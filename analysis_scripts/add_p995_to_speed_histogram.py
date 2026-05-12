@@ -1,3 +1,8 @@
+# ==========================
+# add_p995_to_speed_histogram.py
+# ==========================
+# -*- coding: utf-8 -*-
+
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -10,6 +15,9 @@ import polars as pl
 import seaborn as sns
 
 
+# ==========================
+# 路径配置
+# ==========================
 BASE_DIR = Path(__file__).resolve().parents[1]
 CHUNK_DIR = BASE_DIR / "data" / "processed" / "speed_data_chunks"
 OUTPUT_DIR = BASE_DIR / "data" / "analysis"
@@ -17,14 +25,33 @@ OUTPUT_DIR = BASE_DIR / "data" / "analysis"
 OUTPUT_IMAGE_PATH = OUTPUT_DIR / "speed_histograms_by_class_with_p995_percent.png"
 OUTPUT_CSV_PATH = OUTPUT_DIR / "speed_histograms_by_class_p995.csv"
 
+
+# ==========================
+# 参数配置
+# ==========================
 HIST_MIN_SPEED = 0.0
 HIST_MAX_SPEED = 120.0
 
+# 绘图用粗分箱数量
 PLOT_BIN_COUNT = 30
+
+# P99.5 估计用细分箱数量
+# 120 / 2400 = 0.05
 P99_BIN_COUNT = 2400
+
 PERCENTILE = 0.995
 
+# 是否显示每个柱子的百分比标签
+# True：信息更完整，但绘图稍慢
+# False：图片更简洁，绘图更快
+SHOW_BAR_LABELS = True
 
+FIG_DPI = 220
+
+
+# ==========================
+# 绘图样式
+# ==========================
 def configure_plot_style():
     """
     配置中文字体和 Seaborn 图表风格。
@@ -47,6 +74,9 @@ def configure_plot_style():
             "xtick.labelsize": 10,
             "ytick.labelsize": 10,
             "figure.titlesize": 18,
+            "grid.linestyle": "--",
+            "grid.linewidth": 0.8,
+            "grid.alpha": 0.45,
         },
     )
 
@@ -54,8 +84,12 @@ def configure_plot_style():
 def collect_streaming(lazy_frame: pl.LazyFrame) -> pl.DataFrame:
     """
     使用 Polars 流式引擎执行 LazyFrame。
+    兼容新旧版本 Polars。
     """
-    return lazy_frame.collect(engine="streaming")
+    try:
+        return lazy_frame.collect(engine="streaming")
+    except TypeError:
+        return lazy_frame.collect(streaming=True)
 
 
 def format_percent_label(value: float) -> str:
@@ -78,107 +112,157 @@ def get_grid_shape(item_count: int):
     return row_count, col_count
 
 
+def check_input_files() -> List[Path]:
+    """
+    检查 Parquet 分片文件是否存在。
+    """
+    chunk_files = sorted(CHUNK_DIR.glob("speed_chunk_*.parquet"))
+
+    if not chunk_files:
+        raise FileNotFoundError(
+            f"未在目录中找到 Parquet 数据分片文件：{CHUNK_DIR}\n"
+            f"请确认文件名类似：speed_chunk_000.parquet"
+        )
+
+    return chunk_files
+
+
+# ==========================
+# 数据聚合
+# ==========================
 def build_base_lazy_frame() -> pl.LazyFrame:
     """
-    一次性懒加载所有 speed_chunk_*.csv，并完成基础清洗。
+    一次性懒加载所有 speed_chunk_*.parquet，并完成基础清洗。
+
+    优化点：
+    1. 直接 scan_parquet，不再 scan_csv；
+    2. 只读取 平均速度、速度等级 两列；
+    3. Parquet 已经是结构化列存格式，不再做 Utf8 -> strip -> cast；
+    4. 不 collect 原始大表；
+    5. 只在 LazyFrame 中完成空值过滤和速度裁剪。
     """
-    csv_pattern = str(CHUNK_DIR / "speed_chunk_*.csv")
+    parquet_pattern = (CHUNK_DIR / "speed_chunk_*.parquet").as_posix()
 
     return (
-        pl.scan_csv(
-            csv_pattern,
-            glob=True,
-            infer_schema_length=0,
-            ignore_errors=True,
-        )
-        .select(["平均速度", "速度等级"])
-        .with_columns(
-            [
-                pl.col("平均速度")
-                .cast(pl.Utf8)
-                .str.strip_chars()
-                .cast(pl.Float64, strict=False)
-                .alias("平均速度"),
-                pl.col("速度等级")
-                .cast(pl.Utf8)
-                .str.strip_chars()
-                .cast(pl.Int64, strict=False)
-                .alias("速度等级"),
-            ]
-        )
+        pl.scan_parquet(parquet_pattern)
+        .select([
+            pl.col("平均速度").cast(pl.Float64, strict=False),
+            pl.col("速度等级").cast(pl.Int64, strict=False),
+        ])
         .filter(
             pl.col("平均速度").is_not_null()
             & pl.col("速度等级").is_not_null()
         )
-        .with_columns(
+        .with_columns([
             pl.col("平均速度")
             .clip(HIST_MIN_SPEED, HIST_MAX_SPEED - 1e-9)
-            .alias("平均速度")
-        )
+            .alias("速度裁剪值")
+        ])
     )
 
 
-def aggregate_histogram_bins(
-    base_lf: pl.LazyFrame,
-    bin_count: int,
-    count_column_name: str,
-) -> pl.DataFrame:
+def aggregate_fine_histogram_bins(base_lf: pl.LazyFrame) -> pl.DataFrame:
     """
-    按速度等级和分箱编号聚合频数。
+    只对原始大数据扫描一次，聚合 P99.5 用的细粒度分箱。
+
+    后续从这个小聚合表推导：
+    1. 每个速度等级的样本数；
+    2. 绘图用 30 桶百分比分布；
+    3. P99.5 估计值。
     """
-    bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / bin_count
+    p99_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / P99_BIN_COUNT
+
+    if p99_bin_width <= 0:
+        raise ValueError("P99.5 分箱宽度无效，请检查速度范围和分箱数量。")
 
     query = (
-        base_lf.with_columns(
+        base_lf
+        .with_columns([
             (
-                ((pl.col("平均速度") - HIST_MIN_SPEED) / bin_width)
+                ((pl.col("速度裁剪值") - HIST_MIN_SPEED) / p99_bin_width)
                 .floor()
-                .clip(0, bin_count - 1)
-                .cast(pl.Int64)
-            ).alias("bin_index")
-        )
-        .group_by(["速度等级", "bin_index"])
-        .agg(pl.len().alias(count_column_name))
-        .sort(["速度等级", "bin_index"])
+                .clip(0, P99_BIN_COUNT - 1)
+                .cast(pl.Int32)
+            ).alias("p99_bin_index")
+        ])
+        .group_by(["速度等级", "p99_bin_index"])
+        .agg([
+            pl.len().alias("频数")
+        ])
+        .sort(["速度等级", "p99_bin_index"])
     )
 
     return collect_streaming(query)
 
 
-def aggregate_sample_sizes(base_lf: pl.LazyFrame) -> pl.DataFrame:
+def build_histogram_data_from_fine_bins(fine_bin_frame: pl.DataFrame) -> Dict:
     """
-    统计每个速度等级的样本数。
+    从 2400 个细分箱聚合结果构建绘图和 P99.5 所需数据。
+
+    fine_bin_frame 的规模约为：
+    速度等级数量 × 2400
+    已经非常小，可以安全地用 Python 字典处理。
     """
-    query = (
-        base_lf.group_by("速度等级")
-        .agg(pl.len().alias("样本数"))
+    plot_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / PLOT_BIN_COUNT
+    p99_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / P99_BIN_COUNT
+
+    if plot_bin_width <= 0 or p99_bin_width <= 0:
+        raise ValueError("速度分箱宽度无效，请检查速度范围和分箱数量。")
+
+    speed_classes = (
+        fine_bin_frame
+        .select("速度等级")
+        .unique()
         .sort("速度等级")
+        .get_column("速度等级")
+        .to_list()
     )
 
-    return collect_streaming(query)
-
-
-def build_count_matrix(
-    bin_frame: pl.DataFrame,
-    speed_classes: List[int],
-    bin_count: int,
-    count_column_name: str,
-) -> Dict[int, List[int]]:
-    """
-    将 Polars 聚合结果转换为 {速度等级: 分箱频数列表}。
-    """
-    counts_by_class = {
-        speed_class: [0] * bin_count
+    plot_counts = {
+        int(speed_class): [0] * PLOT_BIN_COUNT
         for speed_class in speed_classes
     }
 
-    for row in bin_frame.iter_rows(named=True):
-        speed_class = row["速度等级"]
-        bin_index = row["bin_index"]
-        count = row[count_column_name]
-        counts_by_class[speed_class][bin_index] = count
+    p99_counts = {
+        int(speed_class): [0] * P99_BIN_COUNT
+        for speed_class in speed_classes
+    }
 
-    return counts_by_class
+    sample_sizes = {
+        int(speed_class): 0
+        for speed_class in speed_classes
+    }
+
+    # 如果 2400 能整除 30，则每 80 个细分箱合并为 1 个绘图箱
+    if P99_BIN_COUNT % PLOT_BIN_COUNT == 0:
+        fine_bins_per_plot_bin = P99_BIN_COUNT // PLOT_BIN_COUNT
+    else:
+        fine_bins_per_plot_bin = None
+
+    for speed_class, p99_bin_index, count in fine_bin_frame.iter_rows():
+        speed_class = int(speed_class)
+        p99_bin_index = int(p99_bin_index)
+        count = int(count)
+
+        p99_counts[speed_class][p99_bin_index] = count
+        sample_sizes[speed_class] += count
+
+        if fine_bins_per_plot_bin is not None:
+            plot_bin_index = p99_bin_index // fine_bins_per_plot_bin
+        else:
+            bin_left_speed = HIST_MIN_SPEED + p99_bin_index * p99_bin_width
+            plot_bin_index = int((bin_left_speed - HIST_MIN_SPEED) / plot_bin_width)
+
+        plot_bin_index = max(0, min(PLOT_BIN_COUNT - 1, plot_bin_index))
+        plot_counts[speed_class][plot_bin_index] += count
+
+    return {
+        "plot_counts": plot_counts,
+        "p99_counts": p99_counts,
+        "sample_sizes": sample_sizes,
+        "plot_bin_width": plot_bin_width,
+        "p99_bin_width": p99_bin_width,
+    }
 
 
 def estimate_percentiles_from_bins(
@@ -189,7 +273,7 @@ def estimate_percentiles_from_bins(
     基于细粒度分箱估计每个速度等级的 P99.5。
     """
     percentile_speeds = {}
-    bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / P99_BIN_COUNT
+    p99_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / P99_BIN_COUNT
 
     for speed_class in sorted(sample_sizes):
         counts = p99_counts[speed_class]
@@ -210,9 +294,9 @@ def estimate_percentiles_from_bins(
             next_cumulative = cumulative + count
 
             if target <= next_cumulative:
-                left_edge = HIST_MIN_SPEED + index * bin_width
+                left_edge = HIST_MIN_SPEED + index * p99_bin_width
                 inside_ratio = (target - cumulative) / count
-                percentile_speed = left_edge + inside_ratio * bin_width
+                percentile_speed = left_edge + inside_ratio * p99_bin_width
                 break
 
             cumulative = next_cumulative
@@ -222,67 +306,9 @@ def estimate_percentiles_from_bins(
     return percentile_speeds
 
 
-def build_histogram_data() -> Dict:
-    """
-    构建绘图和 P99.5 估计所需数据。
-    """
-    plot_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / PLOT_BIN_COUNT
-    p99_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / P99_BIN_COUNT
-
-    if plot_bin_width <= 0 or p99_bin_width <= 0:
-        raise ValueError("速度分箱宽度无效，请检查速度范围和分箱数量。")
-
-    print("正在构建 Polars 惰性查询...")
-
-    base_lf = build_base_lazy_frame()
-
-    print("正在统计各速度等级样本数...")
-    sample_frame = aggregate_sample_sizes(base_lf)
-
-    sample_sizes = {
-        row["速度等级"]: row["样本数"]
-        for row in sample_frame.iter_rows(named=True)
-    }
-
-    speed_classes = sorted(sample_sizes)
-
-    print("正在聚合绘图用速度直方图分箱...")
-    plot_bin_frame = aggregate_histogram_bins(
-        base_lf=base_lf,
-        bin_count=PLOT_BIN_COUNT,
-        count_column_name="频数",
-    )
-
-    print("正在聚合 P99.5 估计用细粒度分箱...")
-    p99_bin_frame = aggregate_histogram_bins(
-        base_lf=base_lf,
-        bin_count=P99_BIN_COUNT,
-        count_column_name="频数",
-    )
-
-    plot_counts = build_count_matrix(
-        bin_frame=plot_bin_frame,
-        speed_classes=speed_classes,
-        bin_count=PLOT_BIN_COUNT,
-        count_column_name="频数",
-    )
-
-    p99_counts = build_count_matrix(
-        bin_frame=p99_bin_frame,
-        speed_classes=speed_classes,
-        bin_count=P99_BIN_COUNT,
-        count_column_name="频数",
-    )
-
-    return {
-        "plot_counts": plot_counts,
-        "p99_counts": p99_counts,
-        "sample_sizes": sample_sizes,
-        "plot_bin_width": plot_bin_width,
-        "p99_bin_width": p99_bin_width,
-    }
-
-
+# ==========================
+# CSV 输出
+# ==========================
 def export_percentile_csv(
     output_path: Path,
     percentile_speeds: Dict[int, Optional[float]],
@@ -292,6 +318,8 @@ def export_percentile_csv(
     导出 P99.5 估计结果 CSV。
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    p99_bin_width = (HIST_MAX_SPEED - HIST_MIN_SPEED) / P99_BIN_COUNT
 
     rows = []
 
@@ -305,13 +333,17 @@ def export_percentile_csv(
                 if percentile_speed is None
                 else f"{percentile_speed:.6f}",
                 "样本数": sample_sizes[speed_class],
-                "说明": "基于0.05速度分箱估计",
+                "百分位": PERCENTILE,
+                "说明": f"基于{p99_bin_width:.6f}速度分箱估计",
             }
         )
 
     pl.DataFrame(rows).write_csv(output_path)
 
 
+# ==========================
+# 绘图
+# ==========================
 def plot_histograms_with_p99(
     histogram_data: Dict,
     percentile_speeds: Dict[int, Optional[float]],
@@ -374,22 +406,23 @@ def plot_histograms_with_p99(
             alpha=0.95,
         )
 
-        max_percent = max(percentages) if percentages else 0
-        label_offset = max_percent * 0.012 if max_percent else 0
+        if SHOW_BAR_LABELS:
+            max_percent = max(percentages) if percentages else 0
+            label_offset = max_percent * 0.012 if max_percent else 0
 
-        for left_edge, percentage in zip(left_edges, percentages):
-            if percentage <= 0:
-                continue
+            for left_edge, percentage in zip(left_edges, percentages):
+                if percentage <= 0:
+                    continue
 
-            ax.text(
-                left_edge + bin_width / 2,
-                percentage + label_offset,
-                format_percent_label(percentage),
-                ha="center",
-                va="bottom",
-                fontsize=7,
-                rotation=90,
-            )
+                ax.text(
+                    left_edge + bin_width / 2,
+                    percentage + label_offset,
+                    format_percent_label(percentage),
+                    ha="center",
+                    va="bottom",
+                    fontsize=7,
+                    rotation=90,
+                )
 
         percentile_speed = percentile_speeds[speed_class]
 
@@ -441,7 +474,7 @@ def plot_histograms_with_p99(
         ax.set_xlim(HIST_MIN_SPEED, HIST_MAX_SPEED)
         ax.set_xticks(x_ticks)
 
-        # 关键：即使 sharex=True，也强制每一行都显示 X 轴刻度值
+        # 即使 sharex=True，也强制每一行都显示 X 轴刻度值
         ax.tick_params(
             axis="x",
             which="both",
@@ -470,21 +503,32 @@ def plot_histograms_with_p99(
     fig.tight_layout(rect=[0, 0.02, 1, 0.965])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=220, bbox_inches="tight")
+    fig.savefig(output_path, dpi=FIG_DPI, bbox_inches="tight")
     plt.close(fig)
 
 
+# ==========================
+# 主流程
+# ==========================
 def main():
     configure_plot_style()
 
-    chunk_files = sorted(CHUNK_DIR.glob("speed_chunk_*.csv"))
+    chunk_files = check_input_files()
 
-    if not chunk_files:
-        raise FileNotFoundError(f"未在目录中找到数据分片文件：{CHUNK_DIR}")
+    print(f"发现 {len(chunk_files)} 个 Parquet 数据分片文件")
+    print(f"数据目录：{CHUNK_DIR}")
+    print(f"输出目录：{OUTPUT_DIR}")
 
-    print(f"发现 {len(chunk_files)} 个数据分片文件")
+    print("\n正在构建 Polars 惰性查询...")
+    base_lf = build_base_lazy_frame()
 
-    histogram_data = build_histogram_data()
+    print("正在一次性聚合 P99.5 细粒度速度分箱...")
+    fine_bin_frame = aggregate_fine_histogram_bins(base_lf)
+
+    print(f"细粒度分箱聚合结果行数：{fine_bin_frame.height}")
+
+    print("正在从细粒度分箱推导绘图分布和样本数...")
+    histogram_data = build_histogram_data_from_fine_bins(fine_bin_frame)
 
     print("正在估计各速度等级的 P99.5...")
     percentile_speeds = estimate_percentiles_from_bins(
@@ -506,9 +550,11 @@ def main():
         sample_sizes=histogram_data["sample_sizes"],
     )
 
-    print("处理完成")
+    print("\n处理完成")
     print(f"输出图片：{OUTPUT_IMAGE_PATH}")
     print(f"输出 CSV：{OUTPUT_CSV_PATH}")
+
+    print("\n各速度等级统计：")
 
     for speed_class in sorted(histogram_data["sample_sizes"]):
         percentile_speed = percentile_speeds[speed_class]
@@ -522,3 +568,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
