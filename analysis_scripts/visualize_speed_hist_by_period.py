@@ -3,6 +3,8 @@
 # ==========================
 # -*- coding: utf-8 -*-
 
+"""按速度等级和时段统计速度直方图，并导出图像与计数结果表。"""
+
 from collections import defaultdict
 from pathlib import Path
 

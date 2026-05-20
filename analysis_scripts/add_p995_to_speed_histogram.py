@@ -3,6 +3,8 @@
 # ==========================
 # -*- coding: utf-8 -*-
 
+"""按速度等级绘制速度直方图，并导出估算得到的 P99.5 速度指标。"""
+
 from pathlib import Path
 from typing import Dict, List, Optional
 

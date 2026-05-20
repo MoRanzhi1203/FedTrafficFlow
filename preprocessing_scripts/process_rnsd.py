@@ -2,15 +2,9 @@
 # process_rnsd.py
 # ==========================
 # -*- coding: utf-8 -*-
-"""
-处理 rnsd 数据
-1. 读取原始 CSV
-2. 列名重命名
-3. 数据清洗（去重、缺失值）
-4. 类型转换
-5. 节点经纬度计算（向量化）
-6. 输出处理后的 CSV
-"""
+
+"""清洗原始路网属性数据，推导起终点坐标，并导出处理后的 rnsd 数据。"""
+
 import pandas as pd
 import numpy as np
 import os

@@ -2,13 +2,9 @@
 # process_link_gps.py
 # ==========================
 # -*- coding: utf-8 -*-
-"""
-处理 link_gps 数据
-1. 读取原始 CSV
-2. 数据清洗（去重、缺失值）
-3. 类型转换
-4. 输出处理后的 CSV
-"""
+
+"""清洗原始 link_gps 记录，并导出供后续使用的标准化路段坐标数据。"""
+
 import pandas as pd
 import os
 

@@ -1,3 +1,5 @@
+"""检查密度指标分片文件中的时间段字段是否按预期顺序排列。"""
+
 from pathlib import Path
 
 import polars as pl

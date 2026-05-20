@@ -3,6 +3,8 @@
 # ==========================
 # -*- coding: utf-8 -*-
 
+"""基于速度分片和参数表计算 Greenshields 密度相关指标。"""
+
 from pathlib import Path
 
 import polars as pl

@@ -1,3 +1,5 @@
+"""检查密度指标 Parquet 分片的结构、样例值和基础统计信息。"""
+
 from pathlib import Path
 from typing import Optional
 

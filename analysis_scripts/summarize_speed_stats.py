@@ -3,6 +3,8 @@
 # ==========================
 # -*- coding: utf-8 -*-
 
+"""汇总处理后速度分片中的总体统计和分时段速度统计结果。"""
+
 from datetime import date, timedelta
 from pathlib import Path
 
