@@ -42,6 +42,8 @@ import os
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from typing import Optional
+import re
 import warnings
 import time
 import psutil
@@ -69,13 +71,15 @@ REQUIRED_FLOW_COLS = ["路段ID", "时间段", "flow_q_hour"]
 # 路网映射必需字段
 REQUIRED_RNSD_COLS = ["路段ID", "起始节点ID", "结束节点ID"]
 
+# 每个日文件应包含 96 个 15 分钟时间段
+EXPECTED_TIME_SLOTS_PER_FILE = 24 * 4
+
 # 输出字段
 OUTPUT_COLS = [
     "节点ID", 
     "时间段", 
     "路口进入流量", 
     "路口离开流量", 
-    "有效方向数", 
     "路口车流量"
 ]
 
@@ -187,6 +191,48 @@ def load_road_network_mapping() -> pd.DataFrame:
     return mapping_df
 
 
+def extract_chunk_index(file_path: Path) -> Optional[int]:
+    """从分片文件名中提取日序号，如 density_chunk_001.parquet -> 1。"""
+    match = re.search(r"(\d+)$", file_path.stem)
+    if match:
+        return int(match.group(1))
+    return None
+
+
+def inspect_time_periods(df: pd.DataFrame, filename: str, chunk_index: int) -> None:
+    """输出单个文件的时间段覆盖情况，检查是否落在对应日期的全局时间段区间。"""
+    unique_periods = np.sort(df["时间段"].unique())
+
+    if len(unique_periods) == 0:
+        print(f"  {filename}: 时间段检查失败，清洗后无有效时间段")
+        return
+
+    expected_start = chunk_index * EXPECTED_TIME_SLOTS_PER_FILE
+    expected_end = expected_start + EXPECTED_TIME_SLOTS_PER_FILE - 1
+    expected_periods = np.arange(expected_start, expected_end + 1, dtype=np.int64)
+
+    min_period = int(unique_periods[0])
+    max_period = int(unique_periods[-1])
+    unique_count = len(unique_periods)
+    is_expected_range = (
+        unique_count == EXPECTED_TIME_SLOTS_PER_FILE
+        and np.array_equal(unique_periods, expected_periods)
+    )
+
+    print(
+        f"  {filename}: 时间段范围 = {min_period} ~ {max_period}, "
+        f"唯一时间段数 = {unique_count}, "
+        f"期望范围 = {expected_start} ~ {expected_end}"
+    )
+
+    if not is_expected_range:
+        print(
+            f"  {filename}: 警告 - 该文件不是完整的 "
+            f"{expected_start}-{expected_end} 共 {EXPECTED_TIME_SLOTS_PER_FILE} 个时间段，"
+            f" 请检查上游分片"
+        )
+
+
 def compute_node_flow(flow_df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.DataFrame:
     """计算路口节点车流量（优化版）
     
@@ -235,18 +281,18 @@ def compute_node_flow(flow_df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.Dat
     node_flow_df["路口进入流量"] = node_flow_df["路口进入流量"].fillna(0)
     node_flow_df["路口离开流量"] = node_flow_df["路口离开流量"].fillna(0)
     
-    # 5. 向量化计算有效方向数
-    node_flow_df["有效方向数"] = (
+    # 5. 向量化计算有效方向数（仅用于综合流量计算，不写入最终输出）
+    effective_direction_count = (
         (node_flow_df["路口进入流量"] > 0).astype(int) + 
         (node_flow_df["路口离开流量"] > 0).astype(int)
     )
     
     # 6. 向量化计算路口综合车流量
     # 使用np.where进行条件计算
-    mask = node_flow_df["有效方向数"] > 0
+    mask = effective_direction_count > 0
     node_flow_df["路口车流量"] = np.where(
         mask,
-        (node_flow_df["路口进入流量"] + node_flow_df["路口离开流量"]) / node_flow_df["有效方向数"],
+        (node_flow_df["路口进入流量"] + node_flow_df["路口离开流量"]) / effective_direction_count,
         0.0
     )
     
@@ -254,19 +300,25 @@ def compute_node_flow(flow_df: pd.DataFrame, mapping_df: pd.DataFrame) -> pd.Dat
     node_flow_df["节点ID"] = node_flow_df["节点ID"].astype("int64")
     node_flow_df["时间段"] = node_flow_df["时间段"].astype("int64")
     
-    # 8. 排序和重置索引
-    node_flow_df = node_flow_df.sort_values(["节点ID", "时间段"]).reset_index(drop=True)
+    # 8. 按时间段主排序、节点ID次排序，保证每个日文件按对应全局时间段顺序输出
+    node_flow_df = node_flow_df.sort_values(["时间段", "节点ID"]).reset_index(drop=True)
     
     return node_flow_df[OUTPUT_COLS]
 
 
-def process_one_file(input_path: Path, output_path: Path, mapping_df: pd.DataFrame) -> None:
+def process_one_file(
+    input_path: Path,
+    output_path: Path,
+    mapping_df: pd.DataFrame,
+    chunk_index: int
+) -> None:
     """处理单个输入文件（优化版）
     
     Args:
         input_path: 输入文件路径
         output_path: 输出文件路径
         mapping_df: 路段到节点的映射DataFrame
+        chunk_index: 日分片序号，用于校验对应的全局时间段范围
     """
     filename = input_path.name
     
@@ -280,6 +332,9 @@ def process_one_file(input_path: Path, output_path: Path, mapping_df: pd.DataFra
         if len(df_clean) == 0:
             print(f"  {filename}: 无有效数据，跳过处理")
             return
+
+        # 2.1 检查单个日文件的时间段覆盖情况
+        inspect_time_periods(df_clean, filename, chunk_index)
         
         # 3. 计算节点车流量
         node_flow_df = compute_node_flow(df_clean, mapping_df)
@@ -347,9 +402,12 @@ def main() -> None:
         # 监控单个文件处理性能
         file_start_time = time.time()
         file_start_memory = psutil.Process().memory_info().rss / 1024 / 1024  # MB
+        chunk_index = extract_chunk_index(input_path)
+        if chunk_index is None:
+            chunk_index = i - 1
         
         try:
-            process_one_file(input_path, output_path, mapping_df)
+            process_one_file(input_path, output_path, mapping_df, chunk_index)
             processed_count += 1
         except Exception as e:
             print(f"处理文件 {input_path.name} 时出错: {e}")
