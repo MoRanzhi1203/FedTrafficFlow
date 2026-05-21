@@ -82,7 +82,7 @@ def print_file_report(file_path: Path, ordered_time_values: list[int]) -> bool:
     print('=' * 120)
     print(f'文件：{file_path.name}')
     print(f'顺序检查：{"正常" if is_ok else "异常"}')
-    print(f'时间段序列：{ordered_time_values}')
+    # print(f'时间段序列：{ordered_time_values}')
 
     if ordered_time_values:
         print(f'起始时间段：{ordered_time_values[0]}')
