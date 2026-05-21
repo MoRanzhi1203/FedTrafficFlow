@@ -12,6 +12,7 @@
 - 产出可复用的处理后 CSV 文件，供后续训练、分析与联邦切分使用。
 - 新增速度等级总体统计、按日期时段统计、分时段直方图与 P99.5 可视化分析结果。
 - 新增基于 Greenshields 模型的密度、车辆数与流量计算脚本及查询脚本。
+- 新增路段流量聚合为路口节点流量的脚本、校验脚本和检查文档。
 
 ## 当前目录结构
 
@@ -20,17 +21,21 @@ FedTrafficFlow/
 ├─ analysis_scripts/
 │  ├─ add_p995_to_speed_histogram.py
 │  ├─ compute_greenshields_density.py
+│  ├─ compute_node_intersection_flow_optimized.py
 │  ├─ summarize_speed_stats.py
 │  ├─ visualize_speed_hist_by_period.py
 ├─ dataset_inspection_scripts/
 │  ├─ check_density_time_order.py
 │  ├─ inspect_density_metrics_chunks.py
+│  ├─ inspect_node_intersection_flow.py
 │  └─ inspect_speed_data_chunks.py
 ├─ docs/
-│  └─ greenshields_speed_density_scheme.md
+│  ├─ greenshields_speed_density_scheme.md
+│  └─ node_intersection_flow_inspection.md
 ├─ data/
 │  ├─ analysis/
 │  │  ├─ density_metrics_chunks/
+│  │  ├─ node_intersection_flow_parquet/
 │  │  ├─ speed_histogram_counts_by_period_by_class.csv
 │  │  ├─ speed_histograms_by_class_p995.csv
 │  │  ├─ speed_histograms_by_class_with_p995_percent.png
@@ -125,6 +130,17 @@ FedTrafficFlow/
 - 按 `时间段`、`路段ID`、`速度等级` 升序输出密度分块结果
 - 输出 `data/analysis/density_metrics_chunks/`
 
+### `analysis_scripts/compute_node_intersection_flow_optimized.py`
+
+功能：
+
+- 读取 `data/analysis/density_metrics_chunks/` 中 61 个路段流量分片
+- 结合 `data/processed/rnsd_processed.csv` 中的路段起终点节点映射
+- 计算每个节点、每个时间段的 `路口进入流量`、`路口离开流量` 和 `路口车流量`
+- 保持按天分文件，每个文件覆盖 96 个连续的全局时间段
+- 在脚本内部直接按 `时间段`、`节点ID` 升序输出节点流量分块结果
+- 输出 `data/analysis/node_intersection_flow_parquet/`
+
 ## 查询脚本说明
 
 ### `dataset_inspection_scripts/inspect_speed_data_chunks.py`
@@ -152,6 +168,14 @@ FedTrafficFlow/
 - 校验每个文件的 `时间段` 是否连续升序
 - 输出异常说明及全量汇总结果，便于确认分块顺序是否正确
 
+### `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+
+功能：
+
+- 查看 `data/analysis/node_intersection_flow_parquet/` 下节点流量分块文件概览
+- 输出样例分块的形状、列名、数据类型、空值统计和样例值
+- 输出前 50 行与后 20 行数据预览
+
 ## 密度建模文档
 
 ### `docs/greenshields_speed_density_scheme.md`
@@ -162,6 +186,15 @@ FedTrafficFlow/
 - 为什么 `P99.5` 只用于校准档位而不直接作为 `v_f`
 - Greenshields 密度计算公式与超速截断规则
 - 车辆数、流量与 15 分钟流量的派生计算方法
+
+### `docs/node_intersection_flow_inspection.md`
+
+文档内容包括：
+
+- 节点流量分块的字段结构与分片规则
+- 61 个日文件对应的全局时间段编号规则
+- 输出排序规则与检查结论
+- 相关生成脚本与检查脚本入口
 
 ## 当前产出文件
 
@@ -183,12 +216,14 @@ FedTrafficFlow/
 - `data/analysis/speed_histograms_by_class_with_p995_percent.png`
 - `data/analysis/speed_histograms_by_period_by_class/`
 - `data/analysis/density_metrics_chunks/`
+- `data/analysis/node_intersection_flow_parquet/`
 
 用于数据核查的脚本位于：
 
 - `dataset_inspection_scripts/inspect_speed_data_chunks.py`
 - `dataset_inspection_scripts/inspect_density_metrics_chunks.py`
 - `dataset_inspection_scripts/check_density_time_order.py`
+- `dataset_inspection_scripts/inspect_node_intersection_flow.py`
 
 ## 大文件说明
 
@@ -216,9 +251,11 @@ python preprocessing_scripts/merge_speed_data.py
 python analysis_scripts/visualize_speed_hist_by_period.py
 python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
+python analysis_scripts/compute_node_intersection_flow_optimized.py
 python dataset_inspection_scripts/inspect_speed_data_chunks.py
 python dataset_inspection_scripts/inspect_density_metrics_chunks.py
 python dataset_inspection_scripts/check_density_time_order.py
+python dataset_inspection_scripts/inspect_node_intersection_flow.py
 ```
 
 建议环境依赖至少包括：
