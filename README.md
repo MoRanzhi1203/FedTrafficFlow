@@ -13,6 +13,7 @@
 - 新增速度等级总体统计、按日期时段统计、分时段直方图与 P99.5 可视化分析结果。
 - 新增基于 Greenshields 模型的密度、车辆数与流量计算脚本及查询脚本。
 - 新增路段流量聚合为路口节点流量的脚本、校验脚本和检查文档。
+- 新增路口节点日内平均车流量的傅里叶曲线拟合脚本、可视化脚本和说明文档。
 
 ## 当前目录结构
 
@@ -22,7 +23,9 @@ FedTrafficFlow/
 │  ├─ add_p995_to_speed_histogram.py
 │  ├─ compute_greenshields_density.py
 │  ├─ compute_node_intersection_flow_optimized.py
+│  ├─ fit_node_flow_daily_curve.py
 │  ├─ summarize_speed_stats.py
+│  ├─ visualize_node_flow_daily_curve_fit.py
 │  ├─ visualize_speed_hist_by_period.py
 ├─ dataset_inspection_scripts/
 │  ├─ check_density_time_order.py
@@ -31,10 +34,12 @@ FedTrafficFlow/
 │  └─ inspect_speed_data_chunks.py
 ├─ docs/
 │  ├─ greenshields_speed_density_scheme.md
+│  ├─ node_flow_daily_curve_fit.md
 │  └─ node_intersection_flow_inspection.md
 ├─ data/
 │  ├─ analysis/
 │  │  ├─ density_metrics_chunks/
+│  │  ├─ node_flow_curve_fit/
 │  │  ├─ node_intersection_flow_parquet/
 │  │  ├─ speed_histogram_counts_by_period_by_class.csv
 │  │  ├─ speed_histograms_by_class_p995.csv
@@ -141,6 +146,25 @@ FedTrafficFlow/
 - 在脚本内部直接按 `时间段`、`节点ID` 升序输出节点流量分块结果
 - 输出 `data/analysis/node_intersection_flow_parquet/`
 
+### `analysis_scripts/fit_node_flow_daily_curve.py`
+
+功能：
+
+- 读取 `data/analysis/node_intersection_flow_parquet/` 下所有 `node_flow_chunk_*.parquet`
+- 仅使用 `节点ID`、`时间段`、`路口车流量` 三列参与计算
+- 将全局 `时间段` 转换为 `日内时间段 = 时间段 % 96`
+- 对每个节点的 96 点日内平均 `路口车流量` 曲线做傅里叶最小二乘拟合
+- 输出节点级拟合曲线结果和傅里叶系数结果到 `data/analysis/node_flow_curve_fit/`
+
+### `analysis_scripts/visualize_node_flow_daily_curve_fit.py`
+
+功能：
+
+- 读取 `node_flow_fitted_daily_curves.parquet` 和 `node_flow_curve_coefficients.parquet`
+- 绘制全体节点的 `RMSE`、`MAE`、`R2` 分布以及 `平均流量 vs R2` 散点图
+- 默认选择平均流量最高的一批节点，绘制日内平均曲线与拟合曲线对比图
+- 输出图片到 `data/analysis/node_flow_curve_fit/plots/`
+
 ## 查询脚本说明
 
 ### `dataset_inspection_scripts/inspect_speed_data_chunks.py`
@@ -196,6 +220,15 @@ FedTrafficFlow/
 - 输出排序规则与检查结论
 - 相关生成脚本与检查脚本入口
 
+### `docs/node_flow_daily_curve_fit.md`
+
+文档内容包括：
+
+- 节点日内平均流量曲线的构造方式
+- 傅里叶基函数拟合模型与最小二乘求解方法
+- 两个 parquet 输出文件的字段定义
+- 可视化脚本生成的拟合质量图和样本节点曲线图说明
+
 ## 当前产出文件
 
 目前已生成以下可直接使用的处理结果：
@@ -217,6 +250,7 @@ FedTrafficFlow/
 - `data/analysis/speed_histograms_by_period_by_class/`
 - `data/analysis/density_metrics_chunks/`
 - `data/analysis/node_intersection_flow_parquet/`
+- `data/analysis/node_flow_curve_fit/`
 
 用于数据核查的脚本位于：
 
@@ -252,6 +286,8 @@ python analysis_scripts/visualize_speed_hist_by_period.py
 python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
 python analysis_scripts/compute_node_intersection_flow_optimized.py
+python analysis_scripts/fit_node_flow_daily_curve.py
+python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 python dataset_inspection_scripts/inspect_speed_data_chunks.py
 python dataset_inspection_scripts/inspect_density_metrics_chunks.py
 python dataset_inspection_scripts/check_density_time_order.py

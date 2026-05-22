@@ -99,10 +99,13 @@
 - [inspect_speed_data_chunks.py](../dataset_inspection_scripts/inspect_speed_data_chunks.py) - 检查速度数据
 - [inspect_density_metrics_chunks.py](../dataset_inspection_scripts/inspect_density_metrics_chunks.py) - 检查密度指标
 - [compute_node_intersection_flow_optimized.py](../analysis_scripts/compute_node_intersection_flow_optimized.py) - 计算路口流量的脚本
+- [fit_node_flow_daily_curve.py](../analysis_scripts/fit_node_flow_daily_curve.py) - 基于节点流量构造日内平均曲线并做傅里叶拟合
+- [visualize_node_flow_daily_curve_fit.py](../analysis_scripts/visualize_node_flow_daily_curve_fit.py) - 可视化拟合质量和样本节点曲线
+- [node_flow_daily_curve_fit.md](./node_flow_daily_curve_fit.md) - 节点日内曲线拟合说明文档
 
 ## 后续工作
-1. 基于节点流量结果分析流量时间模式（早晚高峰识别）
-2. 研究节点流量排名和空间分布
+1. 基于已生成的 96 点日内平均曲线分析早晚高峰模式
+2. 研究节点流量排名、拟合误差与空间分布关系
 3. 开发节点流量异常检测算法
 4. 结合联邦学习任务设计下游建模特征
 
