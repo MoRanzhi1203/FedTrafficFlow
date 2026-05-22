@@ -5,6 +5,8 @@
 本文档说明 `analysis_scripts/fit_node_flow_daily_curve.py` 和
 `analysis_scripts/visualize_node_flow_daily_curve_fit.py` 的输入、处理流程、输出结构与可视化结果。
 
+另外，`analysis_scripts/compare_node_flow_fourier_orders.py` 用于比较不同傅里叶阶数在真实数据上的拟合效果，避免将一次性临时分析脚本散落在仓库根目录。
+
 目标是针对每个 `节点ID` 构建 96 个日内时间段上的平均 `路口车流量` 曲线，并使用傅里叶基函数进行最小二乘拟合。
 
 ## 输入数据
@@ -121,6 +123,54 @@ fitted = max(fitted, 0)
 
 即对负的拟合值截断为 `0`。
 
+## 傅里叶阶数比较
+
+脚本：
+
+- `analysis_scripts/compare_node_flow_fourier_orders.py`
+
+### 作用
+
+- 复用正式拟合脚本的输入目录、字段定义和日内平均曲线构造逻辑
+- 对多个傅里叶阶数进行统一比较，而不是在仓库根目录保留临时脚本
+- 输出每个阶数在全部完整节点上的聚合指标，便于选择默认阶数
+
+### 默认比较阶数
+
+```text
+4, 6, 8, 10
+```
+
+### 输出文件
+
+- `data/analysis/node_flow_curve_fit/node_flow_fourier_order_comparison.json`
+
+### 输出指标
+
+- `parameter_count`
+- `fitted_nodes`
+- `mean_rmse`
+- `median_rmse`
+- `p90_rmse`
+- `mean_mae`
+- `median_mae`
+- `p90_mae`
+- `mean_r2`
+- `median_r2`
+- `p10_r2`
+- `global_r2`
+- `wmape`
+
+### 当前推荐
+
+基于当前真实数据的比较结果，`8` 阶适合作为默认配置，原因是：
+
+- 相比 `4` 阶和 `6` 阶，拟合精度提升明显
+- 相比 `10` 阶，参数数量更少，复杂度更可控
+- 作为项目默认值时，精度和可解释性更均衡
+
+如果更关注单节点曲线重建精度，而不是模型紧凑性，则可以使用 `10` 阶作为高精度选项。
+
 ## 输出结果
 
 输出目录：
@@ -229,6 +279,7 @@ fitted = max(fitted, 0)
 ```bash
 python analysis_scripts/compute_node_intersection_flow_optimized.py
 python analysis_scripts/fit_node_flow_daily_curve.py
+python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ```
 
@@ -236,6 +287,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 
 - `analysis_scripts/compute_node_intersection_flow_optimized.py`
 - `analysis_scripts/fit_node_flow_daily_curve.py`
+- `analysis_scripts/compare_node_flow_fourier_orders.py`
 - `analysis_scripts/visualize_node_flow_daily_curve_fit.py`
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`
 - `docs/node_intersection_flow_inspection.md`
