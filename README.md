@@ -13,7 +13,7 @@
 - 新增速度等级总体统计、按日期时段统计、分时段直方图与 P99.5 可视化分析结果。
 - 新增基于 Greenshields 模型的密度、车辆数与流量计算脚本及查询脚本。
 - 新增路段流量聚合为路口节点流量的脚本、校验脚本和检查文档。
-- 新增路口节点日内平均车流量的傅里叶曲线拟合脚本、可视化脚本和说明文档。
+- 新增路口节点日内平均车流量的傅里叶曲线拟合、阶数比较、曲线聚类脚本及相关说明。
 
 ## 当前目录结构
 
@@ -21,7 +21,9 @@
 FedTrafficFlow/
 ├─ analysis_scripts/
 │  ├─ add_p995_to_speed_histogram.py
+│  ├─ cluster_node_flow_curve_features.py
 │  ├─ compute_greenshields_density.py
+│  ├─ compare_node_flow_fourier_orders.py
 │  ├─ compute_node_intersection_flow_optimized.py
 │  ├─ fit_node_flow_daily_curve.py
 │  ├─ summarize_speed_stats.py
@@ -135,6 +137,26 @@ FedTrafficFlow/
 - 按 `时间段`、`路段ID`、`速度等级` 升序输出密度分块结果
 - 输出 `data/analysis/density_metrics_chunks/`
 
+### `analysis_scripts/compare_node_flow_fourier_orders.py`
+
+功能：
+
+- 复用 `fit_node_flow_daily_curve.py` 中的日内平均曲线构造逻辑
+- 对多个傅里叶阶数进行批量最小二乘拟合比较
+- 统计各阶数在全体完整节点上的 `RMSE`、`MAE`、`R2`、`WMAPE` 和全局 `R2`
+- 输出比较结果到 `data/analysis/node_flow_curve_fit/node_flow_fourier_order_comparison.json`
+
+### `analysis_scripts/cluster_node_flow_curve_features.py`
+
+功能：
+
+- 读取节点日内曲线拟合结果和傅里叶系数结果
+- 将每个节点的 96 点平均流量曲线按节点均值归一化，提取不含 `a0` 的傅里叶形态特征
+- 按 `R2 >= 0.85` 和低流量阈值筛选候选节点
+- 对特征做 `StandardScaler` 标准化，并对 `k=3..8` 执行 `KMeans` 聚类比较
+- 输出聚类标签、聚类评价结果、聚类汇总和类平均曲线到 `data/analysis/node_flow_curve_cluster/`
+- 输出指标对比图、类中心曲线图和 PCA 二维散点图到 `data/analysis/node_flow_curve_cluster/plots/`
+
 ### `analysis_scripts/compute_node_intersection_flow_optimized.py`
 
 功能：
@@ -226,6 +248,7 @@ FedTrafficFlow/
 
 - 节点日内平均流量曲线的构造方式
 - 傅里叶基函数拟合模型与最小二乘求解方法
+- 不同傅里叶阶数的比较脚本与默认推荐阶数
 - 两个 parquet 输出文件的字段定义
 - 可视化脚本生成的拟合质量图和样本节点曲线图说明
 
@@ -251,6 +274,7 @@ FedTrafficFlow/
 - `data/analysis/density_metrics_chunks/`
 - `data/analysis/node_intersection_flow_parquet/`
 - `data/analysis/node_flow_curve_fit/`
+- `data/analysis/node_flow_curve_cluster/`
 
 用于数据核查的脚本位于：
 
@@ -287,7 +311,9 @@ python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
 python analysis_scripts/compute_node_intersection_flow_optimized.py
 python analysis_scripts/fit_node_flow_daily_curve.py
+python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
+python analysis_scripts/cluster_node_flow_curve_features.py
 python dataset_inspection_scripts/inspect_speed_data_chunks.py
 python dataset_inspection_scripts/inspect_density_metrics_chunks.py
 python dataset_inspection_scripts/check_density_time_order.py
