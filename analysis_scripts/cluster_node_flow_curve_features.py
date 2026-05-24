@@ -30,6 +30,7 @@ if str(ROOT_DIR) not in sys.path:
 from analysis_scripts.fit_node_flow_daily_curve import (  # noqa: E402
     AVG_FLOW_COL,
     DAY_SLOT_COL,
+    DEFAULT_HARMONICS,
     NODE_COL,
     SLOTS_PER_DAY,
     build_fourier_design_matrix,
@@ -55,13 +56,17 @@ PCA_PLOT_PATH = PLOT_DIR / "cluster_scatter_pca.png"
 NORMALIZED_FLOW_COL = "归一化路口车流量"
 CLUSTER_COL = "cluster_id"
 
-DEFAULT_K_VALUES = [3, 4, 5, 6, 7, 8]
+DEFAULT_K_VALUES = [3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 DEFAULT_RANDOM_STATE = 42
 DEFAULT_N_INIT = 20
 MIN_R2 = 0.85
 MEAN_FLOW_QUANTILE = 0.05
 EPSILON = 1e-6
 FIG_DPI = 200
+DEFAULT_CLUSTER_HARMONICS = DEFAULT_HARMONICS
+MIN_CLUSTER_RATIO = 0.02
+MAX_CLUSTER_RATIO = 0.80
+SILHOUETTE_RELATIVE_FLOOR = 0.80
 
 
 def parse_args() -> argparse.Namespace:
@@ -79,8 +84,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--harmonics",
         type=int,
-        default=None,
-        help="归一化傅里叶形态特征的谐波数，默认从系数文件自动推断",
+        default=DEFAULT_CLUSTER_HARMONICS,
+        help="归一化傅里叶形态特征的谐波数，默认: 8",
     )
     return parser.parse_args()
 
@@ -130,29 +135,6 @@ def load_inputs() -> Tuple[pl.DataFrame, pl.DataFrame]:
         "node_flow_fitted_daily_curves.parquet",
     )
     return coeff_df, fitted_df
-
-
-def infer_harmonics_from_coefficients(coeff_df: pl.DataFrame) -> int:
-    """从系数字段中推断傅里叶谐波数。"""
-    a_orders = set()
-    b_orders = set()
-    for column_name in coeff_df.columns:
-        match = re.fullmatch(r"([ab])(\d+)", column_name)
-        if not match:
-            continue
-        prefix, order_text = match.groups()
-        order = int(order_text)
-        if order == 0:
-            continue
-        if prefix == "a":
-            a_orders.add(order)
-        else:
-            b_orders.add(order)
-
-    harmonics = max(a_orders & b_orders) if (a_orders & b_orders) else 0
-    if harmonics <= 0:
-        raise ValueError("无法从系数文件中推断傅里叶谐波数")
-    return harmonics
 
 
 def select_candidate_nodes(coeff_df: pl.DataFrame) -> Tuple[pl.DataFrame, float]:
@@ -291,6 +273,9 @@ def evaluate_kmeans_models(
             n_init=DEFAULT_N_INIT,
         )
         labels = model.fit_predict(standardized_features)
+        counts = np.bincount(labels, minlength=k)
+        min_cluster_size = int(counts.min())
+        max_cluster_size = int(counts.max())
         metric_records.append({
             "k": int(k),
             "silhouette_score": float(silhouette_score(standardized_features, labels)),
@@ -300,12 +285,39 @@ def evaluate_kmeans_models(
             "davies_bouldin_score": float(
                 davies_bouldin_score(standardized_features, labels)
             ),
+            "inertia": float(model.inertia_),
+            "min_cluster_size": min_cluster_size,
+            "max_cluster_size": max_cluster_size,
+            "min_cluster_ratio": float(min_cluster_size / n_samples),
+            "max_cluster_ratio": float(max_cluster_size / n_samples),
         })
 
     metric_df = pl.DataFrame(metric_records).sort("k")
+    max_silhouette = float(metric_df.get_column("silhouette_score").max())
+    candidate_df = metric_df.filter(
+        (pl.col("silhouette_score") >= max_silhouette * SILHOUETTE_RELATIVE_FLOOR)
+        & (pl.col("min_cluster_ratio") >= MIN_CLUSTER_RATIO)
+        & (pl.col("max_cluster_ratio") <= MAX_CLUSTER_RATIO)
+    )
+
+    if candidate_df.is_empty():
+        candidate_df = metric_df.filter(
+            pl.col("silhouette_score") >= max_silhouette * SILHOUETTE_RELATIVE_FLOOR
+        )
+    if candidate_df.is_empty():
+        candidate_df = metric_df
+
     best_metric_row = (
-        metric_df
-        .sort(["silhouette_score", "k"], descending=[True, False])
+        candidate_df
+        .sort(
+            [
+                "davies_bouldin_score",
+                "silhouette_score",
+                "calinski_harabasz_score",
+                "k",
+            ],
+            descending=[False, True, True, False],
+        )
         .row(0, named=True)
     )
     best_k = int(best_metric_row["k"])
@@ -496,7 +508,7 @@ def main() -> None:
     check_input_files()
 
     coeff_df, fitted_df = load_inputs()
-    harmonics = args.harmonics or infer_harmonics_from_coefficients(coeff_df)
+    harmonics = int(args.harmonics)
 
     print("=" * 80)
     print("路口节点日内车流量曲线形态聚类")
@@ -529,6 +541,12 @@ def main() -> None:
 
     print(f"评估的 k 值: {metric_df.get_column('k').to_list()}")
     print(f"推荐 k: {best_k}")
+    print(
+        "k 选择约束: "
+        f"silhouette >= {SILHOUETTE_RELATIVE_FLOOR:.0%} * max_silhouette, "
+        f"min_cluster_ratio >= {MIN_CLUSTER_RATIO:.0%}, "
+        f"max_cluster_ratio <= {MAX_CLUSTER_RATIO:.0%}"
+    )
     print(f"最终参与聚类节点数: {label_df.height}")
     print(f"聚类标签输出: {LABEL_OUTPUT_PATH}")
     print(f"聚类评价输出: {METRIC_OUTPUT_PATH}")
