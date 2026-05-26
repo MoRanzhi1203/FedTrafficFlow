@@ -29,7 +29,7 @@ from sklearn.metrics import (
     davies_bouldin_score,
     silhouette_samples,
 )
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import RobustScaler
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -53,7 +53,7 @@ COMPARISON_DIR = OUTPUT_ROOT / "comparison"
 
 METHOD_M0 = "M0_original_fourier"
 METHOD_M1 = "M1_three_date_type_curves"
-METHOD_M2 = "M2_weighted_single_curve"
+METHOD_M2 = "M2_shape_normalized_weighted_curve"
 METHOD_M3 = "M3_multiplicative_corrected_single_curve"
 METHODS = [METHOD_M0, METHOD_M1, METHOD_M2, METHOD_M3]
 
@@ -80,8 +80,22 @@ LOW_R2_THRESHOLD = 0.85
 PCA_SAMPLE_LIMIT = 6000
 SILHOUETTE_SAMPLE_LIMIT = 8000
 FIG_DPI = 200
+MIN_HARD_CLUSTER_SIZE = 3
+SOFT_MIN_CLUSTER_SIZE = 10
+SOFT_MIN_CLUSTER_RATIO = 0.0002
+MAX_CLUSTER_RATIO_TARGET = 0.85
+MAX_CLUSTER_RATIO_HARD = 0.92
+TINY_CLUSTER_PENALTY_WEIGHT = 0.20
+DOMINANT_CLUSTER_PENALTY_WEIGHT = 0.35
+FEATURE_CLIP_LOWER_QUANTILE = 0.01
+FEATURE_CLIP_UPPER_QUANTILE = 0.99
 
 DATE_TYPES = ["workday", "weekend", "holiday"]
+M2_EXPERIENCE_WEIGHTS = {
+    "workday": 0.70,
+    "weekend": 0.20,
+    "holiday": 0.10,
+}
 HOLIDAY_DATES = {
     "2017-04-02",
     "2017-04-03",
@@ -107,6 +121,7 @@ class MethodArtifacts:
     best_k: int
     fit_summary_df: pl.DataFrame
     cluster_metric_df: pl.DataFrame
+    all_k_metric_df: pl.DataFrame
     representative_curve_df: pl.DataFrame
     center_df: pl.DataFrame
     standardized_features: np.ndarray
@@ -129,20 +144,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workday-weight",
         type=float,
-        default=40 / 61,
-        help="M2 中工作日权重，默认 40/61（约 0.656）。",
+        default=M2_EXPERIENCE_WEIGHTS["workday"],
+        help="M2 中工作日经验权重，默认 0.70。",
     )
     parser.add_argument(
         "--weekend-weight",
         type=float,
-        default=12 / 61,
-        help="M2 中普通周末权重，默认 12/61（约 0.197）。",
+        default=M2_EXPERIENCE_WEIGHTS["weekend"],
+        help="M2 中普通周末经验权重，默认 0.20。",
     )
     parser.add_argument(
         "--holiday-weight",
         type=float,
-        default=9 / 61,
-        help="M2 中节假日权重，默认 9/61（约 0.148）。",
+        default=M2_EXPERIENCE_WEIGHTS["holiday"],
+        help="M2 中节假日经验权重，默认 0.10。",
     )
     parser.add_argument(
         "--node-sample-size",
@@ -304,21 +319,90 @@ def build_m2_profiles_from_type_profiles(
     type_profiles_df: pl.DataFrame,
     weights: Dict[str, float],
 ) -> pl.DataFrame:
-    """由日期类型曲线构造加权单曲线。"""
+    """M2：日期类型曲线先做节点内形态归一化，再按经验权重融合为单曲线。"""
     weight_df = pl.DataFrame({
         DATE_TYPE_COL: DATE_TYPES,
         "_weight": [weights[date_type] for date_type in DATE_TYPES],
     })
-    return (
-        type_profiles_df.join(weight_df, on=DATE_TYPE_COL, how="inner")
+
+    type_mean_df = (
+        type_profiles_df
+        .group_by([NODE_COL, DATE_TYPE_COL])
+        .agg([
+            pl.col(AVG_FLOW_COL).mean().alias("_type_daily_mean"),
+            pl.col(DAY_SLOT_COL).n_unique().alias("_slot_count"),
+        ])
+        .filter(pl.col("_slot_count") == SLOTS_PER_DAY)
+        .select([NODE_COL, DATE_TYPE_COL, "_type_daily_mean"])
+    )
+
+    scale_df = (
+        type_mean_df
+        .join(weight_df, on=DATE_TYPE_COL, how="inner")
+        .group_by(NODE_COL)
+        .agg([
+            (pl.col("_type_daily_mean") * pl.col("_weight")).sum().alias("_weighted_scale_sum"),
+            pl.col("_weight").sum().alias("_scale_weight_sum"),
+            pl.col(DATE_TYPE_COL).n_unique().alias("_date_type_count"),
+        ])
+        .filter(pl.col("_date_type_count") == len(DATE_TYPES))
+        .with_columns(
+            (
+                pl.col("_weighted_scale_sum")
+                / (pl.col("_scale_weight_sum") + EPSILON)
+            ).alias("_node_scale")
+        )
+        .select([NODE_COL, "_node_scale"])
+    )
+
+    shape_df = (
+        type_profiles_df
+        .join(type_mean_df, on=[NODE_COL, DATE_TYPE_COL], how="inner")
+        .join(weight_df, on=DATE_TYPE_COL, how="inner")
+        .with_columns(
+            (
+                pl.col(AVG_FLOW_COL)
+                / (pl.col("_type_daily_mean") + EPSILON)
+            ).alias("_normalized_shape")
+        )
         .group_by([NODE_COL, DAY_SLOT_COL])
         .agg([
-            (pl.col(AVG_FLOW_COL) * pl.col("_weight")).sum().alias("_weighted_sum"),
-            pl.col("_weight").sum().alias("_weight_sum"),
+            (pl.col("_normalized_shape") * pl.col("_weight")).sum().alias("_weighted_shape_sum"),
+            pl.col("_weight").sum().alias("_shape_weight_sum"),
             pl.col(SAMPLE_COUNT_COL).sum().alias(SAMPLE_COUNT_COL),
+            pl.col(DATE_TYPE_COL).n_unique().alias("_date_type_count"),
         ])
+        .filter(pl.col("_date_type_count") == len(DATE_TYPES))
         .with_columns(
-            (pl.col("_weighted_sum") / (pl.col("_weight_sum") + EPSILON)).alias(AVG_FLOW_COL)
+            (
+                pl.col("_weighted_shape_sum")
+                / (pl.col("_shape_weight_sum") + EPSILON)
+            ).alias("_weighted_shape")
+        )
+        .select([NODE_COL, DAY_SLOT_COL, "_weighted_shape", SAMPLE_COUNT_COL])
+    )
+
+    shape_mean_df = (
+        shape_df
+        .group_by(NODE_COL)
+        .agg([
+            pl.col("_weighted_shape").mean().alias("_shape_mean"),
+            pl.col(DAY_SLOT_COL).n_unique().alias("_slot_count"),
+        ])
+        .filter(pl.col("_slot_count") == SLOTS_PER_DAY)
+        .select([NODE_COL, "_shape_mean"])
+    )
+
+    return (
+        shape_df
+        .join(shape_mean_df, on=NODE_COL, how="inner")
+        .join(scale_df, on=NODE_COL, how="inner")
+        .with_columns(
+            (
+                pl.col("_weighted_shape")
+                / (pl.col("_shape_mean") + EPSILON)
+                * pl.col("_node_scale")
+            ).alias(AVG_FLOW_COL)
         )
         .select([NODE_COL, DAY_SLOT_COL, AVG_FLOW_COL, SAMPLE_COUNT_COL])
         .sort([NODE_COL, DAY_SLOT_COL])
@@ -576,6 +660,11 @@ def build_normalized_shape_features(
 
     morning_peak = float(np.max(normalized_curve[MORNING_PEAK_SLOTS]))
     evening_peak = float(np.max(normalized_curve[EVENING_PEAK_SLOTS]))
+    peak_slot = int(np.argmax(normalized_curve))
+    peak_angle = 2.0 * math.pi * peak_slot / SLOTS_PER_DAY
+    morning_evening_log_ratio = float(
+        math.log((morning_peak + EPSILON) / (evening_peak + EPSILON))
+    )
     feature_record: Dict[str, float] = {}
     coeff_index = 1
     for harmonic in range(1, FOURIER_HARMONICS + 1):
@@ -583,9 +672,31 @@ def build_normalized_shape_features(
         feature_record[f"{prefix}b{harmonic}"] = float(coefficients[coeff_index + 1])
         coeff_index += 2
     feature_record[f"{prefix}峰谷差"] = float(np.max(normalized_curve) - np.min(normalized_curve))
-    feature_record[f"{prefix}峰值时段"] = float(np.argmax(normalized_curve))
-    feature_record[f"{prefix}早晚峰比"] = float(morning_peak / (evening_peak + EPSILON))
+    feature_record[f"{prefix}峰值时段_sin"] = float(math.sin(peak_angle))
+    feature_record[f"{prefix}峰值时段_cos"] = float(math.cos(peak_angle))
+    feature_record[f"{prefix}早晚峰log比"] = morning_evening_log_ratio
     return feature_record
+
+
+def winsorize_feature_matrix(
+    feature_matrix: np.ndarray,
+    lower_quantile: float = FEATURE_CLIP_LOWER_QUANTILE,
+    upper_quantile: float = FEATURE_CLIP_UPPER_QUANTILE,
+) -> np.ndarray:
+    """按列裁剪特征矩阵，降低极端异常节点对聚类的支配。"""
+    if feature_matrix.size == 0:
+        return feature_matrix
+
+    lower_bounds = np.nanquantile(feature_matrix, lower_quantile, axis=0)
+    upper_bounds = np.nanquantile(feature_matrix, upper_quantile, axis=0)
+
+    clipped_matrix = np.clip(feature_matrix, lower_bounds, upper_bounds)
+    return np.nan_to_num(
+        clipped_matrix,
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
 
 
 def build_single_curve_feature_df(
@@ -640,6 +751,11 @@ def evaluate_kmeans_models(
     if standardized_features.shape[0] <= max(k_values):
         raise ValueError("样本数不足，无法评估给定的聚类数范围")
 
+    soft_min_required_count = max(
+        SOFT_MIN_CLUSTER_SIZE,
+        int(math.ceil(SOFT_MIN_CLUSTER_RATIO * standardized_features.shape[0])),
+    )
+    hard_min_required_count = MIN_HARD_CLUSTER_SIZE
     metric_records: List[Dict[str, float]] = []
     for k in k_values:
         model = KMeans(
@@ -650,6 +766,26 @@ def evaluate_kmeans_models(
         labels = model.fit_predict(standardized_features)
         _, silhouette_vals = sample_silhouette_values(standardized_features, labels)
         counts = np.bincount(labels, minlength=int(k))
+        min_cluster_count = int(counts.min())
+        max_cluster_count = int(counts.max())
+        min_cluster_ratio = float(min_cluster_count / standardized_features.shape[0])
+        max_cluster_ratio = float(max_cluster_count / standardized_features.shape[0])
+        is_valid_cluster_size = min_cluster_count >= hard_min_required_count
+        tiny_cluster_penalty = 0.0
+        if min_cluster_count < soft_min_required_count:
+            tiny_cluster_penalty = TINY_CLUSTER_PENALTY_WEIGHT * (
+                (soft_min_required_count - min_cluster_count) / soft_min_required_count
+            )
+
+        dominant_cluster_penalty = 0.0
+        if max_cluster_ratio > MAX_CLUSTER_RATIO_TARGET:
+            dominant_cluster_penalty = DOMINANT_CLUSTER_PENALTY_WEIGHT * (
+                (max_cluster_ratio - MAX_CLUSTER_RATIO_TARGET)
+                / max(EPSILON, 1.0 - MAX_CLUSTER_RATIO_TARGET)
+            )
+
+        if max_cluster_ratio > MAX_CLUSTER_RATIO_HARD:
+            dominant_cluster_penalty += 0.20
         metric_records.append({
             "k": int(k),
             "silhouette_score": float(np.mean(silhouette_vals)),
@@ -660,8 +796,16 @@ def evaluate_kmeans_models(
                 davies_bouldin_score(standardized_features, labels)
             ),
             "inertia": float(model.inertia_),
-            "min_cluster_ratio": float(counts.min() / standardized_features.shape[0]),
-            "max_cluster_ratio": float(counts.max() / standardized_features.shape[0]),
+            "min_cluster_count": min_cluster_count,
+            "max_cluster_count": max_cluster_count,
+            "hard_min_required_count": int(hard_min_required_count),
+            "soft_min_required_count": int(soft_min_required_count),
+            "min_required_count": int(soft_min_required_count),
+            "is_valid_cluster_size": bool(is_valid_cluster_size),
+            "min_cluster_ratio": min_cluster_ratio,
+            "max_cluster_ratio": max_cluster_ratio,
+            "tiny_cluster_penalty": float(tiny_cluster_penalty),
+            "dominant_cluster_penalty": float(dominant_cluster_penalty),
             "negative_silhouette_ratio": float(np.mean(silhouette_vals < 0.0)),
         })
 
@@ -713,26 +857,74 @@ def evaluate_kmeans_models(
             + 0.15 * ch_scores[idx]
             + 0.05 * complexity_scores[idx]
         )
-        if record["max_cluster_ratio"] > 0.80:
-            score -= 0.08
+        score -= record["tiny_cluster_penalty"]
+        score -= record["dominant_cluster_penalty"]
+        if not record["is_valid_cluster_size"]:
+            score = -1e9
         selection_scores.append(score)
 
     scored_metric_df = metric_df.with_columns(pl.Series(SELECTION_SCORE_COL, selection_scores))
-    best_metric_row = (
-        scored_metric_df.sort(
-            [
-                SELECTION_SCORE_COL,
-                "silhouette_score",
-                "davies_bouldin_score",
-                "negative_silhouette_ratio",
+    invalid_metric_df = scored_metric_df.filter(~pl.col("is_valid_cluster_size"))
+    if invalid_metric_df.height > 0:
+        print("以下 k 因出现单点或两点极小簇被硬排除：")
+        print(
+            invalid_metric_df.select([
                 "k",
-            ],
-            descending=[True, True, False, False, False],
+                "min_cluster_count",
+                "hard_min_required_count",
+                "soft_min_required_count",
+                "min_cluster_ratio",
+                "max_cluster_ratio",
+                "silhouette_score",
+                "tiny_cluster_penalty",
+                "dominant_cluster_penalty",
+                SELECTION_SCORE_COL,
+            ])
         )
-        .row(0, named=True)
+    print("KMeans k 选择诊断：")
+    print(
+        scored_metric_df.select([
+            "k",
+            "silhouette_score",
+            "davies_bouldin_score",
+            "min_cluster_count",
+            "max_cluster_ratio",
+            "tiny_cluster_penalty",
+            "dominant_cluster_penalty",
+            SELECTION_SCORE_COL,
+        ])
     )
+    valid_metric_df = scored_metric_df.filter(pl.col("is_valid_cluster_size"))
+    if valid_metric_df.height > 0:
+        best_metric_row = (
+            valid_metric_df.sort(
+                [
+                    SELECTION_SCORE_COL,
+                    "silhouette_score",
+                    "davies_bouldin_score",
+                    "negative_silhouette_ratio",
+                    "k",
+                ],
+                descending=[True, True, False, False, False],
+            )
+            .row(0, named=True)
+        )
+    else:
+        best_metric_row = (
+            scored_metric_df.sort(
+                [
+                    "min_cluster_count",
+                    "silhouette_score",
+                    "davies_bouldin_score",
+                    "negative_silhouette_ratio",
+                    "k",
+                ],
+                descending=[True, True, False, False, False],
+            )
+            .row(0, named=True)
+        )
     best_k = int(best_metric_row["k"])
-    return metric_df, best_k
+    return scored_metric_df, best_k
 
 
 def sample_silhouette_values(
@@ -804,19 +996,27 @@ def build_cluster_outputs(
         .sort([METHOD_COL, CLUSTER_COL])
     )
     sampled_cluster_ids = cluster_labels[silhouette_sample_indices]
-    sampled_negative_df = (
+    sampled_silhouette_df = (
         pl.DataFrame({
             METHOD_COL: np.full(sampled_cluster_ids.shape[0], method_name, dtype=object),
             CLUSTER_COL: sampled_cluster_ids.astype(np.int64),
             "_silhouette": silhouette_vals.astype(np.float64),
         })
         .group_by([METHOD_COL, CLUSTER_COL])
-        .agg((pl.col("_silhouette") < 0.0).mean().alias("negative_silhouette_ratio"))
+        .agg([
+            pl.col("_silhouette").mean().alias("mean_silhouette"),
+            pl.col("_silhouette").median().alias("median_silhouette"),
+            (pl.col("_silhouette") < 0.0).mean().alias("negative_silhouette_ratio"),
+        ])
         .sort([METHOD_COL, CLUSTER_COL])
     )
     summary_df = (
-        summary_df.join(sampled_negative_df, on=[METHOD_COL, CLUSTER_COL], how="left")
-        .with_columns(pl.col("negative_silhouette_ratio").fill_null(0.0))
+        summary_df.join(sampled_silhouette_df, on=[METHOD_COL, CLUSTER_COL], how="left")
+        .with_columns([
+            pl.col("mean_silhouette").fill_null(0.0),
+            pl.col("median_silhouette").fill_null(0.0),
+            pl.col("negative_silhouette_ratio").fill_null(0.0),
+        ])
     )
 
     center_df = (
@@ -884,9 +1084,18 @@ def build_cluster_method_summary(
         "calinski_harabasz_score",
         "davies_bouldin_score",
         "inertia",
+        "min_cluster_count",
+        "max_cluster_count",
+        "hard_min_required_count",
+        "soft_min_required_count",
+        "min_required_count",
+        "is_valid_cluster_size",
         "min_cluster_ratio",
         "max_cluster_ratio",
+        "tiny_cluster_penalty",
+        "dominant_cluster_penalty",
         "negative_silhouette_ratio",
+        SELECTION_SCORE_COL,
     ])
 
 
@@ -1051,6 +1260,78 @@ def plot_method_pca_comparison(
     plt.close(fig)
 
 
+def plot_cluster_size_comparison(
+    artifacts: Sequence[MethodArtifacts],
+    output_path: Path,
+) -> None:
+    """绘制四种方法最终 best_k 下各聚类的节点数对比图。"""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10))
+
+    for ax, artifact in zip(axes.ravel(), artifacts):
+        summary_path = OUTPUT_ROOT / artifact.method_name / "cluster_summary.parquet"
+        summary_df = pl.read_parquet(summary_path).sort(CLUSTER_COL)
+        ax.bar(
+            summary_df.get_column(CLUSTER_COL).to_numpy(),
+            summary_df.get_column("节点数").to_numpy(),
+            color="#4C78A8",
+            alpha=0.85,
+        )
+        ax.set_title(f"{artifact.method_name} (k={artifact.best_k})")
+        ax.set_xlabel("cluster_id")
+        ax.set_ylabel("节点数")
+        ax.set_xticks(summary_df.get_column(CLUSTER_COL).to_numpy())
+        ax.grid(True, axis="y", linestyle="--", alpha=0.35)
+
+    fig.suptitle("四种方法最终聚类规模对比", fontsize=16)
+    fig.tight_layout(rect=[0, 0.02, 1, 0.96])
+    fig.savefig(output_path, dpi=FIG_DPI, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_all_k_metric_curves(
+    all_k_metric_df: pl.DataFrame,
+    output_path: Path,
+) -> None:
+    """绘制四种方法在所有候选 k 下的指标变化曲线。"""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, axes = plt.subplots(2, 2, figsize=(16, 10), sharex=True)
+    metric_specs = [
+        ("silhouette_score", "Silhouette Score", True),
+        ("davies_bouldin_score", "Davies-Bouldin Score", False),
+        ("max_cluster_ratio", "Max Cluster Ratio", False),
+        (SELECTION_SCORE_COL, "Selection Score", True),
+    ]
+    method_names = all_k_metric_df.get_column(METHOD_COL).unique().sort().to_list()
+    palette = sns.color_palette("bright", n_colors=max(len(method_names), 1))
+
+    for ax, (column, title, _) in zip(axes.ravel(), metric_specs):
+        for idx, method_name in enumerate(method_names):
+            method_df = all_k_metric_df.filter(pl.col(METHOD_COL) == method_name).sort("k")
+            ax.plot(
+                method_df.get_column("k").to_numpy(),
+                method_df.get_column(column).to_numpy(),
+                marker="o",
+                linewidth=2.0,
+                color=palette[idx],
+                label=method_name,
+            )
+        ax.set_title(title)
+        ax.set_xlabel("k")
+        ax.grid(True, linestyle="--", alpha=0.35)
+
+    axes[0, 0].set_ylabel("score")
+    axes[0, 1].set_ylabel("score")
+    axes[1, 0].set_ylabel("ratio")
+    axes[1, 1].set_ylabel("score")
+    axes[0, 0].legend(fontsize=8, loc="best")
+
+    fig.suptitle("四种方法在所有候选 k 下的聚类指标变化", fontsize=16)
+    fig.tight_layout(rect=[0, 0.02, 1, 0.96])
+    fig.savefig(output_path, dpi=FIG_DPI, bbox_inches="tight")
+    plt.close(fig)
+
+
 def run_method_pipeline(
     method_name: str,
     profile_df: pl.DataFrame,
@@ -1097,18 +1378,28 @@ def run_method_pipeline(
         if column not in {NODE_COL, METHOD_COL}
     ]
     feature_matrix = feature_df.select(feature_columns).to_numpy().astype(np.float64)
-    standardized_features = StandardScaler().fit_transform(feature_matrix)
-    cluster_metric_df, best_k = evaluate_kmeans_models(standardized_features, K_VALUES)
-    cluster_metric_df = cluster_metric_df.with_columns(pl.lit(method_name).alias(METHOD_COL)).select([
+    feature_matrix = winsorize_feature_matrix(feature_matrix)
+    standardized_features = RobustScaler().fit_transform(feature_matrix)
+    all_k_metric_df, best_k = evaluate_kmeans_models(standardized_features, K_VALUES)
+    all_k_metric_df = all_k_metric_df.with_columns(pl.lit(method_name).alias(METHOD_COL)).select([
         METHOD_COL,
         "k",
         "silhouette_score",
         "calinski_harabasz_score",
         "davies_bouldin_score",
         "inertia",
+        "min_cluster_count",
+        "max_cluster_count",
+        "hard_min_required_count",
+        "soft_min_required_count",
+        "min_required_count",
+        "is_valid_cluster_size",
         "min_cluster_ratio",
         "max_cluster_ratio",
+        "tiny_cluster_penalty",
+        "dominant_cluster_penalty",
         "negative_silhouette_ratio",
+        SELECTION_SCORE_COL,
     ])
     cluster_labels, cluster_centers, silhouette_sample_indices, silhouette_vals = fit_final_kmeans(
         standardized_features,
@@ -1135,17 +1426,19 @@ def run_method_pipeline(
         profile_df=profile_output_df,
         fitted_df=fitted_df,
         coeff_df=coeff_df,
-        cluster_metric_df=cluster_metric_df,
+        cluster_metric_df=all_k_metric_df,
         cluster_label_df=cluster_label_df,
         cluster_summary_df=cluster_summary_df,
         cluster_center_df=center_df,
     )
 
+    best_k_metric_df = build_cluster_method_summary(method_name, best_k, all_k_metric_df)
     return MethodArtifacts(
         method_name=method_name,
         best_k=best_k,
         fit_summary_df=build_fit_method_summary(method_name, node_metadata_df),
-        cluster_metric_df=build_cluster_method_summary(method_name, best_k, cluster_metric_df),
+        cluster_metric_df=best_k_metric_df,
+        all_k_metric_df=all_k_metric_df,
         representative_curve_df=representative_curve_df,
         center_df=center_df,
         standardized_features=standardized_features,
@@ -1162,6 +1455,10 @@ def save_comparison_outputs(artifacts: Sequence[MethodArtifacts]) -> None:
         [artifact.cluster_metric_df for artifact in artifacts],
         how="vertical",
     ).sort(METHOD_COL)
+    all_k_metric_df = pl.concat(
+        [artifact.all_k_metric_df for artifact in artifacts],
+        how="vertical",
+    ).sort([METHOD_COL, "k"])
     comparison_table_df = build_method_comparison_table(fit_summary_df, cluster_summary_df)
 
     fit_summary_df.write_parquet(
@@ -1173,6 +1470,7 @@ def save_comparison_outputs(artifacts: Sequence[MethodArtifacts]) -> None:
         compression="snappy",
     )
     comparison_table_df.write_csv(COMPARISON_DIR / "method_comparison_table.csv")
+    all_k_metric_df.write_csv(COMPARISON_DIR / "all_k_cluster_metrics.csv")
 
     plot_method_cluster_metric_comparison(
         cluster_summary_df,
@@ -1185,6 +1483,14 @@ def save_comparison_outputs(artifacts: Sequence[MethodArtifacts]) -> None:
     plot_method_pca_comparison(
         artifacts,
         COMPARISON_DIR / "method_pca_comparison.png",
+    )
+    plot_cluster_size_comparison(
+        artifacts,
+        COMPARISON_DIR / "method_cluster_size_comparison.png",
+    )
+    plot_all_k_metric_curves(
+        all_k_metric_df,
+        COMPARISON_DIR / "all_k_metric_curves.png",
     )
 
 
@@ -1206,7 +1512,7 @@ def main() -> None:
     print(f"输出目录: {OUTPUT_ROOT}")
     print(f"统一傅里叶阶数: {FOURIER_HARMONICS}")
     print(f"KMeans 搜索范围: {K_VALUES}")
-    print(f"M2 权重: {weights}")
+    print(f"M2 形态融合经验权重: {weights}")
 
     base_lf = build_base_lazy_frame(day_index_to_type)
     base_lf = sample_base_lazy_frame(base_lf, args.node_sample_size)
