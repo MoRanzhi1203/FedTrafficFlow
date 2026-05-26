@@ -961,6 +961,37 @@ def fit_final_kmeans(
     return labels, model.cluster_centers_, sample_indices, silhouette_vals
 
 
+def remap_cluster_labels_by_size(
+    cluster_labels: np.ndarray,
+    cluster_centers: np.ndarray,
+) -> Tuple[np.ndarray, np.ndarray, Dict[int, int]]:
+    """按簇规模降序重映射聚类标签，最大簇为 0，其次为 1。"""
+    labels = cluster_labels.astype(np.int64)
+    unique_labels, counts = np.unique(labels, return_counts=True)
+
+    # 按节点数降序排序；如果节点数相同，则按原始 label 升序保证结果稳定。
+    sorted_pairs = sorted(
+        zip(unique_labels.tolist(), counts.tolist()),
+        key=lambda item: (-item[1], item[0]),
+    )
+
+    old_to_new = {
+        int(old_label): int(new_label)
+        for new_label, (old_label, _) in enumerate(sorted_pairs)
+    }
+
+    remapped_labels = np.array(
+        [old_to_new[int(label)] for label in labels],
+        dtype=np.int64,
+    )
+
+    remapped_centers = np.zeros_like(cluster_centers)
+    for old_label, new_label in old_to_new.items():
+        remapped_centers[new_label] = cluster_centers[old_label]
+
+    return remapped_labels, remapped_centers, old_to_new
+
+
 def build_cluster_outputs(
     method_name: str,
     metadata_df: pl.DataFrame,
@@ -1227,26 +1258,18 @@ def plot_method_pca_comparison(
                     warn_singular=False,
                     ax=ax,
                 )
-        ax.scatter(
-            projected_centers[:, 0],
-            projected_centers[:, 1],
-            marker="X",
-            s=150,
-            color="white",
-            edgecolors="black",
-            linewidths=1.1,
-            zorder=5,
-            label="Cluster Center",
-        )
         for cluster_id, center_point in enumerate(projected_centers):
             ax.annotate(
-                str(cluster_id),
+                f"C{cluster_id}",
                 (center_point[0], center_point[1]),
-                xytext=(5, 5),
+                xytext=(0, 0),
                 textcoords="offset points",
-                fontsize=8,
+                fontsize=9,
                 weight="bold",
                 color="black",
+                ha="center",
+                va="center",
+                zorder=9,
             )
         ax.set_title(f"{artifact.method_name} (k={artifact.best_k})")
         ax.set_xlabel("PCA 1")
@@ -1405,6 +1428,11 @@ def run_method_pipeline(
         standardized_features,
         best_k,
     )
+    cluster_labels, cluster_centers, cluster_label_mapping = remap_cluster_labels_by_size(
+        cluster_labels,
+        cluster_centers,
+    )
+    print(f"{method_name}: 聚类标签已按簇规模重排 old_to_new = {cluster_label_mapping}")
     cluster_label_df, cluster_summary_df, center_df = build_cluster_outputs(
         method_name=method_name,
         metadata_df=node_metadata_df,
@@ -1431,6 +1459,11 @@ def run_method_pipeline(
         cluster_summary_df=cluster_summary_df,
         cluster_center_df=center_df,
     )
+    mapping_df = pl.DataFrame({
+        "old_cluster_id": list(cluster_label_mapping.keys()),
+        "new_cluster_id": list(cluster_label_mapping.values()),
+    }).sort("new_cluster_id")
+    mapping_df.write_parquet(method_dir / "cluster_label_mapping.parquet", compression="snappy")
 
     best_k_metric_df = build_cluster_method_summary(method_name, best_k, all_k_metric_df)
     return MethodArtifacts(
