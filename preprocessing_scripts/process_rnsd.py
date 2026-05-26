@@ -1,18 +1,25 @@
-# ========================== 
+# ==========================
 # process_rnsd.py
 # ==========================
 # -*- coding: utf-8 -*-
 
 """清洗原始路网属性数据，推导起终点坐标，并导出处理后的 rnsd 数据。"""
 
-import pandas as pd
-import numpy as np
-import os
+from pathlib import Path
 
-os.makedirs('./data/processed', exist_ok=True)
+import numpy as np
+import pandas as pd
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+RAW_PATH = ROOT_DIR / "data" / "raw" / "road_network_sub-dataset.v2"
+OUTPUT_DIR = ROOT_DIR / "data" / "processed"
+OUTPUT_PATH = OUTPUT_DIR / "rnsd_processed.csv"
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # 读取原始 rnsd 数据
-rnsd = pd.read_csv('./data/raw/road_network_sub-dataset.v2', sep='\t')
+rnsd = pd.read_csv(RAW_PATH, sep='\t')
 
 # 列名映射
 column_mapping = {
@@ -69,5 +76,5 @@ rnsd['end_lat'] = np.round(end_lat,6)
 rnsd['end_lon'] = np.round(end_lon,6)
 
 # 保存处理后的 rnsd 数据
-rnsd.to_csv('./data/processed/rnsd_processed.csv', index=False)
-print('rnsd 已处理并保存到: ./data/processed/rnsd_processed.csv')
+rnsd.to_csv(OUTPUT_PATH, index=False)
+print(f'rnsd 已处理并保存到: {OUTPUT_PATH}')

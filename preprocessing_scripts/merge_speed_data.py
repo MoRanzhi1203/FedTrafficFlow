@@ -7,6 +7,7 @@
 
 import os
 import shutil
+from pathlib import Path
 
 # 必须放在 import polars 之前
 os.environ["POLARS_MAX_THREADS"] = "8"
@@ -17,11 +18,12 @@ import polars as pl
 # ==========================
 # 配置
 # ==========================
-input_speed_file = './data/raw/traffic_speed_sub-dataset.v2'
-link_gps_file = './data/processed/link_gps_processed.csv'
-rnsd_file = './data/processed/rnsd_processed.csv'
+ROOT_DIR = Path(__file__).resolve().parents[1]
+input_speed_file = ROOT_DIR / 'data' / 'raw' / 'traffic_speed_sub-dataset.v2'
+link_gps_file = ROOT_DIR / 'data' / 'processed' / 'link_gps_processed.csv'
+rnsd_file = ROOT_DIR / 'data' / 'processed' / 'rnsd_processed.csv'
 
-output_folder = './data/processed/speed_data_chunks'
+output_folder = ROOT_DIR / 'data' / 'processed' / 'speed_data_chunks'
 
 # 原始设定
 chunk_size = 4_334_208
@@ -73,12 +75,12 @@ def clean_float_col(col_name: str):
 # 初始化输出目录
 # ==========================
 if clear_old_output and os.path.exists(output_folder):
-    print(f'正在清空旧输出目录: {os.path.abspath(output_folder)}')
+    print(f'正在清空旧输出目录: {output_folder.resolve()}')
     shutil.rmtree(output_folder)
 
 os.makedirs(output_folder, exist_ok=True)
 
-print(f'输出目录: {os.path.abspath(output_folder)}')
+print(f'输出目录: {output_folder.resolve()}')
 
 
 # ==========================
@@ -238,11 +240,11 @@ for start_time in range(min_time, max_time + 1, time_periods_per_chunk):
         )
 
     output_file = os.path.join(
-        output_folder,
+        str(output_folder),
         f'speed_chunk_{chunk_index:03d}.parquet'
     )
 
-    output_file_abs = os.path.abspath(output_file)
+    output_file_abs = str(Path(output_file).resolve())
 
     # 直接从 LazyFrame 写到 Parquet
     # 避免 current_df = current_lf.collect() 后长时间占用内存
@@ -267,4 +269,4 @@ for start_time in range(min_time, max_time + 1, time_periods_per_chunk):
 print('\n全部交通速度数据分块合并完成')
 print(f'总输出文件数: {chunk_index}')
 print(f'预计总写出行数: {total_written_rows}')
-print(f'输出目录: {os.path.abspath(output_folder)}')
+print(f'输出目录: {output_folder.resolve()}')

@@ -221,8 +221,8 @@ __marimo__/
 data/processed/speed_data_chunks/
 data/raw/traffic_speed_sub-dataset.v2
 data/analysis/density_metrics_chunks/
-data/analysis/node_intersection_flow/
 data/analysis/node_intersection_flow_parquet/
 data/analysis/node_flow_curve_fit/
-data/analysis/node_flow_curve_cluster/
 data/analysis/date_type_curve_method_comparison/
+data/analysis/speed_class_overall_stats.csv
+data/analysis/speed_class_daily_period_stats.csv

@@ -13,7 +13,7 @@
 - 新增速度等级总体统计、按日期时段统计、分时段直方图与 P99.5 可视化分析结果。
 - 新增基于 Greenshields 模型的密度、车辆数与流量计算脚本及查询脚本。
 - 新增路段流量聚合为路口节点流量的脚本、校验脚本和检查文档。
-- 新增路口节点日内平均车流量的傅里叶曲线拟合、阶数比较、曲线聚类脚本及相关说明。
+- 新增路口节点日内平均车流量的傅里叶曲线拟合、阶数比较、日期类型方法对比脚本及相关说明。
 
 ## 当前目录结构
 
@@ -21,7 +21,7 @@
 FedTrafficFlow/
 ├─ analysis_scripts/
 │  ├─ add_p995_to_speed_histogram.py
-│  ├─ cluster_node_flow_curve_features.py
+│  ├─ compare_date_type_curve_methods.py
 │  ├─ compute_greenshields_density.py
 │  ├─ compare_node_flow_fourier_orders.py
 │  ├─ compute_node_intersection_flow_optimized.py
@@ -33,16 +33,18 @@ FedTrafficFlow/
 │  ├─ check_density_time_order.py
 │  ├─ inspect_density_metrics_chunks.py
 │  ├─ inspect_node_intersection_flow.py
+│  ├─ inspect_road_directionality.py
 │  └─ inspect_speed_data_chunks.py
 ├─ docs/
+│  ├─ date_type_curve_method_comparison.md
+│  ├─ environment_setup.md
 │  ├─ greenshields_speed_density_scheme.md
 │  ├─ node_flow_daily_curve_fit.md
-│  └─ node_intersection_flow_inspection.md
+│  ├─ node_intersection_flow_inspection.md
+│  ├─ parameter_files.md
+│  └─ project_pipeline.md
 ├─ data/
 │  ├─ analysis/
-│  │  ├─ density_metrics_chunks/
-│  │  ├─ node_flow_curve_fit/
-│  │  ├─ node_intersection_flow_parquet/
 │  │  ├─ speed_histogram_counts_by_period_by_class.csv
 │  │  ├─ speed_histograms_by_class_p995.csv
 │  │  ├─ speed_histograms_by_class_with_p995_percent.png
@@ -105,6 +107,8 @@ FedTrafficFlow/
 - 基于 `Polars` 流式引擎统计各速度等级的总体速度分布
 - 按日期、时段、速度等级生成分组统计结果
 - 生成可供后续可视化和校验使用的聚合统计结果
+- 输出 `data/analysis/speed_class_overall_stats.csv`
+- 输出 `data/analysis/speed_class_daily_period_stats.csv`
 
 ### `analysis_scripts/visualize_speed_hist_by_period.py`
 
@@ -132,8 +136,7 @@ FedTrafficFlow/
 - 为不同速度等级分配每车道临界密度参数
 - 对超过自由流速度的观测做截断，避免出现负密度
 - 输出路段密度、车辆数估计和 15 分钟流量等衍生指标
-- 输出 `data/params/speed_class_density_params.csv`
-- 读取 `data/params/beijing_capacity_params.csv`
+- 读取 `data/params/speed_class_density_params.csv`
 - 按 `时间段`、`路段ID`、`速度等级` 升序输出密度分块结果
 - 输出 `data/analysis/density_metrics_chunks/`
 
@@ -146,16 +149,14 @@ FedTrafficFlow/
 - 统计各阶数在全体完整节点上的 `RMSE`、`MAE`、`R2`、`WMAPE` 和全局 `R2`
 - 输出比较结果到 `data/analysis/node_flow_curve_fit/node_flow_fourier_order_comparison.json`
 
-### `analysis_scripts/cluster_node_flow_curve_features.py`
+### `analysis_scripts/compare_date_type_curve_methods.py`
 
 功能：
 
-- 读取节点日内曲线拟合结果和傅里叶系数结果
-- 将每个节点的 96 点平均流量曲线按节点均值归一化，提取不含 `a0` 的傅里叶形态特征
-- 按 `R2 >= 0.85` 和低流量阈值筛选候选节点
-- 对特征做 `StandardScaler` 标准化，并对 `k=3..8` 执行 `KMeans` 聚类比较
-- 输出聚类标签、聚类评价结果、聚类汇总和类平均曲线到 `data/analysis/node_flow_curve_cluster/`
-- 输出指标对比图、类中心曲线图和 PCA 二维散点图到 `data/analysis/node_flow_curve_cluster/plots/`
+- 基于节点流量分片构造 `workday / weekend / holiday` 三类日期类型
+- 对 `M0 / M1 / M2 / M3` 四种日内曲线构造方法进行统一拟合与聚类比较
+- 输出各方法的拟合结果、聚类标签、聚类汇总与类中心结果到 `data/analysis/date_type_curve_method_comparison/`
+- 输出方法级比较表和对比图片到 `data/analysis/date_type_curve_method_comparison/comparison/`
 
 ### `analysis_scripts/compute_node_intersection_flow_optimized.py`
 
@@ -224,6 +225,24 @@ FedTrafficFlow/
 
 ## 密度建模文档
 
+### `docs/project_pipeline.md`
+
+文档内容包括：
+
+- 从原始数据到拟合结果的完整处理链路
+- 各脚本输入输出之间的依赖关系
+- 主流程与检查脚本的分工说明
+- 推荐执行顺序的流程化解释
+
+### `docs/environment_setup.md`
+
+文档内容包括：
+
+- 推荐 Python 版本与核心依赖列表
+- `venv` 和 `conda` 两种安装方式
+- 数据准备要求、执行顺序和常见运行问题
+- 大文件、磁盘空间和性能方面的注意事项
+
 ### `docs/greenshields_speed_density_scheme.md`
 
 文档内容包括：
@@ -233,6 +252,15 @@ FedTrafficFlow/
 - Greenshields 密度计算公式与超速截断规则
 - 车辆数、流量与 15 分钟流量的派生计算方法
 
+### `docs/parameter_files.md`
+
+文档内容包括：
+
+- `data/params/` 目录下参数文件的角色划分
+- `speed_class_density_params.csv` 的字段定义与脚本使用位置
+- `beijing_capacity_params.csv` 的当前定位与后续扩展建议
+- 参数表与统计产物之间的关系说明
+
 ### `docs/node_intersection_flow_inspection.md`
 
 文档内容包括：
@@ -241,6 +269,15 @@ FedTrafficFlow/
 - 61 个日文件对应的全局时间段编号规则
 - 输出排序规则与检查结论
 - 相关生成脚本与检查脚本入口
+
+### `docs/date_type_curve_method_comparison.md`
+
+文档内容包括：
+
+- `compare_date_type_curve_methods.py` 的实验目的和输入数据
+- `M0 / M1 / M2 / M3` 四种日期类型处理方法的定义
+- 拟合、特征提取、聚类和 `best_k` 选择流程
+- `data/analysis/date_type_curve_method_comparison/` 输出结构说明
 
 ### `docs/node_flow_daily_curve_fit.md`
 
@@ -274,7 +311,7 @@ FedTrafficFlow/
 - `data/analysis/density_metrics_chunks/`
 - `data/analysis/node_intersection_flow_parquet/`
 - `data/analysis/node_flow_curve_fit/`
-- `data/analysis/node_flow_curve_cluster/`
+- `data/analysis/date_type_curve_method_comparison/`
 
 用于数据核查的脚本位于：
 
@@ -282,6 +319,7 @@ FedTrafficFlow/
 - `dataset_inspection_scripts/inspect_density_metrics_chunks.py`
 - `dataset_inspection_scripts/check_density_time_order.py`
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+- `dataset_inspection_scripts/inspect_road_directionality.py`
 
 ## 大文件说明
 
@@ -306,18 +344,20 @@ FedTrafficFlow/
 python preprocessing_scripts/process_link_gps.py
 python preprocessing_scripts/process_rnsd.py
 python preprocessing_scripts/merge_speed_data.py
+python analysis_scripts/summarize_speed_stats.py
 python analysis_scripts/visualize_speed_hist_by_period.py
 python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
 python analysis_scripts/compute_node_intersection_flow_optimized.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
+python analysis_scripts/compare_date_type_curve_methods.py
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
-python analysis_scripts/cluster_node_flow_curve_features.py
 python dataset_inspection_scripts/inspect_speed_data_chunks.py
 python dataset_inspection_scripts/inspect_density_metrics_chunks.py
 python dataset_inspection_scripts/check_density_time_order.py
 python dataset_inspection_scripts/inspect_node_intersection_flow.py
+python dataset_inspection_scripts/inspect_road_directionality.py
 ```
 
 建议环境依赖至少包括：
