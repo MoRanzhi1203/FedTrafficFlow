@@ -18,6 +18,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+import seaborn as sns
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")
 
@@ -110,6 +111,7 @@ class MethodArtifacts:
     center_df: pl.DataFrame
     standardized_features: np.ndarray
     cluster_labels: np.ndarray
+    cluster_centers: np.ndarray
 
 
 def parse_args() -> argparse.Namespace:
@@ -127,20 +129,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--workday-weight",
         type=float,
-        default=0.60,
-        help="M2 中工作日权重，默认 0.60。",
+        default=40 / 61,
+        help="M2 中工作日权重，默认 40/61（约 0.656）。",
     )
     parser.add_argument(
         "--weekend-weight",
         type=float,
-        default=0.25,
-        help="M2 中普通周末权重，默认 0.25。",
+        default=12 / 61,
+        help="M2 中普通周末权重，默认 12/61（约 0.197）。",
     )
     parser.add_argument(
         "--holiday-weight",
         type=float,
-        default=0.15,
-        help="M2 中节假日权重，默认 0.15。",
+        default=9 / 61,
+        help="M2 中节假日权重，默认 9/61（约 0.148）。",
     )
     parser.add_argument(
         "--node-sample-size",
@@ -318,6 +320,23 @@ def build_m2_profiles_from_type_profiles(
         .with_columns(
             (pl.col("_weighted_sum") / (pl.col("_weight_sum") + EPSILON)).alias(AVG_FLOW_COL)
         )
+        .select([NODE_COL, DAY_SLOT_COL, AVG_FLOW_COL, SAMPLE_COUNT_COL])
+        .sort([NODE_COL, DAY_SLOT_COL])
+    )
+
+
+def build_m1_profiles_from_type_profiles(
+    type_profiles_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """M1：由三类日期类型曲线等权合成为单条节点-时段曲线。"""
+    return (
+        type_profiles_df.group_by([NODE_COL, DAY_SLOT_COL])
+        .agg([
+            pl.col(AVG_FLOW_COL).mean().alias(AVG_FLOW_COL),
+            pl.col(SAMPLE_COUNT_COL).sum().alias(SAMPLE_COUNT_COL),
+            pl.col(DATE_TYPE_COL).n_unique().alias("_date_type_count"),
+        ])
+        .filter(pl.col("_date_type_count") == len(DATE_TYPES))
         .select([NODE_COL, DAY_SLOT_COL, AVG_FLOW_COL, SAMPLE_COUNT_COL])
         .sort([NODE_COL, DAY_SLOT_COL])
     )
@@ -738,8 +757,8 @@ def sample_silhouette_values(
 def fit_final_kmeans(
     standardized_features: np.ndarray,
     k: int,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """使用最终 k 训练 KMeans 并返回标签和抽样 silhouette 结果。"""
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """使用最终 k 训练 KMeans 并返回标签、中心和抽样 silhouette 结果。"""
     model = KMeans(
         n_clusters=k,
         random_state=DEFAULT_RANDOM_STATE,
@@ -747,7 +766,7 @@ def fit_final_kmeans(
     )
     labels = model.fit_predict(standardized_features)
     sample_indices, silhouette_vals = sample_silhouette_values(standardized_features, labels)
-    return labels, sample_indices, silhouette_vals
+    return labels, model.cluster_centers_, sample_indices, silhouette_vals
 
 
 def build_cluster_outputs(
@@ -961,26 +980,70 @@ def plot_method_pca_comparison(
     for ax, artifact in zip(axes.ravel(), artifacts):
         pca = PCA(n_components=2, random_state=DEFAULT_RANDOM_STATE)
         embedding = pca.fit_transform(artifact.standardized_features)
-        labels = artifact.cluster_labels
+        labels = artifact.cluster_labels.astype(np.int64)
+        projected_centers = pca.transform(artifact.cluster_centers)
         if embedding.shape[0] > PCA_SAMPLE_LIMIT:
             sampled_indices = np.sort(rng.choice(embedding.shape[0], PCA_SAMPLE_LIMIT, replace=False))
             embedding = embedding[sampled_indices]
             labels = labels[sampled_indices]
-        scatter = ax.scatter(
-            embedding[:, 0],
-            embedding[:, 1],
-            c=labels,
-            cmap="tab10",
-            s=10,
-            alpha=0.65,
-            edgecolors="none",
+        unique_clusters = np.unique(labels)
+        palette = sns.color_palette("bright", n_colors=max(len(unique_clusters), 1))
+        for cluster_id in unique_clusters:
+            cluster_mask = labels == cluster_id
+            cluster_points = embedding[cluster_mask]
+            color = palette[int(cluster_id) % len(palette)]
+            ax.scatter(
+                cluster_points[:, 0],
+                cluster_points[:, 1],
+                color=color,
+                s=10,
+                alpha=0.65,
+                edgecolors="none",
+                label=f"Cluster {int(cluster_id)}",
+            )
+            # 使用二维核密度估计绘制聚类轮廓线，而不是凸包边界。
+            if (
+                cluster_points.shape[0] >= 5
+                and np.ptp(cluster_points[:, 0]) > EPSILON
+                and np.ptp(cluster_points[:, 1]) > EPSILON
+            ):
+                sns.kdeplot(
+                    x=cluster_points[:, 0],
+                    y=cluster_points[:, 1],
+                    color=color,
+                    levels=5,
+                    alpha=0.5,
+                    linewidths=1.5,
+                    fill=False,
+                    warn_singular=False,
+                    ax=ax,
+                )
+        ax.scatter(
+            projected_centers[:, 0],
+            projected_centers[:, 1],
+            marker="X",
+            s=150,
+            color="white",
+            edgecolors="black",
+            linewidths=1.1,
+            zorder=5,
+            label="Cluster Center",
         )
+        for cluster_id, center_point in enumerate(projected_centers):
+            ax.annotate(
+                str(cluster_id),
+                (center_point[0], center_point[1]),
+                xytext=(5, 5),
+                textcoords="offset points",
+                fontsize=8,
+                weight="bold",
+                color="black",
+            )
         ax.set_title(f"{artifact.method_name} (k={artifact.best_k})")
         ax.set_xlabel("PCA 1")
         ax.set_ylabel("PCA 2")
         ax.grid(True, linestyle="--", alpha=0.30)
-        legend = ax.legend(*scatter.legend_elements(), title="Cluster", loc="best", fontsize=8)
-        ax.add_artist(legend)
+        ax.legend(title="Cluster", loc="best", fontsize=8)
 
     fig.suptitle("四种方法的 PCA 聚类散点图对比", fontsize=16)
     fig.tight_layout(rect=[0, 0.02, 1, 0.96])
@@ -1005,24 +1068,14 @@ def run_method_pipeline(
     )
     print(f"{method_name}: 成功拟合曲线数 {success_count}，跳过 {skipped_count}")
 
-    if method_name == METHOD_M1:
-        node_metadata_df = build_m1_node_metadata(coeff_df)
-        representative_curve_df = build_representative_curves(
-            profile_df,
-            method_name=method_name,
-            observed_col=observed_col,
-            include_date_type=True,
-        )
-        feature_df = build_m1_feature_df(profile_df)
-    else:
-        node_metadata_df = build_single_curve_metadata(coeff_df)
-        representative_curve_df = build_representative_curves(
-            profile_df,
-            method_name=method_name,
-            observed_col=observed_col,
-            include_date_type=False,
-        )
-        feature_df = build_single_curve_feature_df(representative_curve_df, method_name)
+    node_metadata_df = build_single_curve_metadata(coeff_df)
+    representative_curve_df = build_representative_curves(
+        profile_df,
+        method_name=method_name,
+        observed_col=observed_col,
+        include_date_type=False,
+    )
+    feature_df = build_single_curve_feature_df(representative_curve_df, method_name)
 
     common_node_ids = sorted(
         set(node_metadata_df.get_column(NODE_COL).to_list())
@@ -1057,7 +1110,7 @@ def run_method_pipeline(
         "max_cluster_ratio",
         "negative_silhouette_ratio",
     ])
-    cluster_labels, silhouette_sample_indices, silhouette_vals = fit_final_kmeans(
+    cluster_labels, cluster_centers, silhouette_sample_indices, silhouette_vals = fit_final_kmeans(
         standardized_features,
         best_k,
     )
@@ -1097,6 +1150,7 @@ def run_method_pipeline(
         center_df=center_df,
         standardized_features=standardized_features,
         cluster_labels=cluster_labels,
+        cluster_centers=cluster_centers,
     )
 
 
@@ -1181,14 +1235,15 @@ def main() -> None:
         elif method_name == METHOD_M1:
             if type_profiles_df is None:
                 type_profiles_df = collect_type_profiles(base_lf)
+            profile_df = build_m1_profiles_from_type_profiles(type_profiles_df)
             artifacts.append(
                 run_method_pipeline(
                     method_name=method_name,
-                    profile_df=type_profiles_df,
+                    profile_df=profile_df,
                     observed_col=AVG_FLOW_COL,
-                    include_date_type=True,
+                    include_date_type=False,
                     method_dir=method_dir,
-                    feature_builder="m1",
+                    feature_builder="single",
                 )
             )
         elif method_name == METHOD_M2:
