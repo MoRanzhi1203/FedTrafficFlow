@@ -1,114 +1,170 @@
-# 路口流量数据检查报告
+# 路口流量分片检查与使用说明
 
 ## 概述
-本报告总结了 `data/analysis/node_intersection_flow_parquet/` 目录下 61 个 Parquet 文件的结构、分片规则和排序检查结果。
 
-## 检查脚本
-检查脚本位于：[dataset_inspection_scripts/inspect_node_intersection_flow.py](../dataset_inspection_scripts/inspect_node_intersection_flow.py)
+本文档说明 `data/analysis/node_intersection_flow_parquet/` 的字段结构、分片规则、检查入口与使用建议。
 
-## 文件概览
-- **总文件数**: 61个
-- **文件命名模式**: `node_flow_chunk_XXX.parquet` (XXX从000到060)
-- **每个文件大小**: 约54-55 MB
-- **每个文件行数**: 4,034,976行
-- **总数据量**: 约3.3 GB
+说明：
 
-## 数据结构
-所有文件具有相同的5列结构：
+- 本文档已不再维护“固定文件大小、固定行数、固定统计值”一类易失效的快照数据
+- 旧版文档中的静态数值视为历史检查记录，当前以脚本实时检查结果为准
 
-| 列名 | 数据类型 | 描述 |
-|------|----------|------|
-| 节点ID | Int64 | 道路节点标识符 |
-| 时间段 | Int64 | 时间分段标识 |
-| 路口进入流量 | Float32 | 进入路口的车流量 |
-| 路口离开流量 | Float32 | 离开路口的车流量 |
-| 路口车流量 | Float64 | 路口总车流量 |
+## 数据来源
 
-## 数据分布分析
+生成脚本：
 
-### 1. 文件分段模式
-- **每个文件覆盖96个连续时间段**
-- **时间段为全局连续编号**，不是每天都从0重新开始
-- **总时间段范围**: 0-5855 (共5856个时间段，每15分钟一个)
-- **文件分段**:
-  - 文件000: 时间段 0-95
-  - 文件001: 时间段 96-191  
-  - 文件002: 时间段 192-287
-  - 文件003: 时间段 288-383
-  - 文件004: 时间段 384-479
-  - ...以此类推
-  - 文件060: 时间段 5760-5855
+- `analysis_scripts/compute_node_intersection_flow_optimized.py`
 
-### 2. 输出排序规则
-- **主排序键**: `时间段` 升序
-- **次排序键**: `节点ID` 升序
-- **检查结论**: 已生成并核验的节点流量分片均满足 `时间段 -> 节点ID` 的字典序升序输出
+上游输入：
 
-### 3. 节点ID
-- **唯一节点数**: 42,031个
-- **ID范围**: 1,520,263,927 到 1,556,503,835
-- **每个文件包含相同的节点集合**
+- `data/analysis/density_metrics_chunks/`
+- `data/processed/rnsd_processed.csv`
 
-### 4. 时间段
-- **每个时间段代表15分钟**
-- **总时间跨度**: 5856 × 15分钟 = 1464小时 = 61天
-- **时间段0**: 00:00-00:15
-- **时间段95**: 23:45-00:00 (次日)
-- **时间段96**: 第2天 00:00-00:15
-- **时间段5855**: 第61天 23:45-00:00 (次日)
+输出目录：
 
-### 5. 流量统计
+- `data/analysis/node_intersection_flow_parquet/`
 
-下列统计在当前生成的节点流量分片中保持稳定：
+## 命名与分片规则
 
-| 统计指标 | 进入流量 | 离开流量 | 总车流量 |
-|----------|----------|----------|----------|
-| 最小值 | 0.0 | 0.0 | 0.0 |
-| 最大值 | ~14,900 | ~11,000 | ~10,400 |
-| 平均值 | ~2,250 | ~2,250 | ~2,400 |
-| 中位数 | ~2,050 | ~2,000 | ~2,250 |
-| 标准差 | ~1,370 | ~1,350 | ~1,190 |
+默认文件命名模式：
 
-## 数据质量观察
+- `node_flow_chunk_000.parquet`
+- `node_flow_chunk_001.parquet`
+- ...
 
-### 优点
-1. **数据完整性**: 所有文件结构一致，无缺失值
-2. **数据一致性**: 每个文件包含相同的节点集合
-3. **时间连续性**: 61 个文件按全局时间段连续覆盖，无间隔
-4. **排序一致性**: 文件内按 `时间段`、`节点ID` 升序排列
-5. **数据类型合理**: 数值类型选择恰当
+当前主流程下，分片规则为：
 
-### 潜在问题
-1. **进入流量为0**: 从示例数据看，很多记录的"路口进入流量"为0.0
-2. **单向活跃节点存在**: 部分节点在某些时间段只有进入流量或只有离开流量，综合流量会退化为单方向流量
+- 每个文件覆盖 1 天，即 96 个连续 `时间段`
+- `时间段` 使用全局连续编号，而不是每天从 0 重新开始
+- 若上游日期范围仍为 61 天，则通常会生成 61 个分片
+
+因此，更稳妥的理解是：
+
+```text
+节点流量分片数量 = 上游可用日期数
+每个分片覆盖 96 个连续时间段
+```
+
+## 字段结构
+
+默认输出包含以下 5 列：
+
+| 列名 | 说明 |
+| --- | --- |
+| `节点ID` | 路网节点标识符 |
+| `时间段` | 全局时间段编号 |
+| `路口进入流量` | 聚合到节点的进入方向流量 |
+| `路口离开流量` | 聚合到节点的离开方向流量 |
+| `路口车流量` | 节点综合流量结果 |
+
+## 排序与时间解释
+
+当前脚本的目标输出顺序为：
+
+- 主排序键：`时间段` 升序
+- 次排序键：`节点ID` 升序
+
+时间解释规则：
+
+- 每个 `时间段` 对应 15 分钟
+- `0-95` 表示第 1 天的 96 个日内时间段
+- `96-191` 表示第 2 天
+- 以此类推
+
+该规则也是后续：
+
+- `fit_node_flow_daily_curve.py`
+- `compare_date_type_curve_methods.py`
+
+将 `时间段 % 96` 转为 `日内时间段` 的基础。
+
+## 推荐检查方式
+
+### 快速结构检查
+
+脚本：
+
+- `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+
+可用于查看：
+
+- 文件数和样例文件
+- 列名和数据类型
+- 空值统计
+- 前若干行、后若干行样例
+
+### 时间顺序与连续性检查
+
+若要确认上游分片和下游节点流量分片是否连续、是否存在乱序，建议结合：
+
+- `dataset_inspection_scripts/check_density_time_order.py`
+- `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+
+### 方向性与节点映射检查
+
+若怀疑节点进入流量/离开流量存在异常，可结合：
+
+- `dataset_inspection_scripts/inspect_road_directionality.py`
+- `analysis_scripts/compute_node_intersection_flow_optimized.py`
 
 ## 使用建议
 
-### 数据分析方向
-1. **时间序列分析**: 分析不同时间段的流量变化规律
-2. **节点热点分析**: 识别高流量节点和交通瓶颈
-3. **流量相关性**: 分析进入流量与离开流量的关系
-4. **方向模式分析**: 研究进入流量与离开流量的不对称特征
+### 下游分析用途
 
-### 性能优化建议
-1. **分区查询**: 按时间段分区可以提高查询效率
-2. **列式存储优势**: Parquet格式适合列式查询，可选择性读取所需列
-3. **流式处理**: 对于大数据量，建议使用流式处理方式
+该目录主要服务于以下脚本：
 
-## 相关脚本
-- [inspect_speed_data_chunks.py](../dataset_inspection_scripts/inspect_speed_data_chunks.py) - 检查速度数据
-- [inspect_density_metrics_chunks.py](../dataset_inspection_scripts/inspect_density_metrics_chunks.py) - 检查密度指标
-- [compute_node_intersection_flow_optimized.py](../analysis_scripts/compute_node_intersection_flow_optimized.py) - 计算路口流量的脚本
-- [fit_node_flow_daily_curve.py](../analysis_scripts/fit_node_flow_daily_curve.py) - 基于节点流量构造日内平均曲线并做傅里叶拟合
-- [visualize_node_flow_daily_curve_fit.py](../analysis_scripts/visualize_node_flow_daily_curve_fit.py) - 可视化拟合质量和样本节点曲线
-- [node_flow_daily_curve_fit.md](./node_flow_daily_curve_fit.md) - 节点日内曲线拟合说明文档
+- `analysis_scripts/fit_node_flow_daily_curve.py`
+- `analysis_scripts/compare_date_type_curve_methods.py`
 
-## 后续工作
-1. 基于已生成的 96 点日内平均曲线分析早晚高峰模式
-2. 研究节点流量排名、拟合误差与空间分布关系
-3. 开发节点流量异常检测算法
-4. 结合联邦学习任务设计下游建模特征
+常见用途包括：
 
----
-*报告生成时间: 2026-05-21*  
-*数据位置: `data/analysis/node_intersection_flow_parquet/`*
+- 构造节点级 96 点日内平均流量曲线
+- 做傅里叶拟合和拟合质量分析
+- 比较不同日期类型处理方法的聚类表现
+
+### 数据质量判断
+
+以下现象通常不应直接视为错误：
+
+- 某些节点在部分时间段 `路口进入流量` 或 `路口离开流量` 为 0
+- 某些节点存在明显单向流量特征
+
+这些现象可能来自：
+
+- 单向路段主导
+- 路网局部拓扑特征
+- 方向映射差异
+
+真正需要优先检查的是：
+
+- 文件内排序是否混乱
+- 某些时间段是否缺失
+- 某些节点是否在部分文件中突然消失
+- `路口车流量` 是否出现异常负值
+
+## 已废除的旧写法
+
+以下内容已不建议继续写入正式文档：
+
+- “每个文件固定约 54-55 MB”
+- “每个文件固定 4,034,976 行”
+- “唯一节点数固定为某个历史值”
+- “最大流量、均值、中位数始终为某组静态数字”
+
+原因是这些数值会随着：
+
+- 上游过滤规则
+- 参数修正
+- 输出类型调整
+- 数据重生成
+
+而发生变化，更适合作为一次性检查日志，而不是长期说明文档。
+
+## 相关文件
+
+- `analysis_scripts/compute_node_intersection_flow_optimized.py`
+- `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+- `dataset_inspection_scripts/inspect_road_directionality.py`
+- `analysis_scripts/fit_node_flow_daily_curve.py`
+- `analysis_scripts/compare_date_type_curve_methods.py`
+- `docs/node_flow_daily_curve_fit.md`

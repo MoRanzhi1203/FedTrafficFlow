@@ -15,6 +15,7 @@
 -> 路段流量聚合为节点流量
 -> 节点日内平均曲线拟合
 -> 拟合阶数与日期类型方法比较
+-> 函数曲线层面的聚类可视化与解释
 ```
 
 ## 1. 原始输入
@@ -296,7 +297,31 @@
 
 - [date_type_curve_method_comparison.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/date_type_curve_method_comparison.md)
 
-## 9. 检查脚本位置
+## 9. 聚类函数曲线可视化
+
+脚本：
+
+- `analysis_scripts/visualize_fitted_function_clusters.py`
+
+输入：
+
+- `data/analysis/date_type_curve_method_comparison/<method>/`
+
+输出：
+
+- `data/analysis/date_type_curve_method_comparison/function_cluster_visualization/`
+
+作用：
+
+- 复用日期类型方法比较阶段已经生成的 `fitted_curves.parquet`、`cluster_labels.parquet`、`cluster_summary.parquet`、`cluster_centers.parquet`
+- 不重新聚类，只在函数曲线层面做聚类解释与诊断
+- 输出抽样函数云图、overlay 检查图、分位带图、代表节点图、全量诊断图和原始/归一化残差图
+
+更多说明见：
+
+- [function_cluster_visualization.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/function_cluster_visualization.md)
+
+## 10. 检查脚本位置
 
 当前项目还提供多类检查脚本：
 
@@ -313,7 +338,7 @@
 - 抽样查看样例值
 - 研究路网方向性
 
-## 10. 推荐执行顺序
+## 11. 推荐执行顺序
 
 ```bash
 python preprocessing_scripts/process_link_gps.py
@@ -327,11 +352,13 @@ python analysis_scripts/compute_node_intersection_flow_optimized.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/compare_date_type_curve_methods.py
+python analysis_scripts/visualize_fitted_function_clusters.py --method M2_shape_normalized_weighted_curve
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ```
 
-## 11. 使用建议
+## 12. 使用建议
 
 - 若只想复现主流程，优先执行到 `fit_node_flow_daily_curve.py`
 - 若只想验证日期类型方法实验，主流程至少需要先跑到 `node_intersection_flow_parquet/`
+- 若只想复现实验报告中的函数聚类图，先执行 `compare_date_type_curve_methods.py`，再单独运行 `visualize_fitted_function_clusters.py`
 - 若本地磁盘空间有限，可优先保留脚本和轻量级 CSV 结果，重型分块结果可按需重建

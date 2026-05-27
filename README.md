@@ -14,6 +14,7 @@
 - 新增基于 Greenshields 模型的密度、车辆数与流量计算脚本及查询脚本。
 - 新增路段流量聚合为路口节点流量的脚本、校验脚本和检查文档。
 - 新增路口节点日内平均车流量的傅里叶曲线拟合、阶数比较、日期类型方法对比脚本及相关说明。
+- 新增基于既有聚类结果的函数曲线可视化脚本，可直接输出分位带图、抽样函数云图、代表节点图与残差诊断图。
 
 ## 当前目录结构
 
@@ -27,6 +28,7 @@ FedTrafficFlow/
 │  ├─ compute_node_intersection_flow_optimized.py
 │  ├─ fit_node_flow_daily_curve.py
 │  ├─ summarize_speed_stats.py
+│  ├─ visualize_fitted_function_clusters.py
 │  ├─ visualize_node_flow_daily_curve_fit.py
 │  ├─ visualize_speed_hist_by_period.py
 ├─ dataset_inspection_scripts/
@@ -39,6 +41,7 @@ FedTrafficFlow/
 │  ├─ date_type_curve_method_comparison.md
 │  ├─ environment_setup.md
 │  ├─ greenshields_speed_density_scheme.md
+│  ├─ function_cluster_visualization.md
 │  ├─ node_flow_daily_curve_fit.md
 │  ├─ node_intersection_flow_inspection.md
 │  ├─ parameter_files.md
@@ -158,6 +161,15 @@ FedTrafficFlow/
 - 输出各方法的拟合结果、聚类标签、聚类汇总与类中心结果到 `data/analysis/date_type_curve_method_comparison/`
 - 输出方法级比较表和对比图片到 `data/analysis/date_type_curve_method_comparison/comparison/`
 
+### `analysis_scripts/visualize_fitted_function_clusters.py`
+
+功能：
+
+- 读取 `compare_date_type_curve_methods.py` 已生成的各方法 parquet 结果
+- 不重新聚类，只在“已拟合函数 + 已有 cluster_labels”基础上做曲线层面的可视化和解释
+- 输出抽样函数云图、技术检查 overlay 图、分位带图、代表节点图、全量诊断图、原始/归一化残差图
+- 输出目录为 `data/analysis/date_type_curve_method_comparison/function_cluster_visualization/`
+
 ### `analysis_scripts/compute_node_intersection_flow_optimized.py`
 
 功能：
@@ -252,6 +264,15 @@ FedTrafficFlow/
 - Greenshields 密度计算公式与超速截断规则
 - 车辆数、流量与 15 分钟流量的派生计算方法
 
+### `docs/function_cluster_visualization.md`
+
+文档内容包括：
+
+- `visualize_fitted_function_clusters.py` 的使用前提和输入 parquet 说明
+- 各图的定位区分：主图、技术检查图、分位带图、代表节点图、诊断图
+- 关键参数、默认值与推荐使用方式
+- `function_cluster_visualization/` 输出目录结构说明
+
 ### `docs/parameter_files.md`
 
 文档内容包括：
@@ -312,6 +333,7 @@ FedTrafficFlow/
 - `data/analysis/node_intersection_flow_parquet/`
 - `data/analysis/node_flow_curve_fit/`
 - `data/analysis/date_type_curve_method_comparison/`
+- `data/analysis/date_type_curve_method_comparison/function_cluster_visualization/`
 
 用于数据核查的脚本位于：
 
@@ -320,6 +342,7 @@ FedTrafficFlow/
 - `dataset_inspection_scripts/check_density_time_order.py`
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`
 - `dataset_inspection_scripts/inspect_road_directionality.py`
+- `analysis_scripts/visualize_fitted_function_clusters.py`
 
 ## 大文件说明
 
@@ -352,6 +375,7 @@ python analysis_scripts/compute_node_intersection_flow_optimized.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/compare_date_type_curve_methods.py
+python analysis_scripts/visualize_fitted_function_clusters.py --method M2_shape_normalized_weighted_curve
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 python dataset_inspection_scripts/inspect_speed_data_chunks.py
 python dataset_inspection_scripts/inspect_density_metrics_chunks.py

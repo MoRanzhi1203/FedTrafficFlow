@@ -121,6 +121,7 @@ python analysis_scripts/compute_node_intersection_flow_optimized.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/compare_date_type_curve_methods.py
+python analysis_scripts/visualize_fitted_function_clusters.py --method M2_shape_normalized_weighted_curve
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ```
 
@@ -176,6 +177,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 - `node_intersection_flow_parquet/`
 - `node_flow_curve_fit/`
 - `date_type_curve_method_comparison/`
+- `date_type_curve_method_comparison/function_cluster_visualization/`
 
 ## 7. 运行注意事项
 
@@ -205,6 +207,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 - `analysis_scripts/compute_greenshields_density.py`
 - `analysis_scripts/compute_node_intersection_flow_optimized.py`
 - `analysis_scripts/compare_date_type_curve_methods.py`
+- `analysis_scripts/visualize_fitted_function_clusters.py`
 
 建议：
 
@@ -295,6 +298,19 @@ pip install pyarrow
 python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 1000
 ```
 
+### 6. 函数聚类可视化阶段运行较慢
+
+原因：
+
+- `visualize_fitted_function_clusters.py` 会读取单个方法的全量 `fitted_curves.parquet`
+- 全量诊断图需要绘制每个 cluster 的全部节点曲线
+
+解决建议：
+
+- 先只运行单一方法，例如 `--method M2_shape_normalized_weighted_curve`
+- 如仅需论文主图，可优先关注 `sampled_function_cloud_with_center.png`
+- 若只做快速检查，可降低 `--sample-per-cluster` 或暂时跳过重复生成全量诊断图
+
 ## 9. 后续建议
 
 - 后续可以把本文档中的依赖清单固化为 `requirements.txt`
@@ -307,3 +323,4 @@ python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 10
 - [project_pipeline.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/project_pipeline.md)
 - [parameter_files.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/parameter_files.md)
 - [greenshields_speed_density_scheme.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/greenshields_speed_density_scheme.md)
+- [function_cluster_visualization.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/function_cluster_visualization.md)

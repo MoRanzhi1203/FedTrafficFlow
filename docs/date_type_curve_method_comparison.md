@@ -6,6 +6,8 @@
 
 该脚本的目标不是替代正式的节点日内曲线拟合流程，而是在统一数据基础上比较不同“日期类型处理方式”对日内曲线拟合质量与聚类可分性的影响。
 
+基于该脚本输出的 parquet 结果，项目还提供后处理可视化脚本 `analysis_scripts/visualize_fitted_function_clusters.py`，用于从“函数曲线形态”而非 PCA 投影角度解释聚类结果。
+
 当前脚本统一比较以下四种方法：
 
 - `M0_original_fourier`
@@ -238,6 +240,51 @@ k = 3, 4, 5, 6
 - `method_cluster_size_comparison.png`
 - `all_k_metric_curves.png`
 
+## 函数聚类可视化后处理
+
+脚本：
+
+- `analysis_scripts/visualize_fitted_function_clusters.py`
+
+作用：
+
+- 读取单个方法目录下既有的 parquet 输出
+- 不重新运行 `KMeans`，不修改 `cluster_id`，只做可视化和结果解释
+- 将聚类结果直接还原到“拟合函数曲线”层面，而不是只看 PCA 散点图
+
+默认输入目录：
+
+- `data/analysis/date_type_curve_method_comparison/<method>/`
+
+默认输出目录：
+
+- `data/analysis/date_type_curve_method_comparison/function_cluster_visualization/`
+
+当前可输出的主要图表和表格包括：
+
+- `*_sampled_function_cloud_with_center.png`
+- `*_fitted_function_overlay.png`
+- `*_cluster_function_quantile_bands.png`
+- `*_cluster_mean_fitted_vs_center.png`
+- `*_representative_fitted_functions.png`
+- `*_all_fitted_functions_diagnostic.png`
+- `*_residual_distribution_by_cluster.png`
+- `*_normalized_residual_distribution_by_cluster.png`
+- `*_function_cluster_summary.csv`
+- `*_node_function_cluster_labels.csv`
+
+推荐阅读顺序：
+
+- 主解释图：`sampled_function_cloud_with_center.png`
+- 技术检查图：`fitted_function_overlay.png`
+- 稳定性辅助图：`cluster_function_quantile_bands.png`
+- 代表样本图：`representative_fitted_functions.png`
+- 诊断图：`all_fitted_functions_diagnostic.png`
+
+更多细节见：
+
+- [function_cluster_visualization.md](file:///e:/Jupter_Notebook/FedTrafficFlow/docs/function_cluster_visualization.md)
+
 ## 命令行参数
 
 脚本支持以下主要参数：
@@ -278,6 +325,7 @@ python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 50
 - 若只需要正式的节点日内平均曲线拟合结果，仍以 `fit_node_flow_daily_curve.py` 为主流程
 - 若输入分片数量不是 61 个，脚本会报错，因为当前内置日历映射固定为 61 天
 - 该脚本会生成较多中间结果和图片，适合本地分析环境，不建议在轻量部署环境中默认执行
+- 若需要进一步解释单个方法的类中心、类内离散度和代表节点，应在本脚本完成后继续运行 `visualize_fitted_function_clusters.py`
 
 ## 相关文件
 
@@ -285,4 +333,6 @@ python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 50
 - `analysis_scripts/fit_node_flow_daily_curve.py`
 - `analysis_scripts/compare_node_flow_fourier_orders.py`
 - `analysis_scripts/visualize_node_flow_daily_curve_fit.py`
+- `analysis_scripts/visualize_fitted_function_clusters.py`
 - `docs/node_flow_daily_curve_fit.md`
+- `docs/function_cluster_visualization.md`
