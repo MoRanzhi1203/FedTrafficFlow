@@ -15,6 +15,21 @@
 
 - `data/analysis/node_intersection_flow_parquet/`
 
+推荐在拟合前先运行：
+
+```bash
+python analysis_scripts/check_spatial_node_completeness.py
+```
+
+当前项目最新检查结果显示：
+
+- `246133536` 条节点-时间段观测完整覆盖 `42031` 个节点、`61` 天、每日 `96` 个时段
+- 缺失记录数为 `0`
+- 重复记录数为 `0`
+- 非法流量记录数为 `0`
+
+因此当前下游拟合流程直接使用原始 `node_intersection_flow_parquet/`，无需再执行空间均值填补，也不需要准备额外的 `daily_parquet` 副本。
+
 输入文件命名模式：
 
 - `node_flow_chunk_000.parquet`
@@ -59,6 +74,11 @@
 - 删除 `时间段` 为空的记录
 - 删除 `路口车流量` 为空的记录
 - 删除 `路口车流量 < 0` 的记录
+
+说明：
+
+- 这些规则主要用于鲁棒性防护
+- 对当前已经通过 `check_spatial_node_completeness.py` 检查的数据，正常情况下不会触发大规模过滤
 
 ### 3. 按节点构造 96 点曲线
 
@@ -278,6 +298,7 @@ fitted = max(fitted, 0)
 
 ```bash
 python analysis_scripts/compute_node_intersection_flow_optimized.py
+python analysis_scripts/check_spatial_node_completeness.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
@@ -286,6 +307,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ## 相关文件
 
 - `analysis_scripts/compute_node_intersection_flow_optimized.py`
+- `analysis_scripts/check_spatial_node_completeness.py`
 - `analysis_scripts/fit_node_flow_daily_curve.py`
 - `analysis_scripts/compare_node_flow_fourier_orders.py`
 - `analysis_scripts/visualize_node_flow_daily_curve_fit.py`

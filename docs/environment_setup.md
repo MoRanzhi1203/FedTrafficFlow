@@ -118,6 +118,7 @@ python analysis_scripts/visualize_speed_hist_by_period.py
 python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
 python analysis_scripts/compute_node_intersection_flow_optimized.py
+python analysis_scripts/check_spatial_node_completeness.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/compare_date_type_curve_methods.py
@@ -175,9 +176,16 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 输出：
 
 - `node_intersection_flow_parquet/`
+- `node_intersection_flow_check_reports/`
 - `node_flow_curve_fit/`
 - `date_type_curve_method_comparison/`
 - `date_type_curve_method_comparison/function_cluster_visualization/`
+
+补充说明：
+
+- 当前推荐先运行 `analysis_scripts/check_spatial_node_completeness.py`
+- 若完整性检查通过，则后续拟合与日期类型比较直接使用原始 `node_intersection_flow_parquet/`
+- 当前流程不再推荐执行空间均值填补，也不需要额外生成 `daily_parquet` 副本
 
 ## 7. 运行注意事项
 
@@ -290,6 +298,7 @@ pip install pyarrow
 解决建议：
 
 - 先运行检查脚本确认输入是否正确
+- 推荐使用 `analysis_scripts/check_spatial_node_completeness.py` 作为节点流量检查入口
 - 对 `compare_date_type_curve_methods.py` 使用 `--node-sample-size`
 
 示例：
@@ -298,7 +307,25 @@ pip install pyarrow
 python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 1000
 ```
 
-### 6. 函数聚类可视化阶段运行较慢
+### 6. 为什么不再需要空间均值填补
+
+原因：
+
+- 当前节点流量完整性检查结果显示数据已经完整
+
+当前检查结论：
+
+- `246133536` 条节点-时间段观测完整覆盖 `42031` 个节点、`61` 天、每日 `96` 个时段
+- 缺失记录数为 `0`
+- 重复记录数为 `0`
+- 非法流量记录数为 `0`
+
+结论：
+
+- 后续 `fit_node_flow_daily_curve.py` 与 `compare_date_type_curve_methods.py` 直接使用原始 `node_intersection_flow_parquet/`
+- 不需要再生成空间填补后的 `daily_parquet` 副本
+
+### 7. 函数聚类可视化阶段运行较慢
 
 原因：
 

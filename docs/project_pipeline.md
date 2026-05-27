@@ -13,6 +13,7 @@
 -> 速度统计与可视化
 -> Greenshields 密度与流量计算
 -> 路段流量聚合为节点流量
+-> 节点流量完整性检查
 -> 节点日内平均曲线拟合
 -> 拟合阶数与日期类型方法比较
 -> 函数曲线层面的聚类可视化与解释
@@ -329,6 +330,7 @@
 - `dataset_inspection_scripts/inspect_density_metrics_chunks.py`
 - `dataset_inspection_scripts/check_density_time_order.py`
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+- `analysis_scripts/check_spatial_node_completeness.py`
 - `dataset_inspection_scripts/inspect_road_directionality.py`
 
 这些脚本不参与主流程产出，但用于：
@@ -337,6 +339,32 @@
 - 检查分片顺序
 - 抽样查看样例值
 - 研究路网方向性
+
+其中与节点流量主流程直接相关的推荐检查入口为：
+
+- `analysis_scripts/check_spatial_node_completeness.py`
+
+该脚本会在不构造全量理论网格、不执行任何空间填补的前提下，检查：
+
+- 输入分片数量
+- 必需字段是否齐全
+- 每日时间段范围与连续性
+- 观测节点与拓扑节点是否一致
+- 每日节点-时段是否存在缺失或重复
+- `路口车流量` 是否存在 `null / NaN / 负值`
+
+默认输出目录：
+
+- `data/analysis/node_intersection_flow_check_reports/`
+
+基于当前数据的最新检查结果：
+
+- `246133536` 条节点-时间段观测完整覆盖 `42031` 个节点、`61` 天、每日 `96` 个时段
+- 缺失记录数为 `0`
+- 重复记录数为 `0`
+- 非法流量记录数为 `0`
+- 后续 `fit_node_flow_daily_curve.py` 与 `compare_date_type_curve_methods.py` 直接使用原始 `node_intersection_flow_parquet/`
+- 当前主流程不再推荐执行空间均值填补，也不需要额外生成 `daily_parquet` 副本
 
 ## 11. 推荐执行顺序
 
@@ -349,6 +377,7 @@ python analysis_scripts/visualize_speed_hist_by_period.py
 python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
 python analysis_scripts/compute_node_intersection_flow_optimized.py
+python analysis_scripts/check_spatial_node_completeness.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/compare_date_type_curve_methods.py
@@ -358,7 +387,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 
 ## 12. 使用建议
 
-- 若只想复现主流程，优先执行到 `fit_node_flow_daily_curve.py`
-- 若只想验证日期类型方法实验，主流程至少需要先跑到 `node_intersection_flow_parquet/`
+- 若只想复现主流程，建议在 `compute_node_intersection_flow_optimized.py` 后先运行 `check_spatial_node_completeness.py`，再继续到 `fit_node_flow_daily_curve.py`
+- 若只想验证日期类型方法实验，主流程至少需要先产出 `node_intersection_flow_parquet/` 并完成完整性检查
 - 若只想复现实验报告中的函数聚类图，先执行 `compare_date_type_curve_methods.py`，再单独运行 `visualize_fitted_function_clusters.py`
 - 若本地磁盘空间有限，可优先保留脚本和轻量级 CSV 结果，重型分块结果可按需重建

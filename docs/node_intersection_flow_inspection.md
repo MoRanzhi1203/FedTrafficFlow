@@ -93,6 +93,37 @@
 - 空值统计
 - 前若干行、后若干行样例
 
+### 完整性检查
+
+推荐脚本：
+
+- `analysis_scripts/check_spatial_node_completeness.py`
+
+默认命令：
+
+```bash
+python analysis_scripts/check_spatial_node_completeness.py
+```
+
+仅当发现异常且需要导出具体缺失点时，可使用：
+
+```bash
+python analysis_scripts/check_spatial_node_completeness.py --write-missing-detail
+```
+
+该脚本会检查：
+
+- 输入分片数量与字段完整性
+- 每日时间段范围是否与 `day_index * 96` 到 `day_index * 96 + 95` 一致
+- 观测节点集合与拓扑节点集合是否一致
+- 每日是否存在节点-时段缺失或重复
+- `路口车流量` 是否存在 `null / NaN / 负值`
+- 节点级与日内时段级的缺失统计
+
+默认报告目录：
+
+- `data/analysis/node_intersection_flow_check_reports/`
+
 ### 时间顺序与连续性检查
 
 若要确认上游分片和下游节点流量分片是否连续、是否存在乱序，建议结合：
@@ -142,6 +173,14 @@
 - 某些节点是否在部分文件中突然消失
 - `路口车流量` 是否出现异常负值
 
+当前项目最新检查结论为：
+
+- `246133536` 条节点-时间段观测完整覆盖 `42031` 个节点、`61` 天、每日 `96` 个时段
+- 缺失记录数为 `0`
+- 重复记录数为 `0`
+- 非法流量记录数为 `0`
+- 因此后续曲线拟合与聚类直接使用原始 `node_intersection_flow_parquet`，无需再执行空间均值填补
+
 ## 已废除的旧写法
 
 以下内容已不建议继续写入正式文档：
@@ -163,6 +202,7 @@
 ## 相关文件
 
 - `analysis_scripts/compute_node_intersection_flow_optimized.py`
+- `analysis_scripts/check_spatial_node_completeness.py`
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`
 - `dataset_inspection_scripts/inspect_road_directionality.py`
 - `analysis_scripts/fit_node_flow_daily_curve.py`

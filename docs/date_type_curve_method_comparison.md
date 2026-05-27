@@ -21,6 +21,21 @@
 
 - `data/analysis/node_intersection_flow_parquet/`
 
+推荐在方法比较前先运行：
+
+```bash
+python analysis_scripts/check_spatial_node_completeness.py
+```
+
+当前项目最新检查结果显示：
+
+- `246133536` 条节点-时间段观测完整覆盖 `42031` 个节点、`61` 天、每日 `96` 个时段
+- 缺失记录数为 `0`
+- 重复记录数为 `0`
+- 非法流量记录数为 `0`
+
+因此当前方法比较流程直接使用原始 `node_intersection_flow_parquet/`，无需再执行空间均值填补，也不需要切换到额外生成的数据副本。
+
 输入文件命名模式：
 
 - `node_flow_chunk_000.parquet`
@@ -323,6 +338,7 @@ python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 50
 
 - 该脚本适合用于方法比较、论文实验和可解释性分析
 - 若只需要正式的节点日内平均曲线拟合结果，仍以 `fit_node_flow_daily_curve.py` 为主流程
+- 若准备运行本脚本，建议先确认 `check_spatial_node_completeness.py` 已通过，再开始日期类型比较
 - 若输入分片数量不是 61 个，脚本会报错，因为当前内置日历映射固定为 61 天
 - 该脚本会生成较多中间结果和图片，适合本地分析环境，不建议在轻量部署环境中默认执行
 - 若需要进一步解释单个方法的类中心、类内离散度和代表节点，应在本脚本完成后继续运行 `visualize_fitted_function_clusters.py`
@@ -330,6 +346,7 @@ python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 50
 ## 相关文件
 
 - `analysis_scripts/compare_date_type_curve_methods.py`
+- `analysis_scripts/check_spatial_node_completeness.py`
 - `analysis_scripts/fit_node_flow_daily_curve.py`
 - `analysis_scripts/compare_node_flow_fourier_orders.py`
 - `analysis_scripts/visualize_node_flow_daily_curve_fit.py`

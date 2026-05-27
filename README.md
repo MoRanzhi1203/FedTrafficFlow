@@ -23,6 +23,7 @@ FedTrafficFlow/
 ├─ analysis_scripts/
 │  ├─ add_p995_to_speed_histogram.py
 │  ├─ compare_date_type_curve_methods.py
+│  ├─ check_spatial_node_completeness.py
 │  ├─ compute_greenshields_density.py
 │  ├─ compare_node_flow_fourier_orders.py
 │  ├─ compute_node_intersection_flow_optimized.py
@@ -181,6 +182,16 @@ FedTrafficFlow/
 - 在脚本内部直接按 `时间段`、`节点ID` 升序输出节点流量分块结果
 - 输出 `data/analysis/node_intersection_flow_parquet/`
 
+### `analysis_scripts/check_spatial_node_completeness.py`
+
+功能：
+
+- 读取 `data/analysis/node_intersection_flow_parquet/` 下所有 `node_flow_chunk_*.parquet`
+- 只检查节点时空数据的完整性，不执行空间均值填补，不写 `daily_parquet` 副本
+- 检查输入分片数量、必需字段、时间段连续性、节点集合一致性、每日缺失/重复、非法流量值
+- 输出完整性报告到 `data/analysis/node_intersection_flow_check_reports/`
+- 可选使用 `--write-missing-detail` 仅在发现缺失时写出逐日缺失明细
+
 ### `analysis_scripts/fit_node_flow_daily_curve.py`
 
 功能：
@@ -331,6 +342,7 @@ FedTrafficFlow/
 - `data/analysis/speed_histograms_by_period_by_class/`
 - `data/analysis/density_metrics_chunks/`
 - `data/analysis/node_intersection_flow_parquet/`
+- `data/analysis/node_intersection_flow_check_reports/`
 - `data/analysis/node_flow_curve_fit/`
 - `data/analysis/date_type_curve_method_comparison/`
 - `data/analysis/date_type_curve_method_comparison/function_cluster_visualization/`
@@ -341,6 +353,7 @@ FedTrafficFlow/
 - `dataset_inspection_scripts/inspect_density_metrics_chunks.py`
 - `dataset_inspection_scripts/check_density_time_order.py`
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`
+- `analysis_scripts/check_spatial_node_completeness.py`
 - `dataset_inspection_scripts/inspect_road_directionality.py`
 - `analysis_scripts/visualize_fitted_function_clusters.py`
 
@@ -372,6 +385,7 @@ python analysis_scripts/visualize_speed_hist_by_period.py
 python analysis_scripts/add_p995_to_speed_histogram.py
 python analysis_scripts/compute_greenshields_density.py
 python analysis_scripts/compute_node_intersection_flow_optimized.py
+python analysis_scripts/check_spatial_node_completeness.py
 python analysis_scripts/fit_node_flow_daily_curve.py
 python analysis_scripts/compare_node_flow_fourier_orders.py
 python analysis_scripts/compare_date_type_curve_methods.py
@@ -382,6 +396,24 @@ python dataset_inspection_scripts/inspect_density_metrics_chunks.py
 python dataset_inspection_scripts/check_density_time_order.py
 python dataset_inspection_scripts/inspect_node_intersection_flow.py
 python dataset_inspection_scripts/inspect_road_directionality.py
+```
+
+当前节点流量完整性检查结果显示：
+
+- `246133536` 条节点-时间段观测完整覆盖 `42031` 个节点、`61` 天、每日 `96` 个时段
+- 缺失记录数为 `0`，因此后续 `M0 / M1 / M2 / M3` 曲线拟合与聚类直接使用原始 `node_intersection_flow_parquet`
+- 当前流程不再推荐执行空间均值填补，也不需要生成额外的 `daily_parquet` 副本
+
+推荐检查命令：
+
+```bash
+python analysis_scripts/check_spatial_node_completeness.py
+```
+
+仅当发现异常且需要导出具体缺失点时，再使用：
+
+```bash
+python analysis_scripts/check_spatial_node_completeness.py --write-missing-detail
 ```
 
 建议环境依赖至少包括：
