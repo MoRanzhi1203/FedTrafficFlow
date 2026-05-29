@@ -623,90 +623,356 @@ def run_single_experiment(seed, args, model_type, agg_method, dist_types, patter
 
 
 # ============================================================
-# 结果可视化
+# 结果可视化（全面优化版）
 # ============================================================
-def plot_loss_curves(all_losses_records, all_seeds, model_types, agg_methods, output_dir, show_plot=False):
-    os.makedirs(output_dir, exist_ok=True)
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+MODEL_COLORS = {
+    "full": "#2E86AB", "no_attention": "#A23B72",
+    "lstm_only": "#F18F01", "spatial_only": "#C73E1D", "weak": "#6A4C93",
+}
+AGG_COLORS = {
+    "fedavg": "#4C9F70", "loss_weighted": "#E76F51",
+    "data_loss_weighted": "#457B9D",
+}
+MODEL_LABELS = {
+    "full": "Full (GCN+LSTM+Attn)",
+    "no_attention": "No Attention",
+    "lstm_only": "LSTM Only",
+    "spatial_only": "GCN Only",
+    "weak": "Weak Model",
+}
+AGG_LABELS = {
+    "fedavg": "FedAvg",
+    "loss_weighted": "Loss-Weighted",
+    "data_loss_weighted": "Data+Loss Weighted",
+}
+CLIENT_COLORS = ["#264653", "#2A9D8F", "#E9C46A", "#F4A261"]
 
-    for ax_idx, (model_type, agg_method) in enumerate([(model_types[0], agg_methods[0]),
-                                                        (model_types[-1], agg_methods[0])]):
-        if ax_idx >= 2:
-            break
-        ax = axes[0, ax_idx]
-        for rec in all_losses_records:
-            if rec.get("model_type") == model_type and rec.get("agg_method") == agg_method:
-                rounds = np.arange(1, len(rec["round_losses"]) + 1)
-                ax.plot(rounds, rec["round_losses"], marker="o", label=f"seed={rec.get('seed', '?')}")
-        ax.set_title(f"{model_type} + {agg_method} - Global Loss")
-        ax.set_xlabel("Round")
-        ax.set_ylabel("Avg Train Loss")
-        ax.legend()
 
-    ax = axes[1, 0]
-    agg_method_names = list(dict.fromkeys(agg_methods))
-    for agg_method in agg_method_names:
-        subset = [r for i, r in enumerate(all_losses_records)
-                  if r.get("agg_method") == agg_method and r.get("model_type") == model_types[0]]
-        if subset:
-            best = subset[np.argmin([np.mean(s["round_losses"][-3:]) if len(s["round_losses"]) >= 3
-                                     else np.mean(s["round_losses"]) for s in subset])]
-            rounds = np.arange(1, len(best["round_losses"]) + 1)
-            ax.plot(rounds, best["round_losses"], marker="o", label=agg_method)
-    ax.set_title("Aggregation Method Comparison (Best per Method)")
-    ax.set_xlabel("Round")
-    ax.set_ylabel("Avg Train Loss")
-    ax.legend()
-
-    ax = axes[1, 1]
-    for mt in model_types[:5]:
-        subset = [r for r in all_losses_records if r.get("model_type") == mt and r.get("agg_method") == agg_methods[0]]
-        if subset:
-            avg_losses = np.mean([s["round_losses"] for s in subset], axis=0)
-            rounds = np.arange(1, len(avg_losses) + 1)
-            ax.plot(rounds, avg_losses, marker="o", label=mt)
-    ax.set_title("Model Ablation Comparison")
-    ax.set_xlabel("Round")
-    ax.set_ylabel("Avg Train Loss")
-    ax.legend()
-
-    plt.tight_layout()
-    fig_path = os.path.join(output_dir, "loss_curves.png")
-    fig.savefig(fig_path, dpi=150, bbox_inches="tight")
-    print(f"Loss曲线图已保存至: {fig_path}")
+def _save_or_show(fig, path, show_plot):
+    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white", edgecolor="none")
+    print(f"  已保存: {path}")
     if show_plot:
         plt.show()
     else:
         plt.close(fig)
 
 
-def plot_agg_weights(all_losses_records, output_dir, show_plot=False):
+def generate_all_figures(all_losses_records, df_per_seed, comm_df, model_types,
+                         agg_methods, output_dir, show_plot=False):
     os.makedirs(output_dir, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(12, 6))
-    colors = plt.cm.tab10.colors
-    agg_records = [r for r in all_losses_records if r.get("agg_weights")]
-    if not agg_records:
-        plt.close(fig)
+
+    _fig1_model_performance(df_per_seed, model_types, agg_methods, output_dir, show_plot)
+    _fig2_convergence_analysis(all_losses_records, model_types, agg_methods, output_dir, show_plot)
+    _fig3_aggregation_strategy(all_losses_records, df_per_seed, comm_df,
+                               model_types, agg_methods, output_dir, show_plot)
+    _fig4_client_analysis(df_per_seed, model_types, agg_methods, output_dir, show_plot)
+
+
+def _style_ax(ax, title=None, xlabel=None, ylabel=None, grid=True):
+    if title:
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=12)
+    if xlabel:
+        ax.set_xlabel(xlabel, fontsize=12)
+    if ylabel:
+        ax.set_ylabel(ylabel, fontsize=12)
+    if grid:
+        ax.grid(axis="y", alpha=0.3, linestyle="--")
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+
+def _fig1_model_performance(df, model_types, agg_methods, output_dir, show_plot):
+    best_agg = agg_methods[0]
+    df_best = df[df["agg_method"] == best_agg].copy()
+    if df_best.empty:
+        df_best = df
+
+    agg_order = ["full", "no_attention", "lstm_only", "spatial_only", "weak"]
+    order = [m for m in agg_order if m in df_best["model_type"].values]
+    df_best["rmse_mean"] = df_best["rmse_mean"].astype(float)
+    df_best["mae_mean"] = df_best["mae_mean"].astype(float)
+
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+    (ax0, ax1), (ax2, ax3) = axes
+
+    colors_rmse = [MODEL_COLORS.get(m, "#888888") for m in order]
+    bars0 = ax0.bar(order, [float(df_best[df_best["model_type"] == m]["rmse_mean"].iloc[0]) for m in order],
+                     color=colors_rmse, edgecolor="white", linewidth=1.2, width=0.55)
+    for bar, m in zip(bars0, order):
+        val = float(df_best[df_best["model_type"] == m]["rmse_mean"].iloc[0])
+        ax0.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.005,
+                 f"{val:.4f}", ha="center", va="bottom", fontsize=10, fontweight="bold")
+    _style_ax(ax0, "Final Test RMSE by Model Type", ylabel="RMSE")
+    ax0.set_xticks(range(len(order)))
+    ax0.set_xticklabels([MODEL_LABELS.get(m, m) for m in order], rotation=15, ha="right", fontsize=10)
+
+    colors_mae = [MODEL_COLORS.get(m, "#888888") for m in order]
+    bars1 = ax1.bar(order, [float(df_best[df_best["model_type"] == m]["mae_mean"].iloc[0]) for m in order],
+                     color=colors_mae, edgecolor="white", linewidth=1.2, width=0.55)
+    for bar, m in zip(bars1, order):
+        val = float(df_best[df_best["model_type"] == m]["mae_mean"].iloc[0])
+        ax1.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.005,
+                 f"{val:.4f}", ha="center", va="bottom", fontsize=10, fontweight="bold")
+    _style_ax(ax1, "Final Test MAE by Model Type", ylabel="MAE")
+    ax1.set_xticks(range(len(order)))
+    ax1.set_xticklabels([MODEL_LABELS.get(m, m) for m in order], rotation=15, ha="right", fontsize=10)
+
+    pivot = df.pivot_table(values="rmse_mean", index="model_type", columns="agg_method", aggfunc="mean")
+    pivot = pivot.reindex([m for m in order if m in pivot.index])
+    pivot.index = [MODEL_LABELS.get(m, m) for m in pivot.index]
+    pivot.columns = [AGG_LABELS.get(c, c) for c in pivot.columns]
+    sns.heatmap(pivot, annot=True, fmt=".4f", cmap="RdYlGn_r", linewidths=0.8,
+                cbar_kws={"label": "RMSE", "shrink": 0.8}, ax=ax2, annot_kws={"fontsize": 9})
+    _style_ax(ax2, "RMSE Heatmap: Model × Aggregation Strategy", grid=False)
+
+    comm_pivot = df.groupby("model_type")["total_comm_bytes"].mean() / (1024 * 1024)
+    comm_pivot.index = [MODEL_LABELS.get(m, m) for m in comm_pivot.index]
+    rmse_series = df[df["agg_method"] == best_agg].groupby("model_type")["rmse_mean"].mean()
+    comm_data = pd.DataFrame({"Communication (MB)": comm_pivot, "RMSE": rmse_series}).dropna()
+    for mt, row in comm_data.iterrows():
+        color = MODEL_COLORS.get([k for k, v in MODEL_LABELS.items() if v == mt][0]
+                                 if mt in MODEL_LABELS.values() else mt, "#888888")
+        ax3.scatter(row["Communication (MB)"], row["RMSE"], s=200, c=color,
+                     edgecolors="white", linewidth=2, zorder=5)
+        ax3.annotate(mt, (row["Communication (MB)"], row["RMSE"]),
+                      textcoords="offset points", xytext=(8, 5), fontsize=9, fontweight="bold")
+    _style_ax(ax3, "Communication Cost vs RMSE Trade-off",
+              xlabel="Communication (MB)", ylabel="RMSE")
+
+    fig.suptitle("Model Performance Analysis — GCN Federated Learning",
+                 fontsize=18, fontweight="bold", y=1.01)
+    plt.tight_layout()
+    _save_or_show(fig, os.path.join(output_dir, "model_performance.png"), show_plot)
+
+
+def _fig2_convergence_analysis(all_records, model_types, agg_methods, output_dir, show_plot):
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+    (ax0, ax1), (ax2, ax3) = axes
+
+    for agg in agg_methods:
+        subset = [r for r in all_records if r.get("model_type") == "full" and r.get("agg_method") == agg]
+        if subset:
+            losses_arr = np.array([s["round_losses"] for s in subset])
+            mean_l = losses_arr.mean(axis=0)
+            std_l = losses_arr.std(axis=0)
+            rounds = np.arange(1, len(mean_l) + 1)
+            color = AGG_COLORS.get(agg, "#888888")
+            ax0.plot(rounds, mean_l, color=color, linewidth=2.5, marker="o", markersize=6,
+                      label=AGG_LABELS.get(agg, agg))
+            ax0.fill_between(rounds, mean_l - std_l, mean_l + std_l, alpha=0.12, color=color)
+    _style_ax(ax0, "Full Model Convergence by Aggregation Strategy",
+              xlabel="Federated Round", ylabel="Avg Train Loss")
+    ax0.legend(frameon=True, fontsize=10)
+
+    best_agg_per_model = {}
+    for mt in model_types:
+        best_val = float("inf")
+        for agg in agg_methods:
+            subset = [r for r in all_records if r.get("model_type") == mt and r.get("agg_method") == agg]
+            if subset:
+                avg_final = np.mean([np.mean(s["round_losses"][-3:]) if len(s["round_losses"]) >= 3
+                                     else np.mean(s["round_losses"]) for s in subset])
+                if avg_final < best_val:
+                    best_val = avg_final
+                    best_agg_per_model[mt] = agg
+        if mt not in best_agg_per_model:
+            best_agg_per_model[mt] = agg_methods[0]
+
+    for mt in model_types:
+        best_agg = best_agg_per_model.get(mt, agg_methods[0])
+        subset = [r for r in all_records if r.get("model_type") == mt and r.get("agg_method") == best_agg]
+        if subset:
+            losses_arr = np.array([s["round_losses"] for s in subset])
+            mean_l = losses_arr.mean(axis=0)
+            std_l = losses_arr.std(axis=0)
+            rounds = np.arange(1, len(mean_l) + 1)
+            color = MODEL_COLORS.get(mt, "#888888")
+            ax1.plot(rounds, mean_l, color=color, linewidth=2.5, marker="o", markersize=6,
+                      label=MODEL_LABELS.get(mt, mt))
+            ax1.fill_between(rounds, mean_l - std_l, mean_l + std_l, alpha=0.10, color=color)
+    _style_ax(ax1, "Model Ablation Convergence (Best Agg per Model)",
+              xlabel="Federated Round", ylabel="Avg Train Loss")
+    ax1.legend(frameon=True, fontsize=9)
+
+    for agg in agg_methods:
+        subset = [r for r in all_records if r.get("model_type") == "full" and r.get("agg_method") == agg]
+        if subset:
+            client_data = {}
+            for s in subset:
+                for cid, vals in s.get("client_losses", {}).items():
+                    client_data.setdefault(int(cid), []).append(vals)
+            for cid, runs in client_data.items():
+                arr = np.array(runs)
+                mean_c = arr.mean(axis=0)
+                rounds = np.arange(1, len(mean_c) + 1)
+                ax2.plot(rounds, mean_c, linewidth=2, marker="s", markersize=5,
+                          label=f"{AGG_LABELS.get(agg,agg)}-C{cid}",
+                          color=CLIENT_COLORS[cid % len(CLIENT_COLORS)], alpha=0.85)
+    _style_ax(ax2, "Per-Client Loss Trajectories (Full Model)",
+              xlabel="Federated Round", ylabel="Client Avg Train Loss")
+    ax2.legend(frameon=True, fontsize=8, ncol=2)
+
+    rounds_data = []
+    for r in all_records:
+        if r.get("model_type") == "full" and r.get("agg_method") == agg_methods[0]:
+            for rd in r.get("rounds", []):
+                metrics = rd.get("per_client_metrics", [])
+                rmse_vals = [m["rmse"] for m in metrics if "rmse" in m]
+                if rmse_vals:
+                    rounds_data.append({"Round": rd["round"], "RMSE": np.mean(rmse_vals),
+                                        "Std": np.std(rmse_vals)})
+    if rounds_data:
+        df_rnd = pd.DataFrame(rounds_data).groupby("Round").agg(
+            RMSE_mean=("RMSE", "mean"), RMSE_std=("Std", "mean")).reset_index()
+        ax3.plot(df_rnd["Round"], df_rnd["RMSE_mean"], color="#E76F51",
+                  linewidth=2.8, marker="D", markersize=7)
+        ax3.fill_between(df_rnd["Round"],
+                          df_rnd["RMSE_mean"] - df_rnd["RMSE_std"],
+                          df_rnd["RMSE_mean"] + df_rnd["RMSE_std"],
+                          alpha=0.15, color="#E76F51")
+    _style_ax(ax3, "Global Test RMSE Convergence (Full Model)",
+              xlabel="Federated Round", ylabel="Test RMSE (Mean ± Std)")
+
+    fig.suptitle("Convergence Analysis — GCN Federated Learning",
+                 fontsize=18, fontweight="bold", y=1.01)
+    plt.tight_layout()
+    _save_or_show(fig, os.path.join(output_dir, "convergence_analysis.png"), show_plot)
+
+
+def _fig3_aggregation_strategy(all_records, df, comm_df, model_types, agg_methods, output_dir, show_plot):
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+    (ax0, ax1), (ax2, ax3) = axes
+
+    agg_weight_records = [r for r in all_records if r.get("agg_weights")]
+    if agg_weight_records:
+        rec = agg_weight_records[0]
+        if rec.get("agg_weights"):
+            client_ids = sorted(rec["agg_weights"][0].keys())
+            rounds_list = np.arange(1, len(rec["agg_weights"]) + 1)
+            cum_data = np.zeros(len(rounds_list))
+            for j, cid in enumerate(client_ids):
+                vals = np.array([rnd_w.get(cid, 0) for rnd_w in rec["agg_weights"]])
+                color = CLIENT_COLORS[cid % len(CLIENT_COLORS)]
+                ax0.fill_between(rounds_list, cum_data, cum_data + vals, alpha=0.75,
+                                  color=color, label=f"Client {cid}")
+                ax0.plot(rounds_list, cum_data + vals, color=color, linewidth=1.5)
+                cum_data = cum_data + vals
+    _style_ax(ax0, "Aggregation Weight Evolution (Stacked Area)",
+              xlabel="Federated Round", ylabel="Cumulative Weight")
+    ax0.legend(frameon=True, fontsize=10, loc="center left")
+
+    best_agg = agg_methods[0]
+    final_losses = []
+    for mt in model_types:
+        for agg in agg_methods:
+            subset = [r for r in all_records if r.get("model_type") == mt and r.get("agg_method") == agg]
+            if subset:
+                final = [np.mean(s["round_losses"][-3:]) if len(s["round_losses"]) >= 3
+                         else np.mean(s["round_losses"]) for s in subset]
+                final_losses.append({
+                    "Model": MODEL_LABELS.get(mt, mt),
+                    "Aggregation": AGG_LABELS.get(agg, agg),
+                    "FinalLoss": np.mean(final),
+                    "LossStd": np.std(final),
+                })
+    if final_losses:
+        df_final = pd.DataFrame(final_losses)
+        pivot = df_final.pivot_table(values="FinalLoss", index="Model", columns="Aggregation", aggfunc="mean")
+        sns.heatmap(pivot, annot=True, fmt=".4f", cmap="YlOrRd_r", linewidths=0.8,
+                     cbar_kws={"label": "Final Avg Loss", "shrink": 0.8}, ax=ax1, annot_kws={"fontsize": 9})
+    _style_ax(ax1, "Final Loss Heatmap: Model × Aggregation Strategy", grid=False)
+
+    model_comm = comm_df.groupby("model_type")["total_comm_mb"].mean()
+    best_agg2 = agg_methods[-1]
+    df_b2 = df[df["agg_method"] == best_agg2]
+    if df_b2.empty:
+        df_b2 = df
+    model_rmse = df_b2.groupby("model_type")["rmse_mean"].mean()
+
+    comm_vals = [float(model_comm.get(mt, 0)) for mt in model_types]
+    rmse_vals = [float(model_rmse.get(mt, 0)) for mt in model_types]
+    colors_comm = [MODEL_COLORS.get(mt, "#888888") for mt in model_types]
+
+    for i, mt in enumerate(model_types):
+        ax2.barh(i, comm_vals[i], color=colors_comm[i], edgecolor="white", linewidth=1.2, height=0.55)
+        ax2.text(comm_vals[i] + 0.05, i, f"{comm_vals[i]:.2f} MB",
+                  va="center", fontsize=10, fontweight="bold")
+    _style_ax(ax2, "Communication Cost by Model",
+              xlabel="Communication (MB)", ylabel="")
+    ax2.set_yticks(range(len(model_types)))
+    ax2.set_yticklabels([MODEL_LABELS.get(mt, mt) for mt in model_types], fontsize=10)
+
+    for i, mt in enumerate(model_types):
+        color = colors_comm[i]
+        ax3.scatter(comm_vals[i], rmse_vals[i], s=400, c=color,
+                     edgecolors="white", linewidth=2, zorder=5)
+        ax3.annotate(MODEL_LABELS.get(mt, mt),
+                      (comm_vals[i], rmse_vals[i]),
+                      textcoords="offset points", xytext=(8, 5), fontsize=9, fontweight="bold")
+    _style_ax(ax3, "Communication vs RMSE (Bubble: 1/RMSE)",
+              xlabel="Communication (MB)", ylabel="RMSE")
+
+    fig.suptitle("Aggregation & Communication Analysis — GCN Federated Learning",
+                 fontsize=18, fontweight="bold", y=1.01)
+    plt.tight_layout()
+    _save_or_show(fig, os.path.join(output_dir, "aggregation_analysis.png"), show_plot)
+
+
+def _fig4_client_analysis(df, model_types, agg_methods, output_dir, show_plot):
+    best_agg = agg_methods[0]
+    df_best = df[df["agg_method"] == best_agg]
+
+    client_cols_rmse = [c for c in df.columns if c.endswith("_rmse") and c.startswith("client_")]
+    if not client_cols_rmse:
         return
-    rec = agg_records[0]
-    if rec.get("agg_weights"):
-        client_ids = sorted(rec["agg_weights"][0].keys())
-        rounds_list = np.arange(1, len(rec["agg_weights"]) + 1)
-        for j, cid in enumerate(client_ids):
-            vals = [rnd_w.get(cid, 0) for rnd_w in rec["agg_weights"]]
-            ax.plot(rounds_list, vals, marker="o", color=colors[j % len(colors)], label=f"Client {cid}")
-    ax.set_title("Aggregation Weight Evolution")
-    ax.set_xlabel("Federated Round")
-    ax.set_ylabel("Weight")
-    ax.legend()
+
+    fig, axes = plt.subplots(1, 2, figsize=(18, 7))
+    ax0, ax1 = axes
+
+    agg_order = ["full", "no_attention", "lstm_only", "spatial_only", "weak"]
+    order = [m for m in agg_order if m in df_best["model_type"].values]
+    n_models = len(order)
+    n_clients = len(client_cols_rmse)
+    bar_width = 0.7 / n_models
+    x = np.arange(n_clients)
+
+    for j, mt in enumerate(order):
+        sub = df_best[df_best["model_type"] == mt]
+        if sub.empty:
+            continue
+        vals = [float(sub[c].iloc[0]) for c in client_cols_rmse]
+        offset = (j - (n_models - 1) / 2) * bar_width
+        color = MODEL_COLORS.get(mt, "#888888")
+        ax0.bar(x + offset, vals, bar_width * 0.85, color=color, edgecolor="white",
+                 linewidth=0.8, label=MODEL_LABELS.get(mt, mt))
+    _style_ax(ax0, "Per-Client RMSE by Model Type",
+              xlabel="Client", ylabel="RMSE")
+    ax0.set_xticks(x)
+    ax0.set_xticklabels([f"Client {i}" for i in range(n_clients)])
+    ax0.legend(frameon=True, fontsize=9)
+
+    client_data = []
+    for j, mt in enumerate(order):
+        sub = df_best[df_best["model_type"] == mt]
+        if sub.empty:
+            continue
+        for ci, col in enumerate(client_cols_rmse):
+            client_data.append({
+                "Model": MODEL_LABELS.get(mt, mt),
+                "Client": f"Client {ci}",
+                "RMSE": float(sub[col].iloc[0]),
+            })
+    if client_data:
+        df_c = pd.DataFrame(client_data)
+        pivot = df_c.pivot_table(values="RMSE", index="Client", columns="Model", aggfunc="mean")
+        sns.heatmap(pivot, annot=True, fmt=".4f", cmap="RdYlGn_r", linewidths=0.8,
+                     cbar_kws={"label": "RMSE", "shrink": 0.8}, ax=ax1, annot_kws={"fontsize": 9})
+    _style_ax(ax1, "Client × Model RMSE Heatmap", grid=False)
+
+    fig.suptitle("Client-Level Performance Analysis — GCN Federated Learning",
+                 fontsize=18, fontweight="bold", y=1.01)
     plt.tight_layout()
-    fig_path = os.path.join(output_dir, "aggregation_weights.png")
-    fig.savefig(fig_path, dpi=150, bbox_inches="tight")
-    print(f"聚合权重图已保存至: {fig_path}")
-    if show_plot:
-        plt.show()
-    else:
-        plt.close(fig)
+    _save_or_show(fig, os.path.join(output_dir, "client_analysis.png"), show_plot)
 
 
 # ============================================================
@@ -824,8 +1090,8 @@ def main():
     print("\n===== Summary (mean +- std across seeds) =====")
     print(summary_mean.to_string(index=False))
 
-    plot_loss_curves(all_losses_records, seeds, model_types, agg_methods, output_dir, show_plot=args.show_plot)
-    plot_agg_weights(all_losses_records, output_dir, show_plot=args.show_plot)
+    generate_all_figures(all_losses_records, df_summary, comm_df, model_types,
+                         agg_methods, output_dir, show_plot=args.show_plot)
 
     print("\nDone.")
 
