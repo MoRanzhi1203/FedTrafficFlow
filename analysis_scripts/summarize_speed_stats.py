@@ -5,7 +5,7 @@
 
 """汇总处理后速度分片中的总体统计和分时段速度统计结果。"""
 
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import polars as pl
@@ -101,23 +101,20 @@ def build_lazy_frame() -> pl.LazyFrame:
 def add_date_and_period_label(daily_result: pl.DataFrame) -> pl.DataFrame:
     """
     聚合完成后，再把 day_index、时段排序 转成 日期、中文时段。
-    此时数据量已经很小，用 map_elements 不会造成明显性能压力。
+    这里直接使用 Polars 原生表达式，避免 map_elements 告警。
     """
     return (
         daily_result
         .with_columns([
-            pl.col("day_index")
-            .map_elements(
-                lambda x: (START_DATE + timedelta(days=int(x))).strftime("%m-%d"),
-                return_dtype=pl.Utf8,
+            (
+                pl.lit(START_DATE)
+                + pl.duration(days=pl.col("day_index").cast(pl.Int64))
             )
+            .dt.strftime("%m-%d")
             .alias("日期"),
-
             pl.col("时段排序")
-            .map_elements(
-                lambda x: PERIOD_LABEL[int(x)],
-                return_dtype=pl.Utf8,
-            )
+            .cast(pl.Int64)
+            .replace_strict(PERIOD_LABEL)
             .alias("时段"),
         ])
         .sort(["day_index", "时段排序", "速度等级"])
