@@ -5,7 +5,9 @@ import argparse
 import copy
 import os
 import random
+import sys
 from collections import OrderedDict
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Callable, Dict, Optional, Sequence
 
@@ -19,13 +21,14 @@ import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from torch.utils.data import DataLoader, Dataset, random_split
 
 plt.ioff()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output_gcn"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+PROJECT_NAME = "gcn"
 
 
 def configure_plot_style() -> None:
@@ -61,12 +64,37 @@ def ensure_output_dir(output_dir: Path) -> Path:
     return output_dir
 
 
+def build_output_file_name(workflow_name: str, artifact_name: str, extension: str) -> str:
+    return f"{PROJECT_NAME}_{workflow_name}_{artifact_name}.{extension}"
+
+
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
     output_path = ensure_output_dir(output_dir) / file_name
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved figure: {output_path}")
     return output_path
+
+
+def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
+    output_path = ensure_output_dir(output_dir) / file_name
+    df.to_csv(output_path, index=False, encoding="utf-8")
+    print(f"Saved table: {output_path}")
+    return output_path
+
+
+class TeeStream:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self.streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self.streams:
+            stream.flush()
 
 
 def unpack_model_output(model_output):
@@ -350,84 +378,6 @@ class GCNAblationAttention(nn.Module):
         return self.head(fused), attn_w
 
 
-class TimeSeriesCNNLSTMAttention(nn.Module):
-    def __init__(self, hidden_dim: int = 64, num_heads: int = 4):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
-            AdaptiveSwish(),
-        )
-        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        lstm_out, _ = self.lstm(x)
-        attn_out, _ = self.attn(lstm_out, lstm_out, lstm_out)
-        return self.fc(attn_out[:, -1])
-
-
-class TimeSeriesCNNLSTM(nn.Module):
-    def __init__(self, hidden_dim: int = 64):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, hidden_dim, 3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(hidden_dim, hidden_dim, 3, padding=1),
-            AdaptiveSwish(),
-        )
-        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        out, _ = self.lstm(x)
-        return self.fc(out[:, -1])
-
-
-class TimeSeriesLSTMAttention(nn.Module):
-    def __init__(self, hidden_dim: int = 64, num_heads: int = 4):
-        super().__init__()
-        self.lstm = nn.LSTM(1, hidden_dim, batch_first=True)
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        out, _ = self.lstm(x)
-        attn_out, _ = self.attn(out, out, out)
-        return self.fc(attn_out[:, -1])
-
-
-class TimeSeriesCNNAttention(nn.Module):
-    def __init__(self, hidden_dim: int = 64, num_heads: int = 4):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, hidden_dim, 3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(hidden_dim, hidden_dim, 3, padding=1),
-            AdaptiveSwish(),
-        )
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        attn_out, _ = self.attn(x, x, x)
-        return self.fc(attn_out[:, -1])
-
-
 class OverviewHeterogeneousDataset(Dataset):
     def __init__(self, client_id: int, num_samples: int, k: int, t: int, noise: float = 0.1):
         self.x = np.random.randn(num_samples, k, t)
@@ -617,7 +567,7 @@ def plot_overview_figure(
     fed_clients,
     output_dir: Path,
     file_name: str,
-):
+)-> pd.DataFrame:
     client_labels = [f"Client {i}" for i in range(len(fed_metrics))]
     fed_mse = [m["mse"] for m in fed_metrics]
     fed_rmse = [np.sqrt(m["mse"]) for m in fed_metrics]
@@ -725,6 +675,7 @@ def plot_overview_figure(
 
     plt.tight_layout()
     save_figure(fig, output_dir, file_name)
+    return df_metrics
 
 
 def plot_ablation_figure(
@@ -804,6 +755,7 @@ def run_weighted_ablation(
     variants: "OrderedDict[str, Callable[[], nn.Module]]",
     output_dir: Path,
     figure_name: str,
+    metrics_file_name: str,
 ) -> Dict[str, Dict[str, float]]:
     set_global_seed(seed)
     criterion = nn.MSELoss()
@@ -942,7 +894,8 @@ def run_weighted_ablation(
     df_delta = pd.DataFrame(delta_rows)
 
     plot_ablation_figure(df_conv, df_stab, df_delta, client_labels, num_rounds, output_dir, figure_name)
-    print_summary_table(results_summary)
+    summary_df = print_summary_table(results_summary)
+    save_dataframe(summary_df, output_dir, metrics_file_name)
     return results_summary
 def run_overview_experiment(output_dir: Path) -> None:
     seed = 48
@@ -1004,14 +957,15 @@ def run_overview_experiment(output_dir: Path) -> None:
         if fed_metrics[idx]["att_weights"] is not None:
             print(f"  Mean attention weight: {np.round(fed_metrics[idx]['att_weights'].mean(), 4)}")
 
-    plot_overview_figure(
+    overview_df = plot_overview_figure(
         fed_metrics,
         weak_metrics,
         server,
         fed_clients,
         output_dir,
-        "gcn_metrics_overview_2x3.png",
+        build_output_file_name("overview", "figure", "png"),
     )
+    save_dataframe(overview_df, output_dir, build_output_file_name("overview", "metrics", "csv"))
 
 
 def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
@@ -1034,20 +988,24 @@ def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
             ]
         ),
         output_dir=output_dir,
-        figure_name="gcn_ablation_2x2.png",
+        figure_name=build_output_file_name("ablation", "figure", "png"),
+        metrics_file_name=build_output_file_name("ablation", "metrics", "csv"),
     )
 
 
 def run_project(workflow: str, output_dir: Path) -> None:
     ensure_output_dir(output_dir)
-    configure_plot_style()
-    print(f"Using device: {DEVICE}")
+    log_path = output_dir / build_output_file_name("run", "log", "txt")
+    with log_path.open("w", encoding="utf-8") as log_handle, redirect_stdout(TeeStream(sys.stdout, log_handle)):
+        configure_plot_style()
+        print(f"[setup] Using device: {DEVICE}")
+        print(f"[setup] Writing experiment log: {log_path}")
 
-    if workflow in ("all", "overview"):
-        run_overview_experiment(output_dir)
+        if workflow in ("all", "overview"):
+            run_overview_experiment(output_dir)
 
-    if workflow in ("all", "ablation"):
-        run_ablation_experiment(output_dir)
+        if workflow in ("all", "ablation"):
+            run_ablation_experiment(output_dir)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):

@@ -5,7 +5,9 @@ import argparse
 import copy
 import os
 import random
+import sys
 from collections import OrderedDict
+from contextlib import redirect_stdout
 from pathlib import Path
 from typing import Callable, Dict, Optional, Sequence
 
@@ -19,13 +21,14 @@ import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, Dataset, Subset, random_split
+from torch.utils.data import DataLoader, Dataset, random_split
 
 plt.ioff()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_OUTPUT_DIR = SCRIPT_DIR / "output_ccn"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+PROJECT_NAME = "ccn"
 
 
 def configure_plot_style() -> None:
@@ -61,12 +64,37 @@ def ensure_output_dir(output_dir: Path) -> Path:
     return output_dir
 
 
+def build_output_file_name(workflow_name: str, artifact_name: str, extension: str) -> str:
+    return f"{PROJECT_NAME}_{workflow_name}_{artifact_name}.{extension}"
+
+
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
     output_path = ensure_output_dir(output_dir) / file_name
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved figure: {output_path}")
     return output_path
+
+
+def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
+    output_path = ensure_output_dir(output_dir) / file_name
+    df.to_csv(output_path, index=False, encoding="utf-8")
+    print(f"Saved table: {output_path}")
+    return output_path
+
+
+class TeeStream:
+    def __init__(self, *streams):
+        self.streams = streams
+
+    def write(self, data: str) -> int:
+        for stream in self.streams:
+            stream.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for stream in self.streams:
+            stream.flush()
 
 
 def unpack_model_output(model_output):
@@ -337,84 +365,6 @@ class CCNAblationCNNAttention(nn.Module):
         attn_out = self.attn_norm(attn_out + feat_seq)
         fused = attn_out.mean(dim=1)
         return self.head(fused), attn_w
-class TimeSeriesCNNLSTMAttention(nn.Module):
-    def __init__(self, hidden_dim: int = 64, num_heads: int = 4):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
-            AdaptiveSwish(),
-        )
-        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        lstm_out, _ = self.lstm(x)
-        attn_out, _ = self.attn(lstm_out, lstm_out, lstm_out)
-        return self.fc(attn_out[:, -1])
-
-
-class TimeSeriesCNNLSTM(nn.Module):
-    def __init__(self, hidden_dim: int = 64):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, hidden_dim, 3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(hidden_dim, hidden_dim, 3, padding=1),
-            AdaptiveSwish(),
-        )
-        self.lstm = nn.LSTM(hidden_dim, hidden_dim, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        out, _ = self.lstm(x)
-        return self.fc(out[:, -1])
-
-
-class TimeSeriesLSTMAttention(nn.Module):
-    def __init__(self, hidden_dim: int = 64, num_heads: int = 4):
-        super().__init__()
-        self.lstm = nn.LSTM(1, hidden_dim, batch_first=True)
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        out, _ = self.lstm(x)
-        attn_out, _ = self.attn(out, out, out)
-        return self.fc(attn_out[:, -1])
-
-
-class TimeSeriesCNNAttention(nn.Module):
-    def __init__(self, hidden_dim: int = 64, num_heads: int = 4):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(1, hidden_dim, 3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(hidden_dim, hidden_dim, 3, padding=1),
-            AdaptiveSwish(),
-        )
-        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        x = x.permute(0, 2, 1)
-        x = self.cnn(x)
-        x = x.permute(0, 2, 1)
-        attn_out, _ = self.attn(x, x, x)
-        return self.fc(attn_out[:, -1])
-
-
 class OverviewHeterogeneousDataset(Dataset):
     def __init__(self, client_id: int, num_samples: int, k: int, t: int, noise: float = 0.1):
         self.x = np.random.randn(num_samples, k, t)
@@ -451,73 +401,6 @@ class AblationHeterogeneousDataset(Dataset):
 
     def __getitem__(self, idx):
         return torch.tensor(self.x[idx], dtype=torch.float32), torch.tensor(self.y[idx], dtype=torch.float32)
-
-
-class ClientSeriesDataset(Dataset):
-    def __init__(self, series: np.ndarray, t_in: int = 12, t_out: int = 1):
-        self.series = torch.from_numpy(series)
-        self.t_in = t_in
-        self.t_out = t_out
-        self.valid_len = int(self.series.shape[0] - t_in - t_out)
-
-    def __len__(self):
-        return max(0, self.valid_len)
-
-    def __getitem__(self, idx):
-        x = self.series[idx : idx + self.t_in].clone().detach()
-        y = self.series[idx + self.t_in : idx + self.t_in + self.t_out].clone().detach()
-        return x.unsqueeze(-1), y
-
-
-def split_dataset_time(dataset, train_ratio: float = 0.7, val_ratio: float = 0.15):
-    n = len(dataset)
-    n_train = int(n * train_ratio)
-    n_val = int(n * val_ratio)
-    n_test = n - n_train - n_val
-    idx_train = list(range(0, n_train))
-    idx_val = list(range(n_train, n_train + n_val))
-    idx_test = list(range(n_train + n_val, n_train + n_val + n_test))
-    return Subset(dataset, idx_train), Subset(dataset, idx_val), Subset(dataset, idx_test)
-
-
-def make_client_series(
-    cid: int,
-    seed: int,
-    t_total: int = 800,
-    season_period: int = 48,
-    noise_scale: float = 0.15,
-):
-    rng = np.random.default_rng(seed + 1000 + cid)
-    t = np.arange(t_total, dtype=np.float32)
-
-    amp1 = 1.0 + 0.3 * rng.normal()
-    amp2 = 0.6 + 0.2 * rng.normal()
-    phase1 = rng.uniform(0, 2 * np.pi)
-    phase2 = rng.uniform(0, 2 * np.pi)
-
-    trend = (0.0008 + 0.0005 * rng.normal()) * t
-    seasonal1 = amp1 * np.sin(2 * np.pi * t / season_period + phase1)
-    seasonal2 = amp2 * np.sin(2 * np.pi * t / (season_period // 2) + phase2)
-
-    shift_point = int(t_total * (0.45 + 0.1 * rng.uniform()))
-    level_shift = (0.8 + 0.5 * rng.normal()) * (t >= shift_point).astype(np.float32)
-
-    x = trend + seasonal1 + seasonal2 + level_shift
-
-    ar = np.zeros_like(x, dtype=np.float32)
-    phi = 0.65 + 0.15 * rng.uniform()
-    eps = noise_scale * rng.normal(size=t_total).astype(np.float32)
-    for i in range(1, t_total):
-        ar[i] = phi * ar[i - 1] + eps[i]
-    x = x + ar
-
-    spike_rate = 0.01 + 0.01 * rng.uniform()
-    spikes = (rng.uniform(size=t_total) < spike_rate).astype(np.float32)
-    spike_mag = (1.5 + 0.8 * rng.normal(size=t_total)).astype(np.float32)
-    x = x + spikes * spike_mag
-
-    x = (x - x.mean()) / (x.std() + 1e-6)
-    return x.astype(np.float32)
 
 
 class FederatedClient:
@@ -667,77 +550,6 @@ class WeightedFederatedServer:
         return self.global_model.state_dict()
 
 
-class TimeSeriesFederatedClient:
-    def __init__(
-        self,
-        cid: int,
-        train_ds,
-        global_model,
-        seed: int,
-        lr: float = 1e-3,
-        local_epochs: int = 2,
-        batch_size: int = 32,
-        clip_grad: float = 1.0,
-    ):
-        self.cid = cid
-        self.train_ds = train_ds
-        self.model = copy.deepcopy(global_model).to(DEVICE)
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
-        self.crit = nn.MSELoss()
-        self.local_epochs = local_epochs
-        self.batch_size = batch_size
-        self.clip_grad = clip_grad
-        self.loader_gen = torch.Generator()
-        self.loader_gen.manual_seed(seed + 200 + cid)
-
-    def train(self, global_weights):
-        self.model.load_state_dict(global_weights)
-        loader = DataLoader(self.train_ds, batch_size=self.batch_size, shuffle=True, generator=self.loader_gen)
-        self.model.train()
-
-        total_loss, steps = 0.0, 0
-        for _ in range(self.local_epochs):
-            for x, y in loader:
-                x, y = x.to(DEVICE), y.to(DEVICE)
-                pred, _ = unpack_model_output(self.model(x))
-                pred = pred.squeeze()
-                loss = self.crit(pred, y.squeeze())
-                self.opt.zero_grad()
-                loss.backward()
-                if self.clip_grad is not None:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.clip_grad)
-                self.opt.step()
-                total_loss += loss.item()
-                steps += 1
-
-        return copy.deepcopy(self.model.state_dict()), total_loss / max(1, steps)
-
-
-def fedavg(weights):
-    avg = copy.deepcopy(weights[0])
-    for key in avg.keys():
-        if avg[key].dtype in (torch.float16, torch.float32, torch.float64):
-            for idx in range(1, len(weights)):
-                avg[key] += weights[idx][key]
-            avg[key] /= len(weights)
-    return avg
-
-
-@torch.no_grad()
-def evaluate_metrics(model, loader):
-    model.eval()
-    mse_sum, mae_sum, n = 0.0, 0.0, 0
-    for x, y in loader:
-        x, y = x.to(DEVICE), y.to(DEVICE)
-        pred, _ = unpack_model_output(model(x))
-        diff = pred - y
-        mse_sum += (diff ** 2).sum().item()
-        mae_sum += diff.abs().sum().item()
-        n += y.numel()
-    mse = mse_sum / max(1, n)
-    mae = mae_sum / max(1, n)
-    rmse = float(np.sqrt(mse))
-    return {"mse": mse, "rmse": rmse, "mae": mae}
 def plot_overview_figure(
     fed_metrics,
     weak_metrics,
@@ -745,7 +557,7 @@ def plot_overview_figure(
     fed_clients,
     output_dir: Path,
     file_name: str,
-):
+)-> pd.DataFrame:
     client_labels = [f"Client {i}" for i in range(len(fed_metrics))]
     fed_mse = [m["mse"] for m in fed_metrics]
     fed_rmse = [np.sqrt(m["mse"]) for m in fed_metrics]
@@ -853,6 +665,7 @@ def plot_overview_figure(
 
     plt.tight_layout()
     save_figure(fig, output_dir, file_name)
+    return df_metrics
 
 
 def plot_ablation_figure(
@@ -932,6 +745,7 @@ def run_weighted_ablation(
     variants: "OrderedDict[str, Callable[[], nn.Module]]",
     output_dir: Path,
     figure_name: str,
+    metrics_file_name: str,
 ) -> Dict[str, Dict[str, float]]:
     set_global_seed(seed)
     criterion = nn.MSELoss()
@@ -1070,187 +884,8 @@ def run_weighted_ablation(
     df_delta = pd.DataFrame(delta_rows)
 
     plot_ablation_figure(df_conv, df_stab, df_delta, client_labels, num_rounds, output_dir, figure_name)
-    print_summary_table(results_summary)
-    return results_summary
-
-
-def run_ccn_time_series_ablation(output_dir: Path) -> Dict[str, Dict[str, float]]:
-    seed = 15
-    rounds = 5
-    local_epochs = 2
-    batch_size = 32
-    lr = 1e-3
-    num_clients = 3
-    t_in, t_out = 12, 1
-    t_total = 900
-
-    set_global_seed(seed)
-
-    client_data = []
-    for cid in range(num_clients):
-        series = make_client_series(cid, seed=seed, t_total=t_total, season_period=48, noise_scale=0.18)
-        dataset = ClientSeriesDataset(series, t_in=t_in, t_out=t_out)
-        train_ds, val_ds, test_ds = split_dataset_time(dataset, train_ratio=0.7, val_ratio=0.15)
-        if len(test_ds) == 0:
-            continue
-        client_data.append((cid, train_ds, val_ds, test_ds))
-
-    print(f"\n===== CCN Time-Series Simulation =====")
-    print(f"Valid clients: {len(client_data)} / {num_clients}")
-
-    client_labels = [f"Client {cid}" for cid, *_ in client_data]
-
-    def federated_training_with_history(model_class):
-        global_model = model_class().to(DEVICE)
-        global_weights = global_model.state_dict()
-
-        clients = [
-            TimeSeriesFederatedClient(
-                cid,
-                train_ds,
-                global_model,
-                seed=seed,
-                lr=lr,
-                local_epochs=local_epochs,
-                batch_size=batch_size,
-            )
-            for cid, train_ds, _, _ in client_data
-        ]
-
-        hist_train_mean, hist_train_std = [], []
-        hist_train_client = []
-        hist_test_mean, hist_test_std = [], []
-        hist_test_client = []
-
-        for rnd in range(rounds):
-            print(f"  Round {rnd + 1}/{rounds}")
-            local_weights, local_losses = [], []
-
-            for client in clients:
-                weights, loss = client.train(global_weights)
-                local_weights.append(weights)
-                local_losses.append(float(loss))
-                print(f"    Client {client.cid} | Local avg MSE: {loss:.6f}")
-
-            global_weights = fedavg(local_weights)
-            local_losses_arr = np.array(local_losses, dtype=float)
-            round_global_mse = float(local_losses_arr.mean())
-            print(f"    Aggregated global MSE: {round_global_mse:.6f}")
-
-            hist_train_client.append(local_losses)
-            hist_train_mean.append(round_global_mse)
-            hist_train_std.append(float(local_losses_arr.std(ddof=0)))
-
-            global_model.load_state_dict(global_weights)
-            per_client_rmse = []
-            for _, _, _, test_ds in client_data:
-                test_loader = DataLoader(test_ds, batch_size=256, shuffle=False)
-                metrics = evaluate_metrics(global_model, test_loader)
-                per_client_rmse.append(float(metrics["rmse"]))
-            per_client_rmse = np.array(per_client_rmse, dtype=float)
-            hist_test_client.append(per_client_rmse.tolist())
-            hist_test_mean.append(float(per_client_rmse.mean()))
-            hist_test_std.append(float(per_client_rmse.std(ddof=0)))
-
-        global_model.load_state_dict(global_weights)
-        history = {
-            "train_mean": hist_train_mean,
-            "train_std": hist_train_std,
-            "train_client": hist_train_client,
-            "test_mean": hist_test_mean,
-            "test_std": hist_test_std,
-            "test_client": hist_test_client,
-        }
-        return global_model, history
-
-    models = OrderedDict(
-        [
-            ("CCN-LSTM-Attention", TimeSeriesCNNLSTMAttention),
-            ("CCN-LSTM", TimeSeriesCNNLSTM),
-            ("LSTM-Attention", TimeSeriesaLSTMAttention),
-            ("CCN-Attention", TimeSeriesCNNAttention),
-        ]
-    )
-
-    results_summary = {}
-    results_client = {}
-    histories = {}
-
-    for name, model_class in models.items():
-        print(f"\nStart training model: {name}")
-        model, history = federated_training_with_history(model_class)
-        histories[name] = history
-
-        per_client_metrics = []
-        for cid, _, _, test_ds in client_data:
-            loader = DataLoader(test_ds, batch_size=256, shuffle=False)
-            metrics = evaluate_metrics(model, loader)
-            metrics["cid"] = cid
-            per_client_metrics.append(metrics)
-
-        df_pc = pd.DataFrame(per_client_metrics).sort_values("cid").reset_index(drop=True)
-        results_client[name] = df_pc
-        results_summary[name] = {
-            "mse_mean": float(df_pc["mse"].mean()),
-            "mse_std": float(df_pc["mse"].std(ddof=0)),
-            "rmse_mean": float(df_pc["rmse"].mean()),
-            "rmse_std": float(df_pc["rmse"].std(ddof=0)),
-            "mae_mean": float(df_pc["mae"].mean()),
-            "mae_std": float(df_pc["mae"].std(ddof=0)),
-        }
-
-    conv_rows = []
-    for name, hist in histories.items():
-        for rnd in range(rounds):
-            conv_rows.append(
-                {
-                    "Model": name,
-                    "Round": rnd + 1,
-                    "TestRMSE_mean": hist["test_mean"][rnd],
-                    "TestRMSE_std": hist["test_std"][rnd],
-                }
-            )
-    df_conv = pd.DataFrame(conv_rows)
-
-    stab_rows = []
-    for name, df_pc in results_client.items():
-        for _, row in df_pc.iterrows():
-            stab_rows.append(
-                {
-                    "Model": name,
-                    "Client": f"Client {int(row['cid'])}",
-                    "rmse": row["rmse"],
-                    "mae": row["mae"],
-                    "mse": row["mse"],
-                }
-            )
-    df_stab = pd.DataFrame(stab_rows)
-
-    full_name = "CCN-LSTM-Attention"
-    full = results_summary[full_name]
-    delta_rows = []
-    for name, summary in results_summary.items():
-        if name == full_name:
-            continue
-        delta_rows.append(
-            {
-                "Model": name,
-                "Delta_RMSE_%": (summary["rmse_mean"] - full["rmse_mean"]) / (full["rmse_mean"] + 1e-12) * 100.0,
-                "Delta_MAE_%": (summary["mae_mean"] - full["mae_mean"]) / (full["mae_mean"] + 1e-12) * 100.0,
-            }
-        )
-    df_delta = pd.DataFrame(delta_rows)
-
-    plot_ablation_figure(
-        df_conv,
-        df_stab,
-        df_delta,
-        client_labels,
-        rounds,
-        output_dir,
-        "fig_ablation_sim_2x2.png",
-    )
-    print_summary_table(results_summary)
+    summary_df = print_summary_table(results_summary)
+    save_dataframe(summary_df, output_dir, metrics_file_name)
     return results_summary
 def run_overview_experiment(output_dir: Path) -> None:
     seed = 15
@@ -1312,14 +947,15 @@ def run_overview_experiment(output_dir: Path) -> None:
         if fed_metrics[idx]["att_weights"] is not None:
             print(f"  Mean attention weight: {np.round(fed_metrics[idx]['att_weights'].mean(), 4)}")
 
-    plot_overview_figure(
+    overview_df = plot_overview_figure(
         fed_metrics,
         weak_metrics,
         server,
         fed_clients,
         output_dir,
-        "ccn_metrics_overview_2x3.png",
+        build_output_file_name("overview", "figure", "png"),
     )
+    save_dataframe(overview_df, output_dir, build_output_file_name("overview", "metrics", "csv"))
 
 
 def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
@@ -1342,30 +978,31 @@ def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
             ]
         ),
         output_dir=output_dir,
-        figure_name="fig_ablation_cnn_2x2.png",
+        figure_name=build_output_file_name("ablation", "figure", "png"),
+        metrics_file_name=build_output_file_name("ablation", "metrics", "csv"),
     )
 
 
 def run_project(workflow: str, output_dir: Path) -> None:
     ensure_output_dir(output_dir)
-    configure_plot_style()
-    print(f"Using device: {DEVICE}")
+    log_path = output_dir / build_output_file_name("run", "log", "txt")
+    with log_path.open("w", encoding="utf-8") as log_handle, redirect_stdout(TeeStream(sys.stdout, log_handle)):
+        configure_plot_style()
+        print(f"[setup] Using device: {DEVICE}")
+        print(f"[setup] Writing experiment log: {log_path}")
 
-    if workflow in ("all", "overview"):
-        run_overview_experiment(output_dir)
+        if workflow in ("all", "overview"):
+            run_overview_experiment(output_dir)
 
-    if workflow in ("all", "ablation"):
-        run_ablation_experiment(output_dir)
-
-    if workflow in ("all", "timeseries"):
-        run_ccn_time_series_ablation(output_dir)
+        if workflow in ("all", "ablation"):
+            run_ablation_experiment(output_dir)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
     parser = argparse.ArgumentParser(description="Standalone CCN simulation project.")
     parser.add_argument(
         "--workflow",
-        choices=["all", "overview", "ablation", "timeseries"],
+        choices=["all", "overview", "ablation"],
         default="all",
         help="Workflow to execute.",
     )
