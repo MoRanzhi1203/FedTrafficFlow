@@ -1,8 +1,9 @@
-numpy
+﻿numpy
 pandas
+polars
 matplotlib
 seaborn
-torch
+scikit-learn
 pyarrow
 psutil
 pytest
