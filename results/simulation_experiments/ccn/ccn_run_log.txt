@@ -1,5 +1,5 @@
 [setup] Using device: cpu
-[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\simulation_experiments\output_ccn\ccn_run_log.txt
+[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn\ccn_run_log.txt
 
 ===== CCN Overview =====
 [overview] round 1/6
@@ -50,8 +50,8 @@ Client 2:
   Federated   - MSE: 0.0214, MAE: 0.1110
   Independent - MSE: 0.0253, MAE: 0.1248
   Mean attention weight: 0.5
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\simulation_experiments\output_ccn\ccn_overview_figure.png
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\simulation_experiments\output_ccn\ccn_overview_metrics.csv
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn\ccn_overview_figure.png
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn\ccn_overview_metrics.csv
 
 ===== CCN Heterogeneous Ablation =====
 
@@ -162,7 +162,7 @@ Start Federated Training: CCN-Attention
     Client 1 | Local avg MSE: 0.005885
     Client 2 | Local avg MSE: 0.006047
     Global Test RMSE mean: 0.413573 (std 0.127001)
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\simulation_experiments\output_ccn\ccn_ablation_figure.png
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn\ccn_ablation_figure.png
 
 === Final Test Metrics Summary (mean ± std across clients) ===
              Model  rmse_mean  rmse_std  mae_mean  mae_std  mse_mean  mse_std
@@ -170,4 +170,4 @@ Saved figure: E:\Jupter_Notebook\FedTrafficFlow\simulation_experiments\output_cc
           CCN-LSTM   0.212060  0.024741  0.182876 0.022277  0.045581 0.010676
 CCN-LSTM-Attention   0.267528  0.027512  0.239623 0.026403  0.072328 0.014412
     LSTM-Attention   0.238694  0.020522  0.206687 0.015913  0.057396 0.009505
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\simulation_experiments\output_ccn\ccn_ablation_metrics.csv
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn\ccn_ablation_metrics.csv
