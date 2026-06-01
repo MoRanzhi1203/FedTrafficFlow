@@ -80,6 +80,30 @@ def configure_plot_style() -> None:
     )
 
 
+def annotate_panel_labels(
+    axes: np.ndarray,
+    labels: Sequence[str] = ("(a)", "(b)", "(c)", "(d)", "(e)", "(f)"),
+) -> None:
+    """为多子图添加统一的左上角标签。"""
+    for ax, label in zip(np.ravel(axes), labels):
+        ax.text(
+            0.02,
+            0.98,
+            label,
+            transform=ax.transAxes,
+            ha="left",
+            va="top",
+            fontsize=15,
+            fontweight="bold",
+            bbox={
+                "boxstyle": "round,pad=0.2",
+                "facecolor": "white",
+                "alpha": 0.9,
+                "edgecolor": "#444444",
+            },
+        )
+
+
 def set_global_seed(seed: int) -> None:
     """设置全局随机种子，提升结果可复现性。"""
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -1010,6 +1034,7 @@ def plot_overview_figure(
     axes[1, 2].tick_params(axis="x", rotation=30)
     axes[1, 2].legend(title="Method")
 
+    annotate_panel_labels(axes)
     plt.tight_layout()
     save_figure(fig, output_dir, file_name)
     return df_metrics
