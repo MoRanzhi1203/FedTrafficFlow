@@ -80,30 +80,6 @@ def configure_plot_style() -> None:
     )
 
 
-def annotate_panel_labels(
-    axes: np.ndarray,
-    labels: Sequence[str] = ("(a)", "(b)", "(c)", "(d)", "(e)", "(f)"),
-) -> None:
-    """为多子图添加统一的左上角标签。"""
-    for ax, label in zip(np.ravel(axes), labels):
-        ax.text(
-            0.02,
-            0.98,
-            label,
-            transform=ax.transAxes,
-            ha="left",
-            va="top",
-            fontsize=15,
-            fontweight="bold",
-            bbox={
-                "boxstyle": "round,pad=0.2",
-                "facecolor": "white",
-                "alpha": 0.9,
-                "edgecolor": "#444444",
-            },
-        )
-
-
 def set_global_seed(seed: int) -> None:
     """设置全局随机种子，提升结果可复现性。"""
     os.environ["PYTHONHASHSEED"] = str(seed)
@@ -968,7 +944,7 @@ def plot_overview_figure(
         hue="Method",
         ax=axes[0, 0],
     )
-    axes[0, 0].set_title("MSE Comparison")
+    axes[0, 0].set_title("(a) MSE Comparison")
     axes[0, 0].set_xlabel("")
     axes[0, 0].set_ylabel("MSE")
     axes[0, 0].legend(title="Method", loc="lower right", frameon=True)
@@ -980,7 +956,7 @@ def plot_overview_figure(
         hue="Method",
         ax=axes[0, 1],
     )
-    axes[0, 1].set_title("RMSE Comparison")
+    axes[0, 1].set_title("(b) RMSE Comparison")
     axes[0, 1].set_xlabel("")
     axes[0, 1].set_ylabel("RMSE")
     axes[0, 1].legend(title="Method", loc="lower right", frameon=True)
@@ -992,7 +968,7 @@ def plot_overview_figure(
         hue="Method",
         ax=axes[0, 2],
     )
-    axes[0, 2].set_title("MAE Comparison")
+    axes[0, 2].set_title("(c) MAE Comparison")
     axes[0, 2].set_xlabel("")
     axes[0, 2].set_ylabel("MAE")
     axes[0, 2].legend(title="Method", loc="lower right", frameon=True)
@@ -1004,7 +980,7 @@ def plot_overview_figure(
         marker="o",
         ax=axes[1, 0],
     )
-    axes[1, 0].set_title("Federated Convergence (Global)")
+    axes[1, 0].set_title("(d) Federated Convergence (Global)")
     axes[1, 0].set_xlabel("Federated Round")
     axes[1, 0].set_ylabel("Avg Train Loss")
 
@@ -1016,7 +992,7 @@ def plot_overview_figure(
         marker="o",
         ax=axes[1, 1],
     )
-    axes[1, 1].set_title("Client Validation Convergence (Federated)")
+    axes[1, 1].set_title("(e) Client Validation Convergence (Federated)")
     axes[1, 1].set_xlabel("Federated Round")
     axes[1, 1].set_ylabel("Validation Loss")
     axes[1, 1].legend(title="Client")
@@ -1028,13 +1004,12 @@ def plot_overview_figure(
         hue="Method",
         ax=axes[1, 2],
     )
-    axes[1, 2].set_title("Cross-Client Error Stability (Dispersion)")
+    axes[1, 2].set_title("(f) Cross-Client Error Stability (Dispersion)")
     axes[1, 2].set_xlabel("")
     axes[1, 2].set_ylabel("Value")
     axes[1, 2].tick_params(axis="x", rotation=30)
     axes[1, 2].legend(title="Method")
 
-    annotate_panel_labels(axes)
     plt.tight_layout()
     save_figure(fig, output_dir, file_name)
     return df_metrics
