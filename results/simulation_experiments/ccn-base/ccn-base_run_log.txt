@@ -1,5 +1,5 @@
 [setup] Using device: cpu
-[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn\cnn_run_log.txt
+[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_run_log.txt
 
 ===== CCN Overview =====
 [overview] round 1/6
@@ -50,8 +50,8 @@ Client 2:
   CCN-FedAvg   - MSE: 0.0219, MAE: 0.1105
   Independent - MSE: 0.0179, MAE: 0.1123
   Mean attention weight: 0.5
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn\cnn_overview_figure.png
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn\cnn_overview_metrics.csv
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_overview_figure.png
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_overview_metrics.csv
 
 ===== CCN FedAvg Ablation =====
 
@@ -162,7 +162,7 @@ Start FedAvg Training: CCN-Attention
     Client 1 | Local avg MSE: 0.002045
     Client 2 | Local avg MSE: 0.002829
     Global Test RMSE mean: 0.212159 (std 0.110685)
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn\cnn_ablation_figure.png
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_ablation_figure.png
 
 === Final Test Metrics Summary (mean ± std across clients) ===
              Model  rmse_mean  rmse_std  mae_mean  mae_std  mse_mean  mse_std
@@ -170,4 +170,4 @@ Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\c
           CCN-LSTM   0.225272  0.096310  0.205270 0.094083  0.060023 0.049885
 CCN-LSTM-Attention   0.217710  0.058732  0.195584 0.060914  0.050847 0.027149
     LSTM-Attention   0.232848  0.095847  0.199938 0.091964  0.063405 0.050413
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn\cnn_ablation_metrics.csv
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_ablation_metrics.csv

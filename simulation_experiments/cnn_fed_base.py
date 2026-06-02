@@ -54,7 +54,7 @@ SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 # 自动选择 GPU 或 CPU，便于在不同环境中复用同一脚本。
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # 工程前缀，用于统一输出文件命名规则。
-PROJECT_NAME = "cnn"
+PROJECT_NAME = "ccn-base"
 # CCN 实验默认输出目录。
 DEFAULT_OUTPUT_DIR = SIMULATION_RESULTS_ROOT / PROJECT_NAME
 # Windows 常见非法路径字符，用于阻止错误路径写入。

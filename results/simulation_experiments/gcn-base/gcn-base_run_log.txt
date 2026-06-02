@@ -1,5 +1,5 @@
 [setup] Using device: cpu
-[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_run_log.txt
+[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn-base\gcn-base_run_log.txt
 
 ===== GCN Overview =====
 [overview] round 1/5
@@ -45,8 +45,8 @@ Client 2:
   GCN-FedAvg   - MSE: 0.0210, MAE: 0.1107
   Independent - MSE: 0.0268, MAE: 0.1242
   Mean attention weight: 0.5
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_overview_figure.png
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_overview_metrics.csv
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn-base\gcn-base_overview_figure.png
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn-base\gcn-base_overview_metrics.csv
 
 ===== GCN FedAvg Ablation =====
 
@@ -157,7 +157,7 @@ Start FedAvg Training: GCN-Attention
     Client 1 | Local avg MSE: 0.001091
     Client 2 | Local avg MSE: 0.000522
     Global Test RMSE mean: 0.221320 (std 0.118772)
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_ablation_figure.png
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn-base\gcn-base_ablation_figure.png
 
 === Final Test Metrics Summary (mean ± std across clients) ===
              Model  rmse_mean  rmse_std  mae_mean  mae_std  mse_mean  mse_std
@@ -165,4 +165,4 @@ Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\g
           GCN-LSTM   0.210474  0.088464  0.188989 0.090045  0.052125 0.042352
 GCN-LSTM-Attention   0.194026  0.102362  0.169880 0.098208  0.048124 0.044885
     LSTM-Attention   0.231844  0.096285  0.199235 0.092501  0.063022 0.050605
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_ablation_metrics.csv
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn-base\gcn-base_ablation_metrics.csv

@@ -54,7 +54,7 @@ SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 # 自动选择可用计算设备。
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # 工程名作为统一输出文件名前缀。
-PROJECT_NAME = "gcn"
+PROJECT_NAME = "gcn-base"
 # GCN 实验默认输出目录。
 DEFAULT_OUTPUT_DIR = SIMULATION_RESULTS_ROOT / PROJECT_NAME
 # Windows 常见非法路径字符，用于阻止错误路径写入。
