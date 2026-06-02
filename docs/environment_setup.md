@@ -1,4 +1,4 @@
-﻿# 环境安装与运行说明
+# 环境安装与运行说明
 
 ## 概述
 
@@ -8,7 +8,7 @@
 
 建议使用：
 
-- Python `3.10` 或 `3.11`
+- Python `3.9` - `3.11`（当前项目验证环境：Python 3.9.23, conda env `analysis`）
 
 推荐原因：
 
@@ -17,8 +17,9 @@
 - `numpy`
 - `matplotlib`
 - `scikit-learn`
+- `torch`（仿真实验需要）
 
-这些依赖在 Python 3.10 和 3.11 下兼容性通常更稳定。
+这些依赖在 Python 3.9 - 3.11 下兼容性通常更稳定。
 
 ## 2. 核心依赖
 
@@ -33,12 +34,14 @@
 - `pyarrow`
 - `psutil`
 - `pytest`
+- `torch`（联邦仿真实验需要）
 
 补充说明：
 
 - `pyarrow` 用于 `pandas.read_parquet()` 和 `DataFrame.to_parquet()`。
 - `psutil` 用于节点流量聚合脚本中的性能监控输出。
 - `scikit-learn` 用于日期类型方法比较中的聚类分析。
+- `torch` 用于仿真实验中的 CNN/GCN + BiLSTM + Attention 模型训练。
 
 ## 3. 推荐安装方式
 
@@ -82,7 +85,44 @@ conda activate fedtrafficflow
 pip install -r requirements.txt
 ```
 
-## 4. 数据准备
+### 当前项目使用的 conda 环境
+
+当前项目已在 `analysis` conda 环境下验证通过：
+
+```powershell
+conda activate analysis
+python --version     # Python 3.9.23
+```
+
+该环境包含完整依赖：
+
+- torch 2.8.0+cpu
+- numpy 2.0.2
+- pandas 2.3.3
+- matplotlib 3.9.4
+- sklearn 1.6.1
+- seaborn
+
+## 4. 仿真实验环境要求
+
+仿真实验（`simulation_experiments/`）需要额外安装 PyTorch：
+
+```bash
+pip install torch
+```
+
+验证安装：
+
+```python
+import torch
+print(torch.__version__)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
+```
+
+仿真实验脚本已内置自动 GPU/CPU 判断逻辑。
+
+## 5. 数据准备
 
 运行脚本前，建议先确认以下数据位置：
 
@@ -105,7 +145,7 @@ pip install -r requirements.txt
 - `traffic_speed_sub-dataset.v2` 文件体积较大，默认不纳入版本管理。
 - 若缺少该文件，后续速度分片、密度分片和节点流量分片都无法生成。
 
-## 5. 推荐执行顺序
+## 6. 推荐执行顺序
 
 主流程建议按以下顺序运行：
 
@@ -126,7 +166,7 @@ python analysis_scripts/visualize_fitted_function_clusters.py --method M2_shape_
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ```
 
-## 6. 各阶段最小依赖关系
+## 7. 各阶段最小依赖关系
 
 ### 预处理阶段
 
@@ -181,7 +221,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 - `date_type_curve_method_comparison/`
 - `date_type_curve_method_comparison/function_cluster_visualization/`
 
-## 7. 运行注意事项
+## 8. 运行注意事项
 
 ### 路径说明
 
@@ -217,7 +257,7 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 - 优先使用 SSD。
 - 在试验阶段先用抽样参数或先只跑部分流程。
 
-## 8. 常见问题
+## 9. 常见问题
 
 ### 1. 找不到 `traffic_speed_sub-dataset.v2`
 
@@ -284,7 +324,7 @@ pip install pyarrow
 python analysis_scripts/compare_date_type_curve_methods.py --node-sample-size 1000
 ```
 
-## 9. 后续建议
+## 10. 后续建议
 
 - 当前已提供 `requirements.txt`，后续可进一步按环境锁定版本号。
 - 若项目继续扩展，可再补 `Makefile`、PowerShell 脚本或批处理脚本。

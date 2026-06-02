@@ -1,4 +1,4 @@
-﻿# FedTrafficFlow 项目文档
+# FedTrafficFlow 项目文档
 
 ## 1. 项目概述
 
@@ -49,6 +49,7 @@
 | Parquet 支持 | `pyarrow` |
 | 绘图分析 | `matplotlib`、`seaborn` |
 | 机器学习 | `scikit-learn` |
+| 深度学习 | `torch` (PyTorch) |
 | 资源监控 | `psutil` |
 | 测试 | `pytest` |
 
@@ -87,12 +88,15 @@ FedTrafficFlow/
  analysis_scripts/                # 真实交通数据分析、密度计算、节点曲线拟合与聚类
  dataset_inspection_scripts/      # 数据结构检查、顺序检查、样例查看
  docs/                            # 项目说明文档
+ simulation_experiments/          # 联邦仿真实验脚本 (CNN/GCN + BiLSTM + Attention)
+ results/                         # 仿真实验结果输出 (PNG, CSV, TXT)
  data/
    raw/                          # 原始数据
    processed/                    # 预处理后的标准化数据与速度分块
    params/                       # 参数表
    analysis/                     # 分析结果与中间产物
  preprocessing_scripts/           # 原始路网与速度数据预处理
+ test/                           # Jupyter Notebook 实验文件
  README.md
  requirements.txt
 ```
@@ -128,6 +132,37 @@ FedTrafficFlow/
 - `check_spatial_node_completeness.py`
 
 这些脚本不产生主流程结果，但用于保障主流程输入正确。
+
+#### D. 仿真实验模块
+
+**文件位置**：`simulation_experiments/`
+
+**核心脚本**：
+
+- `cnn_fed_base.py`：CNN + BiLSTM + Attention 联邦仿真实验。
+- `gcn_fed_base.py`：GCN + BiLSTM + Attention 联邦仿真实验（链式图结构）。
+
+**仿真内容**：
+
+1. **总览实验 (overview)**：比较 CCN-FedAvg / GCN-FedAvg 与 Independent Training 在异构客户端上的性能差异。
+2. **消融实验 (ablation)**：比较完整模型与移除 Attention / 移除 LSTM / 移除空间编码器的变体性能。
+
+**联邦聚合方式**：标准样本量加权 FedAvg。
+
+```text
+global_model = sum(n_i / total_n * local_model_i)
+```
+
+**模型架构**：
+
+- CNN 分支：Conv1d×2 + BN + AdaptiveSwish + AdaptiveAvgPool1d
+- GCN 分支：GCNLayer×2 + LayerNorm + AdaptiveSwish（可学习邻接矩阵）
+- BiLSTM 分支 + MultiheadAttention(4 head) + 残差连接
+- 回归头：Linear → LayerNorm → AdaptiveSwish → Dropout → Linear
+
+**输出位置**：`results/simulation_experiments/cnn/` 和 `results/simulation_experiments/gcn/`
+
+**详细文档**：参见 `docs/simulation_experiments.md`。
 
 ### 3.3 模块调用逻辑与数据流转
 
@@ -247,7 +282,26 @@ python analysis_scripts/visualize_fitted_function_clusters.py --method M2_shape_
 python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ```
 
-### 5.3 推荐的快速验证方式
+### 5.3 仿真实验执行
+
+激活环境并运行：
+
+```powershell
+conda activate analysis
+cd simulation_experiments
+python cnn_fed_base.py --workflow all
+python gcn_fed_base.py --workflow all
+```
+
+workflow 选项：`all`（默认，overview + ablation）、`overview`、`ablation`。
+
+输出：
+- `results/simulation_experiments/cnn/`：CNN 仿真 PNG / CSV / TXT
+- `results/simulation_experiments/gcn/`：GCN 仿真 PNG / CSV / TXT
+
+详细文档：`docs/simulation_experiments.md`
+
+### 5.4 推荐的快速验证方式
 
 如果只想快速验证流程是否通畅，至少执行到：
 

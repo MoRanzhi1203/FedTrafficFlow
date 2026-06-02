@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-CCN 仿真实验独立工程。
+GCN 仿真实验独立工程。
 
-本文件实现了基于 CCN（卷积特征提取）主干的联邦仿真实验，包含以下内容：
+本文件实现了基于 GCN（图卷积网络）主干的联邦仿真实验，包含以下内容：
 1. 联邦总览实验：比较联邦训练与独立训练在异构客户端上的误差表现；
-2. 消融实验：比较 CCN-LSTM-Attention 及其裁剪变体的性能差异；
+2. 消融实验：比较 GCN-LSTM-Attention 及其裁剪变体的性能差异；
 3. 可视化输出：将指标对比图、消融分析图、指标表格与运行日志统一写入输出目录。
 
 主要依赖库：
@@ -29,7 +29,7 @@ from typing import Callable, Dict, Optional, Sequence
 
 import matplotlib
 
-# 使用无界面后端，避免服务器或终端环境弹出交互式窗口。
+# 使用无界面后端，避免在命令行或服务器环境中弹出图形窗口。
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -40,10 +40,10 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, random_split
 
-# 关闭 matplotlib 交互模式，确保绘图流程完全由文件保存驱动。
+# 关闭交互模式，统一采用“绘制后直接保存”的工作流。
 plt.ioff()
 
-# 当前脚本目录。
+# 当前脚本所在目录。
 SCRIPT_DIR = Path(__file__).resolve().parent
 # 项目根目录，用于构造统一的结果输出根目录。
 PROJECT_ROOT = SCRIPT_DIR.parent
@@ -51,22 +51,18 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
 # 仿真实验主目录，所有独立仿真实验均在此目录下建立各自子目录。
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
-# 自动选择 GPU 或 CPU，便于在不同环境中复用同一脚本。
+# 自动选择可用计算设备。
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# 工程前缀，用于统一输出文件命名规则。
-PROJECT_NAME = "ccn"
-# CCN 实验默认输出目录。
+# 工程名作为统一输出文件名前缀。
+PROJECT_NAME = "gcn"
+# GCN 实验默认输出目录。
 DEFAULT_OUTPUT_DIR = SIMULATION_RESULTS_ROOT / PROJECT_NAME
 # Windows 常见非法路径字符，用于阻止错误路径写入。
 INVALID_PATH_CHARS = set('<>:"|?*')
 
 
 def configure_plot_style() -> None:
-    """配置全局绘图样式。
-
-    该函数统一设置 seaborn 主题、字体和字号，保证总览图与消融图
-    在不同运行环境中的视觉风格一致，避免出现字号不统一或负号乱码。
-    """
+    """配置全局绘图主题与版式参数。"""
     sns.set_theme(
         style="whitegrid",
         context="notebook",
@@ -85,17 +81,7 @@ def configure_plot_style() -> None:
 
 
 def set_global_seed(seed: int) -> None:
-    """设置全局随机种子。
-
-    参数:
-        seed: 用于控制 Python、NumPy 和 PyTorch 随机性的整数种子。
-
-    返回:
-        None
-
-    说明:
-        同时关闭 cuDNN 的非确定性优化，以便不同运行之间尽可能复现实验结果。
-    """
+    """设置全局随机种子，提升结果可复现性。"""
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -106,30 +92,13 @@ def set_global_seed(seed: int) -> None:
 
 
 def ensure_output_dir(output_dir: Path) -> Path:
-    """确保输出目录存在。
-
-    参数:
-        output_dir: 目标输出目录。
-
-    返回:
-        已确认存在的目录路径。
-    """
+    """确保输出目录存在并返回该目录。"""
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
 def validate_output_subdir(output_subdir: str) -> None:
-    """校验相对子目录参数是否合法。
-
-    参数:
-        output_subdir: 用户传入的输出子目录。
-
-    返回:
-        None
-
-    异常:
-        ValueError: 当目录为空、包含路径遍历片段或非法字符时抛出。
-    """
+    """校验相对子目录参数是否合法。"""
     if not output_subdir or not output_subdir.strip():
         raise ValueError("The output directory must not be empty.")
 
@@ -151,15 +120,7 @@ def validate_output_subdir(output_subdir: str) -> None:
 
 
 def resolve_output_dir(output_subdir: Optional[str] = None) -> Path:
-    """解析并创建安全的输出目录。
-
-    参数:
-        output_subdir: 位于 `results/simulation_experiments` 下的相对子目录。
-            未传入时使用当前实验的默认子目录。
-
-    返回:
-        经校验并已创建的安全输出目录。
-    """
+    """解析并创建安全的输出目录。"""
     ensure_output_dir(SIMULATION_RESULTS_ROOT)
     relative_subdir = output_subdir or PROJECT_NAME
     validate_output_subdir(relative_subdir)
@@ -177,30 +138,12 @@ def build_output_file_name(
     artifact_name: str,
     extension: str,
 ) -> str:
-    """构造统一命名规则的输出文件名。
-
-    参数:
-        workflow_name: 工作流名称，例如 `overview` 或 `ablation`。
-        artifact_name: 产物名称，例如 `figure`、`metrics`、`log`。
-        extension: 文件扩展名，不包含点号。
-
-    返回:
-        符合 `ccn_<workflow>_<artifact>.<ext>` 规范的文件名。
-    """
+    """构造统一命名规则的输出文件名。"""
     return f"{PROJECT_NAME}_{workflow_name}_{artifact_name}.{extension}"
 
 
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
-    """保存图像并关闭图对象。
-
-    参数:
-        fig: 待保存的 matplotlib 图对象。
-        output_dir: 输出目录。
-        file_name: 输出文件名。
-
-    返回:
-        图像最终保存路径。
-    """
+    """保存图像并关闭图对象。"""
     output_path = ensure_output_dir(output_dir) / file_name
     fig.savefig(output_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
@@ -209,16 +152,7 @@ def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
 
 
 def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
-    """保存表格结果为 CSV 文件。
-
-    参数:
-        df: 待保存的数据表。
-        output_dir: 输出目录。
-        file_name: 输出文件名。
-
-    返回:
-        CSV 最终保存路径。
-    """
+    """保存数据表为 CSV 文件。"""
     output_path = ensure_output_dir(output_dir) / file_name
     df.to_csv(output_path, index=False, encoding="utf-8")
     print(f"Saved table: {output_path}")
@@ -226,40 +160,29 @@ def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
 
 
 class TeeStream:
-    """将标准输出同时写入多个流对象。
-
-    该类用于把终端日志同步写入控制台与日志文件，方便实验跟踪与问题复现。
-    """
+    """将标准输出同时写入多个目标流。"""
 
     def __init__(self, *streams):
-        """初始化多路输出流。
-
-        参数:
-            *streams: 任意数量的类文件对象，通常为标准输出和日志句柄。
-        """
+        """初始化输出流集合。"""
         self.streams = streams
 
     def write(self, data: str) -> int:
-        """向所有输出流写入文本。"""
+        """将文本写入所有流对象。"""
         for stream in self.streams:
             stream.write(data)
         return len(data)
 
     def flush(self) -> None:
-        """刷新所有输出流缓冲区。"""
+        """刷新所有流对象。"""
         for stream in self.streams:
             stream.flush()
 
 
 def unpack_model_output(model_output):
-    """统一解析模型输出格式。
-
-    参数:
-        model_output: 模型原始输出，可能是单一张量，也可能是
-            `(prediction, attention_weights)` 元组。
+    """统一解析模型输出。
 
     返回:
-        二元组 `(prediction, attention_weights)`。
+        `(prediction, attention_weights)` 二元组。
     """
     if isinstance(model_output, tuple):
         return model_output
@@ -267,14 +190,7 @@ def unpack_model_output(model_output):
 
 
 def stability_stats(arr):
-    """计算跨客户端稳定性统计量。
-
-    参数:
-        arr: 一组误差值列表。
-
-    返回:
-        `(std, gap, cv)`，分别表示标准差、极差和变异系数。
-    """
+    """计算跨客户端稳定性统计量。"""
     arr = np.array(arr, dtype=float)
     std = float(arr.std())
     gap = float(arr.max() - arr.min())
@@ -284,14 +200,7 @@ def stability_stats(arr):
 
 
 def print_summary_table(results_summary: Dict[str, Dict[str, float]]) -> pd.DataFrame:
-    """打印并返回消融实验汇总表。
-
-    参数:
-        results_summary: 以模型名称为键、以统计指标字典为值的汇总结果。
-
-    返回:
-        排序后的 pandas.DataFrame，包含 MSE、RMSE、MAE 的均值与标准差。
-    """
+    """打印并返回消融实验汇总表。"""
     df_sum = (
         pd.DataFrame(results_summary)
         .T.reset_index()
@@ -315,17 +224,10 @@ def print_summary_table(results_summary: Dict[str, Dict[str, float]]) -> pd.Data
 
 
 class AdaptiveSwish(nn.Module):
-    """带可学习系数的 Swish 激活函数。
-
-    该激活函数允许模型自适应调整非线性强度，常用于替代固定形态的 ReLU。
-    """
+    """带可学习缩放因子的 Swish 激活函数。"""
 
     def __init__(self, trainable: bool = True):
-        """初始化激活函数参数。
-
-        参数:
-            trainable: 是否将 `beta` 设为可训练参数。
-        """
+        """初始化激活函数参数。"""
         super().__init__()
         if trainable:
             self.beta = nn.Parameter(torch.ones(1, dtype=torch.float32))
@@ -333,29 +235,104 @@ class AdaptiveSwish(nn.Module):
             self.register_buffer("beta", torch.tensor(1.0, dtype=torch.float32))
 
     def forward(self, x):
-        """执行自适应 Swish 变换。"""
+        """执行自适应 Swish 非线性变换。"""
         return x * torch.sigmoid(self.beta * x)
 
 
-class WeakModel(nn.Module):
-    """独立训练基线模型。
+class SimpleGCNLayer(nn.Module):
+    """基础图卷积层。
 
-    该模型不显式建模局部卷积结构、时序递归关系或注意力机制，
-    仅将输入展平后通过浅层全连接网络回归，用于作为性能下界参考。
+    本层先利用归一化邻接矩阵传播节点特征，再通过线性层完成通道映射。
     """
 
-    def __init__(self, k: int, t: int, hidden_dim: int = 16):
-        """初始化弱基线模型。
+    def __init__(self, in_dim: int, out_dim: int, bias: bool = True):
+        """初始化图卷积层。"""
+        super().__init__()
+        self.lin = nn.Linear(in_dim, out_dim, bias=bias)
+
+    def forward(self, x, a_norm):
+        """执行单层图卷积。
 
         参数:
-            k: 节点或特征通道数。
-            t: 时间步长度。
-            hidden_dim: 隐层维度，保持较小以体现弱模型特性。
+            x: 形状为 `[B, K, F]` 的节点特征张量。
+            a_norm: 形状为 `[K, K]` 的归一化邻接矩阵。
+        """
+        # `einsum` 实现对每个 batch 共享同一邻接矩阵的消息传播。
+        ax = torch.einsum("ij,bjf->bif", a_norm, x)
+        return self.lin(ax)
+
+
+class GCNEncoder(nn.Module):
+    """GCN 编码器。
+
+    编码器通过可学习邻接矩阵显式构建节点之间的拓扑关系，再经过两层图卷积
+    完成节点状态更新与信息传递，最后对节点维进行池化得到图级表示。
+    """
+
+    def __init__(self, k: int, t: int, hidden_dim: int = 128):
+        """初始化 GCN 编码器。
+
+        参数:
+            k: 节点数或观测变量数。
+            t: 每个节点的时间序列长度。
+            hidden_dim: 图编码器隐层维度。
         """
         super().__init__()
         self.k = k
         self.t = t
-        # 简单特征提取器仅做展平特征映射，故表达能力明显弱于主模型。
+        self.hidden_dim = hidden_dim
+
+        # 先将每个节点长度为 T 的时间序列投影到统一隐藏空间。
+        self.node_proj = nn.Sequential(
+            nn.Linear(t, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            AdaptiveSwish(),
+        )
+        # 两层图卷积负责执行节点间信息传递与状态迭代更新。
+        self.gcn1 = SimpleGCNLayer(hidden_dim, hidden_dim)
+        self.gcn2 = SimpleGCNLayer(hidden_dim, hidden_dim)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.norm2 = nn.LayerNorm(hidden_dim)
+        self.act = AdaptiveSwish()
+        # 可学习邻接矩阵是拓扑构建核心，用于让模型自动发现变量关联。
+        self.a_param = nn.Parameter(torch.randn(k, k) * 0.01)
+
+    def _normalize_adj(self, a):
+        """对邻接矩阵执行非负化、自环补充和对称归一化。"""
+        a = torch.relu(a)
+        a = a + torch.eye(self.k, device=a.device, dtype=a.dtype)
+        deg = a.sum(dim=1)
+        deg_inv_sqrt = torch.pow(deg + 1e-12, -0.5)
+        d_inv_sqrt = torch.diag(deg_inv_sqrt)
+        return d_inv_sqrt @ a @ d_inv_sqrt
+
+    def forward(self, x):
+        """执行 GCN 编码流程。"""
+        x = x.to(dtype=torch.float32)
+        x = self.node_proj(x)
+        a_norm = self._normalize_adj(self.a_param)
+
+        # 第一层图卷积：聚合邻居信息并更新节点状态。
+        h = self.gcn1(x, a_norm)
+        h = self.norm1(h)
+        h = self.act(h)
+
+        # 第二层图卷积：进一步扩展信息传播范围。
+        h = self.gcn2(h, a_norm)
+        h = self.norm2(h)
+        h = self.act(h)
+        # 对所有节点做平均池化，得到图级全局表示。
+        return h.mean(dim=1)
+
+
+class WeakModel(nn.Module):
+    """独立训练基线模型。"""
+
+    def __init__(self, k: int, t: int, hidden_dim: int = 16):
+        """初始化弱基线模型。"""
+        super().__init__()
+        self.k = k
+        self.t = t
         self.simple_extractor = nn.Sequential(
             nn.Linear(k * t, hidden_dim),
             nn.ReLU(),
@@ -364,7 +341,7 @@ class WeakModel(nn.Module):
         self.fc = nn.Linear(hidden_dim, 1)
 
     def forward(self, x):
-        """前向传播，返回预测值与空注意力权重。"""
+        """执行前向传播，返回预测值与空注意力权重。"""
         x = x.to(dtype=torch.float32)
         batch_size, k, t = x.shape
         x = x.view(batch_size, k * t)
@@ -372,45 +349,19 @@ class WeakModel(nn.Module):
         return self.fc(x), None
 
 
-class CCNOverviewModel(nn.Module):
-    """CCN 总览实验主模型。
+class GCNOverviewModel(nn.Module):
+    """GCN 总览实验主模型。
 
-    模型结构由三部分组成：
-    1. CCN 分支：利用一维卷积抽取局部时间邻域模式；
-    2. BiLSTM 分支：建模双向时序依赖；
-    3. 多头注意力融合：自适应整合卷积特征与时序特征。
-
-    这里的“网络拓扑”并非显式图结构，而是由卷积核在时间维上的局部连接
-    隐式表达时序邻接关系，适合刻画局部波动与短程依赖。
+    模型由三部分组成：
+    1. GCN 分支：基于可学习图拓扑执行节点间消息传递；
+    2. BiLSTM 分支：建模全局时序依赖；
+    3. 多头注意力融合：自适应整合图结构特征与时序特征。
     """
 
     def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化 CCN 主模型。
-
-        参数:
-            k: 输入通道数，对应每个时间步的观测变量数量。
-            t: 时间窗口长度。
-            hidden_dim: 主干隐层维度。
-            num_heads: 多头注意力头数，用于融合两个分支的高层表示。
-        """
+        """初始化 GCN 总览模型。"""
         super().__init__()
-        # 卷积主干负责在时间维局部感受野内提取平滑且稳定的局部模式。
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
-        # BiLSTM 双向编码整段时间序列，补足卷积分支对长程依赖建模不足的问题。
+        self.gcn_encoder = GCNEncoder(k=k, t=t, hidden_dim=hidden_dim)
         self.lstm = nn.LSTM(
             input_size=k,
             hidden_size=hidden_dim // 2,
@@ -418,16 +369,13 @@ class CCNOverviewModel(nn.Module):
             batch_first=True,
             bidirectional=True,
         )
-        # 将 LSTM 输出投影到与卷积分支一致的维度，便于后续融合。
         self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        # 多头注意力用于学习两条分支在不同样本上的相对重要性。
         self.multihead_attn = nn.MultiheadAttention(
             embed_dim=hidden_dim,
             num_heads=num_heads,
             batch_first=True,
         )
         self.attn_norm = nn.LayerNorm(hidden_dim)
-        # 回归头输出单一连续值，用于模拟交通状态相关回归目标。
         self.regression_head = nn.Sequential(
             nn.Linear(hidden_dim, 64),
             nn.LayerNorm(64),
@@ -436,140 +384,24 @@ class CCNOverviewModel(nn.Module):
         )
 
     def forward(self, x):
-        """执行 CCN + BiLSTM + Attention 前向传播。"""
+        """执行 GCN + BiLSTM + Attention 前向传播。"""
         x = x.to(dtype=torch.float32)
-        # CCN 分支直接在 `[B, K, T]` 张量上做一维卷积。
-        x_cnn = self.cnn(x)
+        x_gcn = self.gcn_encoder(x)
 
-        # LSTM 要求时间维位于中间位置，因此先变换为 `[B, T, K]`。
         x_lstm = x.permute(0, 2, 1)
         x_lstm, _ = self.lstm(x_lstm)
-        # 对整个时间序列取均值池化，构建全局时序状态。
         x_lstm = x_lstm.mean(dim=1)
         x_lstm = self.lstm_proj(x_lstm)
 
-        # 将两条高层分支特征组成长度为 2 的“特征序列”输入注意力层。
-        feat_seq = torch.stack([x_cnn, x_lstm], dim=1)
+        feat_seq = torch.stack([x_gcn, x_lstm], dim=1)
         attn_output, attn_weights = self.multihead_attn(feat_seq, feat_seq, feat_seq)
-        # 残差连接与归一化有助于稳定融合阶段训练。
         attn_output = self.attn_norm(attn_output + feat_seq)
         x_fused = attn_output.mean(dim=1)
         return self.regression_head(x_fused), attn_weights
 
 
-class CCNAblationFull(nn.Module):
-    """CCN 消融实验中的完整模型。"""
-
-    def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化完整的 CCN-LSTM-Attention 模型。"""
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
-        self.lstm = nn.LSTM(
-            input_size=k,
-            hidden_size=hidden_dim // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        self.mha = nn.MultiheadAttention(
-            embed_dim=hidden_dim,
-            num_heads=num_heads,
-            batch_first=True,
-        )
-        self.attn_norm = nn.LayerNorm(hidden_dim)
-        self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
-            AdaptiveSwish(),
-            nn.Linear(64, 1),
-        )
-
-    def forward(self, x):
-        """执行完整消融模型前向传播。"""
-        x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
-        x_lstm = x.permute(0, 2, 1)
-        x_lstm, _ = self.lstm(x_lstm)
-        x_lstm = x_lstm.mean(dim=1)
-        x_lstm = self.lstm_proj(x_lstm)
-        feat_seq = torch.stack([x_cnn, x_lstm], dim=1)
-        attn_out, attn_w = self.mha(feat_seq, feat_seq, feat_seq)
-        attn_out = self.attn_norm(attn_out + feat_seq)
-        fused = attn_out.mean(dim=1)
-        return self.head(fused), attn_w
-
-
-class CCNAblationCNNLSTM(nn.Module):
-    """移除注意力模块后的 CCN 消融模型。"""
-
-    def __init__(self, k: int, t: int, hidden_dim: int = 128):
-        """初始化 CCN-LSTM 变体。"""
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
-        self.lstm = nn.LSTM(
-            input_size=k,
-            hidden_size=hidden_dim // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        # 这里使用全连接融合代替注意力，便于评估注意力模块的真实贡献。
-        self.fuse = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            AdaptiveSwish(),
-        )
-        self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
-            AdaptiveSwish(),
-            nn.Linear(64, 1),
-        )
-
-    def forward(self, x):
-        """执行 CCN-LSTM 变体前向传播。"""
-        x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
-        x_lstm = x.permute(0, 2, 1)
-        x_lstm, _ = self.lstm(x_lstm)
-        x_lstm = x_lstm.mean(dim=1)
-        x_lstm = self.lstm_proj(x_lstm)
-        fused = self.fuse(torch.cat([x_cnn, x_lstm], dim=1))
-        return self.head(fused), None
-
-
 class LSTMAttentionHetero(nn.Module):
-    """移除卷积主干后的时序注意力模型。"""
+    """移除 GCN 图结构分支后的时序注意力模型。"""
 
     def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
         """初始化 LSTM-Attention 变体。"""
@@ -596,7 +428,7 @@ class LSTMAttentionHetero(nn.Module):
         )
 
     def forward(self, x):
-        """执行仅保留时序主干的前向传播。"""
+        """执行仅保留时序分支的前向传播。"""
         x = x.to(dtype=torch.float32)
         x_lstm = x.permute(0, 2, 1)
         x_lstm, _ = self.lstm(x_lstm)
@@ -609,27 +441,21 @@ class LSTMAttentionHetero(nn.Module):
         return self.head(fused), attn_w
 
 
-class CCNAblationCNNAttention(nn.Module):
-    """移除 LSTM 分支后的 CCN-Attention 变体。"""
+class GCNAblationFull(nn.Module):
+    """GCN 消融实验中的完整模型。"""
 
     def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化 CCN-Attention 变体。"""
+        """初始化 GCN-LSTM-Attention 完整模型。"""
         super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
+        self.gcn_encoder = GCNEncoder(k=k, t=t, hidden_dim=hidden_dim)
+        self.lstm = nn.LSTM(
+            input_size=k,
+            hidden_size=hidden_dim // 2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
         )
+        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
         self.mha = nn.MultiheadAttention(
             embed_dim=hidden_dim,
             num_heads=num_heads,
@@ -644,10 +470,84 @@ class CCNAblationCNNAttention(nn.Module):
         )
 
     def forward(self, x):
-        """执行仅保留卷积主干的前向传播。"""
+        """执行完整消融模型前向传播。"""
         x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
-        feat_seq = x_cnn.unsqueeze(1)
+        x_gcn = self.gcn_encoder(x)
+        x_lstm = x.permute(0, 2, 1)
+        x_lstm, _ = self.lstm(x_lstm)
+        x_lstm = x_lstm.mean(dim=1)
+        x_lstm = self.lstm_proj(x_lstm)
+        feat_seq = torch.stack([x_gcn, x_lstm], dim=1)
+        attn_out, attn_w = self.mha(feat_seq, feat_seq, feat_seq)
+        attn_out = self.attn_norm(attn_out + feat_seq)
+        fused = attn_out.mean(dim=1)
+        return self.head(fused), attn_w
+
+
+class GCNAblationLSTM(nn.Module):
+    """移除注意力模块后的 GCN 消融模型。"""
+
+    def __init__(self, k: int, t: int, hidden_dim: int = 128):
+        """初始化 GCN-LSTM 变体。"""
+        super().__init__()
+        self.gcn_encoder = GCNEncoder(k=k, t=t, hidden_dim=hidden_dim)
+        self.lstm = nn.LSTM(
+            input_size=k,
+            hidden_size=hidden_dim // 2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True,
+        )
+        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.fuse = nn.Sequential(
+            nn.Linear(hidden_dim * 2, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            AdaptiveSwish(),
+        )
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, 64),
+            nn.LayerNorm(64),
+            AdaptiveSwish(),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, x):
+        """执行 GCN-LSTM 变体前向传播。"""
+        x = x.to(dtype=torch.float32)
+        x_gcn = self.gcn_encoder(x)
+        x_lstm = x.permute(0, 2, 1)
+        x_lstm, _ = self.lstm(x_lstm)
+        x_lstm = x_lstm.mean(dim=1)
+        x_lstm = self.lstm_proj(x_lstm)
+        fused = self.fuse(torch.cat([x_gcn, x_lstm], dim=1))
+        return self.head(fused), None
+
+
+class GCNAblationAttention(nn.Module):
+    """移除 LSTM 分支后的 GCN-Attention 变体。"""
+
+    def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
+        """初始化 GCN-Attention 变体。"""
+        super().__init__()
+        self.gcn_encoder = GCNEncoder(k=k, t=t, hidden_dim=hidden_dim)
+        self.mha = nn.MultiheadAttention(
+            embed_dim=hidden_dim,
+            num_heads=num_heads,
+            batch_first=True,
+        )
+        self.attn_norm = nn.LayerNorm(hidden_dim)
+        self.head = nn.Sequential(
+            nn.Linear(hidden_dim, 64),
+            nn.LayerNorm(64),
+            AdaptiveSwish(),
+            nn.Linear(64, 1),
+        )
+
+    def forward(self, x):
+        """执行仅保留图结构主干的前向传播。"""
+        x = x.to(dtype=torch.float32)
+        x_gcn = self.gcn_encoder(x)
+        feat_seq = x_gcn.unsqueeze(1)
         attn_out, attn_w = self.mha(feat_seq, feat_seq, feat_seq)
         attn_out = self.attn_norm(attn_out + feat_seq)
         fused = attn_out.mean(dim=1)
@@ -655,11 +555,7 @@ class CCNAblationCNNAttention(nn.Module):
 
 
 class OverviewHeterogeneousDataset(Dataset):
-    """总览实验使用的异构客户端数据集。
-
-    每个客户端共享相同输入维度，但目标值生成函数不同，从而模拟联邦场景中
-    不同采集节点、不同道路结构或不同交通机理带来的非 IID 分布。
-    """
+    """总览实验使用的异构客户端数据集。"""
 
     def __init__(
         self,
@@ -669,17 +565,8 @@ class OverviewHeterogeneousDataset(Dataset):
         t: int,
         noise: float = 0.1,
     ):
-        """构造异构数据集。
-
-        参数:
-            client_id: 客户端编号，用于决定目标生成函数。
-            num_samples: 样本数。
-            k: 节点或观测变量数。
-            t: 时间窗口长度。
-            noise: 观测噪声强度，用于模拟真实交通测量波动。
-        """
+        """构造异构客户端样本。"""
         self.x = np.random.randn(num_samples, k, t)
-        # 中间时间片段均值被视为基础交通状态强度。
         base_feature = self.x[:, :, t // 4 : t * 3 // 4].mean(axis=(1, 2))
         if client_id == 0:
             self.y = (
@@ -713,11 +600,7 @@ class OverviewHeterogeneousDataset(Dataset):
 
 
 class AblationHeterogeneousDataset(Dataset):
-    """消融实验使用的异构数据集。
-
-    与总览实验数据集基本一致，但在数值类型与标签构造上做了更明确的控制，
-    便于不同模型变体在相同数据生成规则下公平比较。
-    """
+    """消融实验使用的异构客户端数据集。"""
 
     def __init__(
         self,
@@ -727,7 +610,7 @@ class AblationHeterogeneousDataset(Dataset):
         t: int,
         noise: float = 0.1,
     ):
-        """构造消融实验数据集。"""
+        """构造消融实验数据。"""
         self.x = np.random.randn(num_samples, k, t).astype(np.float32)
         base_feature = self.x[:, :, t // 4 : t * 3 // 4].mean(axis=(1, 2))
         if client_id == 0:
@@ -742,7 +625,6 @@ class AblationHeterogeneousDataset(Dataset):
             y = 0.6 * np.sin(base_feature) + 0.4 * np.tanh(
                 self.x.max(axis=(1, 2))
             )
-        # 额外叠加高斯噪声，以模拟真实环境中传感误差和随机扰动。
         y = y + noise * np.random.randn(num_samples).astype(np.float32)
         self.y = y.astype(np.float32)
 
@@ -759,14 +641,7 @@ class AblationHeterogeneousDataset(Dataset):
 
 
 class FederatedClient:
-    """联邦客户端封装类。
-
-    每个客户端持有一份本地模型和数据加载器，负责：
-    1. 本地训练；
-    2. 本地验证；
-    3. 输出局部权重给联邦服务端聚合；
-    4. 在统一全局模型下计算测试指标。
-    """
+    """联邦客户端封装类。"""
 
     def __init__(
         self,
@@ -777,28 +652,17 @@ class FederatedClient:
         criterion,
         lr: float = 1e-3,
     ):
-        """初始化联邦客户端。
-
-        参数:
-            client_id: 客户端编号。
-            model: 当前客户端使用的模型实例。
-            train_loader: 本地训练集迭代器。
-            test_loader: 本地测试集迭代器。
-            criterion: 损失函数。
-            lr: 本地优化学习率。
-        """
+        """初始化联邦客户端。"""
         self.client_id = client_id
         self.model = model.to(DEVICE).float()
         self.train_loader = train_loader
         self.test_loader = test_loader
         self.criterion = criterion
-        # Adam 在这类小样本非线性回归上通常更稳定。
         self.optimizer = optim.Adam(
             self.model.parameters(),
             lr=lr,
             weight_decay=1e-4,
         )
-        # 每 3 个 epoch 衰减一次学习率，用于平衡前期收敛速度和后期稳定性。
         self.scheduler = optim.lr_scheduler.StepLR(
             self.optimizer,
             step_size=3,
@@ -808,11 +672,7 @@ class FederatedClient:
         self.val_losses = []
 
     def train_epoch(self):
-        """执行一个本地训练轮次。
-
-        返回:
-            当前 epoch 在本地训练集上的平均损失。
-        """
+        """执行单个本地训练 epoch。"""
         self.model.train()
         total_loss = 0.0
         for x, y in self.train_loader:
@@ -822,7 +682,6 @@ class FederatedClient:
             pred, _ = unpack_model_output(self.model(x))
             loss = self.criterion(pred.squeeze(), y)
             loss.backward()
-            # 梯度裁剪用于防止循环网络部分在训练初期出现梯度爆炸。
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
             total_loss += loss.item() * x.shape[0]
@@ -832,11 +691,7 @@ class FederatedClient:
 
     @torch.no_grad()
     def validate(self):
-        """在本地测试集上执行验证。
-
-        返回:
-            平均验证损失。
-        """
+        """在本地测试集上计算验证损失。"""
         self.model.eval()
         total_loss = 0.0
         for x, y in self.test_loader:
@@ -856,17 +711,7 @@ class FederatedClient:
         verbose: bool = False,
         prefix: str = "Local",
     ):
-        """执行客户端本地训练。
-
-        参数:
-            epochs: 本地训练 epoch 数。
-            global_model: 若不为空，训练前先同步全局模型权重。
-            verbose: 是否打印每个 epoch 的详细日志。
-            prefix: 日志前缀，用于区分联邦训练与独立训练。
-
-        返回:
-            `(最终训练损失, 本地模型权重副本)`。
-        """
+        """执行客户端本地训练并返回权重副本。"""
         if global_model is not None:
             self.model.load_state_dict(global_model.state_dict())
         for epoch in range(epochs):
@@ -881,11 +726,7 @@ class FederatedClient:
 
     @torch.no_grad()
     def test_predictions(self):
-        """获取测试集预测结果与注意力统计。
-
-        返回:
-            包含 `mse`、`mae`、`preds`、`truths`、`att_weights` 的字典。
-        """
+        """获取测试集预测结果及注意力统计。"""
         self.model.eval()
         preds, truths, att_weights = [], [], []
         for x, y in self.test_loader:
@@ -905,7 +746,6 @@ class FederatedClient:
         att_mean = None
         if att_weights:
             att_weights = np.concatenate(att_weights, axis=0)
-            # 这里输出所有样本上的平均注意力矩阵，用于辅助解释分支融合关系。
             att_mean = np.mean(att_weights, axis=0)
         return {
             "mse": mse,
@@ -936,15 +776,10 @@ class FederatedClient:
 
 
 class IndependentClient(FederatedClient):
-    """独立训练客户端。
-
-    该类复用联邦客户端大部分逻辑，但不进行全局模型同步，
-    主要用于构建非联邦基线。
-    """
+    """独立训练客户端。"""
 
     def __init__(self, client_id, model, train_loader, test_loader, criterion):
         """初始化独立训练客户端。"""
-        # 独立训练基线使用更大学习率，以在较少 epoch 下快速收敛。
         super().__init__(
             client_id,
             model,
@@ -955,7 +790,7 @@ class IndependentClient(FederatedClient):
         )
 
     def train_local(self, epochs: int = 2, verbose: bool = False):
-        """执行独立训练，不接收全局模型。"""
+        """执行独立训练。"""
         return super().train_local(
             epochs=epochs,
             global_model=None,
@@ -1015,19 +850,7 @@ def plot_overview_figure(
     output_dir: Path,
     file_name: str,
 ) -> pd.DataFrame:
-    """绘制总览实验图。
-
-    参数:
-        fed_metrics: 联邦模型在各客户端上的测试结果。
-        weak_metrics: 独立训练基线在各客户端上的测试结果。
-        server: 联邦服务端对象，用于读取全局轮次损失。
-        fed_clients: 联邦客户端列表，用于读取各自验证损失。
-        output_dir: 图像输出目录。
-        file_name: 输出文件名。
-
-    返回:
-        总览图对应的指标表。
-    """
+    """绘制总览实验图并返回指标表。"""
     client_labels = [f"Client {i}" for i in range(len(fed_metrics))]
     fed_mse = [m["mse"] for m in fed_metrics]
     fed_rmse = [np.sqrt(m["mse"]) for m in fed_metrics]
@@ -1040,7 +863,7 @@ def plot_overview_figure(
     df_metrics = pd.DataFrame(
         {
             "Client": client_labels * 2,
-            "Method": ["CCN-FedAvg"] * len(client_labels)
+            "Method": ["GCN-FedAvg"] * len(client_labels)
             + ["Independent"] * len(client_labels),
             "MSE": fed_mse + weak_mse,
             "RMSE": fed_rmse + weak_rmse,
@@ -1054,13 +877,11 @@ def plot_overview_figure(
         value_name="Value",
     )
 
-    # 记录全局损失曲线，用于观察联邦训练整体收敛趋势。
     round_axis = np.arange(1, len(server.round_losses) + 1)
     df_global = pd.DataFrame(
         {"Round": round_axis, "AvgTrainLoss": server.round_losses}
     )
 
-    # 记录客户端验证损失，用于观察异构客户端上的收敛差异。
     df_client_val = pd.concat(
         [
             pd.DataFrame(
@@ -1080,7 +901,6 @@ def plot_overview_figure(
     fed_mae_std, fed_mae_gap, fed_mae_cv = stability_stats(fed_mae)
     weak_mae_std, weak_mae_gap, weak_mae_cv = stability_stats(weak_mae)
 
-    # 稳定性统计用于刻画不同客户端之间误差离散程度。
     df_stability = pd.DataFrame(
         {
             "Statistic": [
@@ -1106,7 +926,7 @@ def plot_overview_figure(
                 weak_mae_gap,
                 weak_mae_cv,
             ],
-            "Method": ["CCN-FedAvg"] * 6 + ["Independent"] * 6,
+            "Method": ["GCN-FedAvg"] * 6 + ["Independent"] * 6,
         }
     )
 
@@ -1198,14 +1018,7 @@ def plot_ablation_figure(
     output_dir: Path,
     file_name: str,
 ):
-    """绘制消融实验图。
-
-    图中包含：
-    1. 测试集 RMSE 收敛曲线；
-    2. 客户端级稳定性分布；
-    3. 相对完整模型的性能变化；
-    4. 客户端与模型二维热力图。
-    """
+    """绘制消融实验图。"""
     heat = df_stab.pivot_table(
         index="Client",
         columns="Model",
@@ -1223,7 +1036,6 @@ def plot_ablation_figure(
         y = sub["TestRMSE_mean"].to_numpy(dtype=float)
         s = sub["TestRMSE_std"].to_numpy(dtype=float)
         ax1.plot(x, y, marker="o", linewidth=2, label=name)
-        # 使用均值 ± 标准差阴影展示不同客户端的离散程度。
         ax1.fill_between(x, y - s, y + s, alpha=0.15)
 
     ax1.set_xlabel("Communication Round")
@@ -1302,26 +1114,7 @@ def run_fedavg_ablation(
     figure_name: str,
     metrics_file_name: str,
 ) -> Dict[str, Dict[str, float]]:
-    """执行带加权聚合的联邦消融实验。
-
-    参数:
-        workflow_name: 当前实验名称。
-        seed: 随机种子。
-        num_clients: 客户端数量。
-        k: 输入特征数。
-        t: 时间窗口长度。
-        samples_per_client: 各客户端样本数列表。
-        num_rounds: 联邦轮次。
-        local_epochs: 每轮联邦中的本地训练 epoch 数。
-        full_name: 完整模型名称，用于计算相对性能变化。
-        variants: 模型变体构造器字典。
-        output_dir: 输出目录。
-        figure_name: 图像文件名。
-        metrics_file_name: 指标文件名。
-
-    返回:
-        各模型变体的汇总指标字典。
-    """
+    """执行样本量加权 FedAvg 消融实验。"""
     set_global_seed(seed)
     criterion = nn.MSELoss()
     split_gen = torch.Generator().manual_seed(seed)
@@ -1355,7 +1148,7 @@ def run_fedavg_ablation(
         return train_loaders, test_loaders
 
     def eval_global_on_clients(global_model, clients):
-        """将同一全局模型下发至所有客户端并统一评估。"""
+        """在所有客户端上评估同一全局模型。"""
         per_client = []
         for client in clients:
             client.model.load_state_dict(global_model.state_dict())
@@ -1368,7 +1161,6 @@ def run_fedavg_ablation(
 
     print(f"\n===== {workflow_name} =====")
     for name, ctor in variants.items():
-        # 为保证模型间对比公平，每个变体都重新生成相同规则的数据划分。
         train_loaders, test_loaders = build_loaders()
         clients = [
             FederatedClient(
@@ -1507,10 +1299,9 @@ def run_fedavg_ablation(
 
 
 def run_overview_experiment(output_dir: Path) -> None:
-    """运行 CCN 总览实验。"""
-    # 固定实验超参数，确保与既有结果口径一致。
-    seed = 15
-    num_rounds = 6
+    """运行 GCN 总览实验。"""
+    seed = 42
+    num_rounds = 5
     local_epochs = 5
     num_clients = 3
     k, t = 5, 24
@@ -1551,7 +1342,7 @@ def run_overview_experiment(output_dir: Path) -> None:
         fed_clients.append(
             FederatedClient(
                 client_id,
-                CCNOverviewModel(k=k, t=t),
+                GCNOverviewModel(k=k, t=t),
                 train_loader,
                 test_loader,
                 criterion,
@@ -1568,10 +1359,10 @@ def run_overview_experiment(output_dir: Path) -> None:
             )
         )
 
-    server = FedAvgServer(CCNOverviewModel(k=k, t=t), num_clients)
+    server = FedAvgServer(GCNOverviewModel(k=k, t=t), num_clients)
     server.set_client_data_sizes(samples_per_client)
 
-    print("\n===== CCN Overview =====")
+    print("\n===== GCN Overview =====")
     for rnd in range(num_rounds):
         print(f"[overview] round {rnd + 1}/{num_rounds}")
         client_weights, client_losses = [], []
@@ -1599,7 +1390,7 @@ def run_overview_experiment(output_dir: Path) -> None:
     for idx in range(num_clients):
         print(f"Client {idx}:")
         print(
-            f"  CCN-FedAvg   - MSE: {fed_metrics[idx]['mse']:.4f}, "
+            f"  GCN-FedAvg   - MSE: {fed_metrics[idx]['mse']:.4f}, "
             f"MAE: {fed_metrics[idx]['mae']:.4f}"
         )
         print(
@@ -1628,26 +1419,26 @@ def run_overview_experiment(output_dir: Path) -> None:
 
 
 def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
-    """运行 CCN 消融实验。"""
+    """运行 GCN 消融实验。"""
     return run_fedavg_ablation(
-        workflow_name="CCN FedAvg Ablation",
-        seed=15,
+        workflow_name="GCN FedAvg Ablation",
+        seed=42,
         num_clients=3,
         k=5,
         t=24,
         samples_per_client=[50, 80, 120],
         num_rounds=5,
         local_epochs=5,
-        full_name="CCN-LSTM-Attention",
+        full_name="GCN-LSTM-Attention",
         variants=OrderedDict(
             [
                 (
-                    "CCN-LSTM-Attention",
-                    lambda: CCNAblationFull(k=5, t=24, hidden_dim=128, num_heads=4),
+                    "GCN-LSTM-Attention",
+                    lambda: GCNAblationFull(k=5, t=24, hidden_dim=128, num_heads=4),
                 ),
                 (
-                    "CCN-LSTM",
-                    lambda: CCNAblationCNNLSTM(k=5, t=24, hidden_dim=128),
+                    "GCN-LSTM",
+                    lambda: GCNAblationLSTM(k=5, t=24, hidden_dim=128),
                 ),
                 (
                     "LSTM-Attention",
@@ -1659,8 +1450,8 @@ def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
                     ),
                 ),
                 (
-                    "CCN-Attention",
-                    lambda: CCNAblationCNNAttention(
+                    "GCN-Attention",
+                    lambda: GCNAblationAttention(
                         k=5,
                         t=24,
                         hidden_dim=128,
@@ -1676,12 +1467,7 @@ def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
 
 
 def run_project(workflow: str, output_dir: Path) -> None:
-    """按工作流执行整个 CCN 工程。
-
-    参数:
-        workflow: 可选 `all`、`overview`、`ablation`。
-        output_dir: 结果输出目录。
-    """
+    """按工作流执行整个 GCN 工程。"""
     ensure_output_dir(output_dir)
     log_path = output_dir / build_output_file_name("run", "log", "txt")
     with log_path.open("w", encoding="utf-8") as log_handle, redirect_stdout(
@@ -1700,7 +1486,7 @@ def run_project(workflow: str, output_dir: Path) -> None:
 
 def parse_args(argv: Optional[Sequence[str]] = None):
     """解析命令行参数。"""
-    parser = argparse.ArgumentParser(description="Standalone CCN simulation project.")
+    parser = argparse.ArgumentParser(description="Standalone GCN simulation project.")
     parser.add_argument(
         "--workflow",
         choices=["all", "overview", "ablation"],

@@ -17,6 +17,12 @@
 -> 节点日内平均曲线拟合
 -> 拟合阶数与日期类型方法比较
 -> 函数曲线层面的聚类可视化与解释
+
+联邦仿真实验（合成数据，独立于真实数据链路）:
+-> 合成交通序列生成 (sin/cos/周期项/噪声)
+-> CNN + BiLSTM + Attention / GCN + BiLSTM + Attention 模型
+-> 独立训练 / 样本量加权 FedAvg / 消融实验
+-> 指标评估 (MSE/RMSE/MAE) + 可视化输出 (PNG/CSV/TXT)
 ```
 
 ## 1. 原始输入
@@ -339,6 +345,39 @@
 - 检查分片顺序
 - 抽样查看样例值
 - 研究路网方向性
+
+## 11. 仿真实验链路
+
+仿真实验使用**合成数据**，不依赖真实交通数据，可独立运行。
+
+### 11.1 数据生成
+
+两个脚本内部通过 `generate_synthetic_traffic()` 生成合成异构交通序列（sin/cos/周期项/噪声）。
+
+### 11.2 总览实验 (overview)
+
+```powershell
+python cnn_fed_base.py --workflow overview
+python gcn_fed_base.py --workflow overview
+```
+
+对比 CCN-FedAvg / GCN-FedAvg 与 Independent Training 的性能。
+
+### 11.3 消融实验 (ablation)
+
+```powershell
+python cnn_fed_base.py --workflow ablation
+python gcn_fed_base.py --workflow ablation
+```
+
+4 模型变体消融：完整模型 vs 移除 Attention vs 移除 LSTM vs 移除空间编码器。
+
+### 11.4 输出
+
+- `results/simulation_experiments/cnn/`：CCN/C 仿真结果
+- `results/simulation_experiments/gcn/`：GCN 仿真结果
+
+详细文档：`docs/simulation_experiments.md`
 
 其中与节点流量主流程直接相关的推荐检查入口为：
 
