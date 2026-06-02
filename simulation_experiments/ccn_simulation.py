@@ -964,45 +964,26 @@ class IndependentClient(FederatedClient):
         )
 
 
-class WeightedFederatedServer:
-    """带加权聚合策略的联邦服务端。
+class FedAvgServer:
+    """标准样本量加权 FedAvg 服务端。
 
-    聚合逻辑同时考虑两类因素：
-    1. 数据量权重：样本量更大的客户端对全局模型影响更大；
-    2. 损失权重：局部损失更低的客户端被认为更新质量更高。
-
-    最终再引入 0.9 / 0.1 的动量式混合，避免全局参数在单轮内剧烈震荡。
+    聚合公式：
+        global_model = sum(n_i / total_n * local_model_i)
+    其中 n_i 为客户端 i 的训练样本量，total_n 为所有客户端训练样本量总和。
     """
 
     def __init__(self, model, num_clients: int):
-        """初始化联邦服务端。"""
         self.global_model = model.to(DEVICE).float()
         self.num_clients = num_clients
         self.round_losses = []
         self.client_data_sizes = None
 
     def set_client_data_sizes(self, sizes):
-        """设置各客户端样本量。"""
         self.client_data_sizes = sizes
 
     def aggregate(self, client_weights, client_losses):
-        """执行加权联邦聚合。
-
-        参数:
-            client_weights: 每个客户端上传的模型参数。
-            client_losses: 每个客户端最后一个本地训练平均损失。
-
-        返回:
-            聚合后的全局模型参数字典。
-        """
-        data_weights = np.array(self.client_data_sizes) / float(sum(self.client_data_sizes))
-        # 使用损失的指数衰减构造质量权重，使低损失客户端获得更高贡献。
-        loss_weights = np.exp(-np.array(client_losses) * 2.0)
-        loss_weights = loss_weights / (loss_weights.sum() + 1e-12)
-
-        # 数据量与训练质量各占一半，平衡“样本规模”与“更新可靠性”。
-        weights = 0.5 * data_weights + 0.5 * loss_weights
-        weights = weights / (weights.sum() + 1e-12)
+        total_n = float(sum(self.client_data_sizes))
+        weights = np.array(self.client_data_sizes) / total_n
 
         global_dict = self.global_model.state_dict()
         new_dict = {
@@ -1022,14 +1003,9 @@ class WeightedFederatedServer:
                     dtype=torch.float32,
                 )
 
-        for key in new_dict.keys():
-            # 动量混合可降低全局模型在异构客户端之间来回振荡的风险。
-            new_dict[key] = 0.9 * global_dict[key] + 0.1 * new_dict[key]
-
         self.global_model.load_state_dict(new_dict)
         self.round_losses.append(float(np.mean(client_losses)))
         return self.global_model.state_dict()
-
 
 def plot_overview_figure(
     fed_metrics,
@@ -1064,7 +1040,7 @@ def plot_overview_figure(
     df_metrics = pd.DataFrame(
         {
             "Client": client_labels * 2,
-            "Method": ["Federated"] * len(client_labels)
+            "Method": ["CCN-FedAvg"] * len(client_labels)
             + ["Independent"] * len(client_labels),
             "MSE": fed_mse + weak_mse,
             "RMSE": fed_rmse + weak_rmse,
@@ -1130,7 +1106,7 @@ def plot_overview_figure(
                 weak_mae_gap,
                 weak_mae_cv,
             ],
-            "Method": ["Federated"] * 6 + ["Independent"] * 6,
+            "Method": ["CCN-FedAvg"] * 6 + ["Independent"] * 6,
         }
     )
 
@@ -1178,8 +1154,8 @@ def plot_overview_figure(
         marker="o",
         ax=axes[1, 0],
     )
-    axes[1, 0].set_title("(d) Federated Convergence (Global)")
-    axes[1, 0].set_xlabel("Federated Round")
+    axes[1, 0].set_title("(d) FedAvg Convergence (Global)")
+    axes[1, 0].set_xlabel("Communication Round")
     axes[1, 0].set_ylabel("Avg Train Loss")
 
     sns.lineplot(
@@ -1190,8 +1166,8 @@ def plot_overview_figure(
         marker="o",
         ax=axes[1, 1],
     )
-    axes[1, 1].set_title("(e) Client Validation Convergence (Federated)")
-    axes[1, 1].set_xlabel("Federated Round")
+    axes[1, 1].set_title("(e) Client Validation Convergence (FedAvg)")
+    axes[1, 1].set_xlabel("Communication Round")
     axes[1, 1].set_ylabel("Validation Loss")
     axes[1, 1].legend(title="Client")
 
@@ -1250,7 +1226,7 @@ def plot_ablation_figure(
         # 使用均值 ± 标准差阴影展示不同客户端的离散程度。
         ax1.fill_between(x, y - s, y + s, alpha=0.15)
 
-    ax1.set_xlabel("Federated Round")
+    ax1.set_xlabel("Communication Round")
     ax1.set_ylabel("Test RMSE")
     ax1.set_title("(a) Convergence of Test RMSE (mean ± std)")
     ax1.set_xticks(np.arange(1, rounds + 1, dtype=int))
@@ -1310,7 +1286,7 @@ def plot_ablation_figure(
     save_figure(fig, output_dir, file_name)
 
 
-def run_weighted_ablation(
+def run_fedavg_ablation(
     *,
     workflow_name: str,
     seed: int,
@@ -1405,13 +1381,13 @@ def run_weighted_ablation(
             )
             for cid in range(num_clients)
         ]
-        server = WeightedFederatedServer(ctor(), num_clients)
+        server = FedAvgServer(ctor(), num_clients)
         server.set_client_data_sizes(samples_per_client)
 
         hist_train_client, hist_train_mean, hist_train_std = [], [], []
         hist_test_client, hist_test_mean, hist_test_std = [], [], []
 
-        print(f"\nStart Federated Training: {name}")
+        print(f"\nStart FedAvg Training: {name}")
         for rnd in range(num_rounds):
             print(f"  Round {rnd + 1}/{num_rounds}")
             client_weights, client_losses = [], []
@@ -1592,7 +1568,7 @@ def run_overview_experiment(output_dir: Path) -> None:
             )
         )
 
-    server = WeightedFederatedServer(CCNOverviewModel(k=k, t=t), num_clients)
+    server = FedAvgServer(CCNOverviewModel(k=k, t=t), num_clients)
     server.set_client_data_sizes(samples_per_client)
 
     print("\n===== CCN Overview =====")
@@ -1623,7 +1599,7 @@ def run_overview_experiment(output_dir: Path) -> None:
     for idx in range(num_clients):
         print(f"Client {idx}:")
         print(
-            f"  Federated   - MSE: {fed_metrics[idx]['mse']:.4f}, "
+            f"  CCN-FedAvg   - MSE: {fed_metrics[idx]['mse']:.4f}, "
             f"MAE: {fed_metrics[idx]['mae']:.4f}"
         )
         print(
@@ -1653,8 +1629,8 @@ def run_overview_experiment(output_dir: Path) -> None:
 
 def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
     """运行 CCN 消融实验。"""
-    return run_weighted_ablation(
-        workflow_name="CCN Heterogeneous Ablation",
+    return run_fedavg_ablation(
+        workflow_name="CCN FedAvg Ablation",
         seed=15,
         num_clients=3,
         k=5,

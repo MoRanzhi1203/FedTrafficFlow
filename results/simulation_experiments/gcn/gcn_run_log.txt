@@ -8,25 +8,25 @@
   Client 2 | Local avg MSE: 0.0057
   Round average federated loss: 0.0149
 [overview] round 2/5
-  Client 0 | Local avg MSE: 0.0132
-  Client 1 | Local avg MSE: 0.0051
-  Client 2 | Local avg MSE: 0.0028
-  Round average federated loss: 0.0070
-[overview] round 3/5
-  Client 0 | Local avg MSE: 0.0070
-  Client 1 | Local avg MSE: 0.0028
-  Client 2 | Local avg MSE: 0.0033
-  Round average federated loss: 0.0043
-[overview] round 4/5
-  Client 0 | Local avg MSE: 0.0036
-  Client 1 | Local avg MSE: 0.0018
-  Client 2 | Local avg MSE: 0.0013
-  Round average federated loss: 0.0022
-[overview] round 5/5
-  Client 0 | Local avg MSE: 0.0053
+  Client 0 | Local avg MSE: 0.0160
   Client 1 | Local avg MSE: 0.0013
-  Client 2 | Local avg MSE: 0.0025
-  Round average federated loss: 0.0030
+  Client 2 | Local avg MSE: 0.0009
+  Round average federated loss: 0.0061
+[overview] round 3/5
+  Client 0 | Local avg MSE: 0.0079
+  Client 1 | Local avg MSE: 0.0015
+  Client 2 | Local avg MSE: 0.0009
+  Round average federated loss: 0.0034
+[overview] round 4/5
+  Client 0 | Local avg MSE: 0.0069
+  Client 1 | Local avg MSE: 0.0014
+  Client 2 | Local avg MSE: 0.0002
+  Round average federated loss: 0.0028
+[overview] round 5/5
+  Client 0 | Local avg MSE: 0.0059
+  Client 1 | Local avg MSE: 0.0002
+  Client 2 | Local avg MSE: 0.0009
+  Round average federated loss: 0.0023
 [overview] independent baselines
   Client 0 | Independent avg MSE: 0.2865
   Client 1 | Independent avg MSE: 0.4624
@@ -34,135 +34,135 @@
 
 ===== Performance Comparison =====
 Client 0:
-  Federated   - MSE: 0.0222, MAE: 0.1292
+  GCN-FedAvg   - MSE: 0.0171, MAE: 0.1152
   Independent - MSE: 0.1897, MAE: 0.3825
   Mean attention weight: 0.5
 Client 1:
-  Federated   - MSE: 0.0105, MAE: 0.0854
+  GCN-FedAvg   - MSE: 0.0092, MAE: 0.0839
   Independent - MSE: 0.0609, MAE: 0.1968
   Mean attention weight: 0.5
 Client 2:
-  Federated   - MSE: 0.0233, MAE: 0.1170
+  GCN-FedAvg   - MSE: 0.0158, MAE: 0.1047
   Independent - MSE: 0.0289, MAE: 0.1420
   Mean attention weight: 0.5
 Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_overview_figure.png
 Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_overview_metrics.csv
 
-===== GCN Heterogeneous Ablation =====
+===== GCN FedAvg Ablation =====
 
-Start Federated Training: GCN-LSTM-Attention
+Start FedAvg Training: GCN-LSTM-Attention
   Round 1/5
     Client 0 | Local avg MSE: 0.023618
     Client 1 | Local avg MSE: 0.013859
     Client 2 | Local avg MSE: 0.005536
-    Global Test RMSE mean: 0.326261 (std 0.101451)
+    Global Test RMSE mean: 0.204959 (std 0.086779)
   Round 2/5
-    Client 0 | Local avg MSE: 0.005657
-    Client 1 | Local avg MSE: 0.004900
-    Client 2 | Local avg MSE: 0.009325
-    Global Test RMSE mean: 0.257739 (std 0.024325)
+    Client 0 | Local avg MSE: 0.010699
+    Client 1 | Local avg MSE: 0.001699
+    Client 2 | Local avg MSE: 0.001344
+    Global Test RMSE mean: 0.208915 (std 0.126928)
   Round 3/5
-    Client 0 | Local avg MSE: 0.010173
-    Client 1 | Local avg MSE: 0.007502
-    Client 2 | Local avg MSE: 0.006751
-    Global Test RMSE mean: 0.241565 (std 0.039669)
+    Client 0 | Local avg MSE: 0.005626
+    Client 1 | Local avg MSE: 0.001303
+    Client 2 | Local avg MSE: 0.000277
+    Global Test RMSE mean: 0.207327 (std 0.087597)
   Round 4/5
-    Client 0 | Local avg MSE: 0.006538
-    Client 1 | Local avg MSE: 0.001901
-    Client 2 | Local avg MSE: 0.002364
-    Global Test RMSE mean: 0.234864 (std 0.048032)
+    Client 0 | Local avg MSE: 0.004933
+    Client 1 | Local avg MSE: 0.001640
+    Client 2 | Local avg MSE: 0.000226
+    Global Test RMSE mean: 0.205807 (std 0.105475)
   Round 5/5
-    Client 0 | Local avg MSE: 0.001536
-    Client 1 | Local avg MSE: 0.001636
-    Client 2 | Local avg MSE: 0.003415
-    Global Test RMSE mean: 0.230832 (std 0.054526)
+    Client 0 | Local avg MSE: 0.007424
+    Client 1 | Local avg MSE: 0.000549
+    Client 2 | Local avg MSE: 0.000420
+    Global Test RMSE mean: 0.206056 (std 0.098588)
 
-Start Federated Training: GCN-LSTM
+Start FedAvg Training: GCN-LSTM
   Round 1/5
     Client 0 | Local avg MSE: 0.008398
     Client 1 | Local avg MSE: 0.006087
     Client 2 | Local avg MSE: 0.003522
-    Global Test RMSE mean: 0.574738 (std 0.122344)
+    Global Test RMSE mean: 0.197119 (std 0.095967)
   Round 2/5
-    Client 0 | Local avg MSE: 0.006916
-    Client 1 | Local avg MSE: 0.010220
-    Client 2 | Local avg MSE: 0.002786
-    Global Test RMSE mean: 0.359639 (std 0.119868)
+    Client 0 | Local avg MSE: 0.006629
+    Client 1 | Local avg MSE: 0.006438
+    Client 2 | Local avg MSE: 0.001192
+    Global Test RMSE mean: 0.206375 (std 0.038626)
   Round 3/5
-    Client 0 | Local avg MSE: 0.004545
-    Client 1 | Local avg MSE: 0.001547
-    Client 2 | Local avg MSE: 0.001088
-    Global Test RMSE mean: 0.275415 (std 0.096570)
+    Client 0 | Local avg MSE: 0.004954
+    Client 1 | Local avg MSE: 0.001148
+    Client 2 | Local avg MSE: 0.000643
+    Global Test RMSE mean: 0.199304 (std 0.059671)
   Round 4/5
-    Client 0 | Local avg MSE: 0.007595
-    Client 1 | Local avg MSE: 0.002172
-    Client 2 | Local avg MSE: 0.002645
-    Global Test RMSE mean: 0.244555 (std 0.065803)
+    Client 0 | Local avg MSE: 0.005601
+    Client 1 | Local avg MSE: 0.000674
+    Client 2 | Local avg MSE: 0.000174
+    Global Test RMSE mean: 0.205074 (std 0.034040)
   Round 5/5
-    Client 0 | Local avg MSE: 0.002270
-    Client 1 | Local avg MSE: 0.001300
-    Client 2 | Local avg MSE: 0.000802
-    Global Test RMSE mean: 0.229952 (std 0.040252)
+    Client 0 | Local avg MSE: 0.003576
+    Client 1 | Local avg MSE: 0.000537
+    Client 2 | Local avg MSE: 0.000334
+    Global Test RMSE mean: 0.201994 (std 0.046352)
 
-Start Federated Training: LSTM-Attention
+Start FedAvg Training: LSTM-Attention
   Round 1/5
     Client 0 | Local avg MSE: 0.026237
     Client 1 | Local avg MSE: 0.016172
     Client 2 | Local avg MSE: 0.012947
-    Global Test RMSE mean: 0.213908 (std 0.099031)
+    Global Test RMSE mean: 0.202990 (std 0.081303)
   Round 2/5
-    Client 0 | Local avg MSE: 0.014429
-    Client 1 | Local avg MSE: 0.013998
-    Client 2 | Local avg MSE: 0.014726
-    Global Test RMSE mean: 0.208644 (std 0.090811)
+    Client 0 | Local avg MSE: 0.016874
+    Client 1 | Local avg MSE: 0.012215
+    Client 2 | Local avg MSE: 0.011643
+    Global Test RMSE mean: 0.198779 (std 0.091749)
   Round 3/5
-    Client 0 | Local avg MSE: 0.016095
-    Client 1 | Local avg MSE: 0.016703
-    Client 2 | Local avg MSE: 0.012702
-    Global Test RMSE mean: 0.205242 (std 0.091777)
+    Client 0 | Local avg MSE: 0.019731
+    Client 1 | Local avg MSE: 0.011968
+    Client 2 | Local avg MSE: 0.011683
+    Global Test RMSE mean: 0.199456 (std 0.089887)
   Round 4/5
-    Client 0 | Local avg MSE: 0.015826
-    Client 1 | Local avg MSE: 0.013068
-    Client 2 | Local avg MSE: 0.010835
-    Global Test RMSE mean: 0.203098 (std 0.093579)
+    Client 0 | Local avg MSE: 0.018657
+    Client 1 | Local avg MSE: 0.010968
+    Client 2 | Local avg MSE: 0.011201
+    Global Test RMSE mean: 0.197456 (std 0.120409)
   Round 5/5
-    Client 0 | Local avg MSE: 0.013934
-    Client 1 | Local avg MSE: 0.012434
-    Client 2 | Local avg MSE: 0.011483
-    Global Test RMSE mean: 0.202191 (std 0.091296)
+    Client 0 | Local avg MSE: 0.016092
+    Client 1 | Local avg MSE: 0.011059
+    Client 2 | Local avg MSE: 0.010801
+    Global Test RMSE mean: 0.202423 (std 0.081566)
 
-Start Federated Training: GCN-Attention
+Start FedAvg Training: GCN-Attention
   Round 1/5
     Client 0 | Local avg MSE: 0.011363
     Client 1 | Local avg MSE: 0.004973
     Client 2 | Local avg MSE: 0.002473
-    Global Test RMSE mean: 0.378858 (std 0.160880)
+    Global Test RMSE mean: 0.223018 (std 0.078386)
   Round 2/5
-    Client 0 | Local avg MSE: 0.007559
-    Client 1 | Local avg MSE: 0.008342
-    Client 2 | Local avg MSE: 0.003908
-    Global Test RMSE mean: 0.318213 (std 0.100903)
+    Client 0 | Local avg MSE: 0.005608
+    Client 1 | Local avg MSE: 0.002386
+    Client 2 | Local avg MSE: 0.001692
+    Global Test RMSE mean: 0.220876 (std 0.090894)
   Round 3/5
-    Client 0 | Local avg MSE: 0.002096
-    Client 1 | Local avg MSE: 0.001247
-    Client 2 | Local avg MSE: 0.001702
-    Global Test RMSE mean: 0.293846 (std 0.066273)
+    Client 0 | Local avg MSE: 0.006373
+    Client 1 | Local avg MSE: 0.000827
+    Client 2 | Local avg MSE: 0.000608
+    Global Test RMSE mean: 0.224910 (std 0.064730)
   Round 4/5
-    Client 0 | Local avg MSE: 0.002434
-    Client 1 | Local avg MSE: 0.002798
-    Client 2 | Local avg MSE: 0.003301
-    Global Test RMSE mean: 0.276886 (std 0.038862)
+    Client 0 | Local avg MSE: 0.004867
+    Client 1 | Local avg MSE: 0.000637
+    Client 2 | Local avg MSE: 0.000443
+    Global Test RMSE mean: 0.223766 (std 0.067185)
   Round 5/5
-    Client 0 | Local avg MSE: 0.003680
-    Client 1 | Local avg MSE: 0.001905
-    Client 2 | Local avg MSE: 0.000733
-    Global Test RMSE mean: 0.265549 (std 0.019472)
+    Client 0 | Local avg MSE: 0.002318
+    Client 1 | Local avg MSE: 0.000679
+    Client 2 | Local avg MSE: 0.000160
+    Global Test RMSE mean: 0.224027 (std 0.065532)
 Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_ablation_figure.png
 
 === Final Test Metrics Summary (mean ± std across clients) ===
              Model  rmse_mean  rmse_std  mae_mean  mae_std  mse_mean  mse_std
-     GCN-Attention   0.265549  0.019472  0.240463 0.018553  0.070895 0.010476
-          GCN-LSTM   0.229952  0.040252  0.199475 0.035245  0.054498 0.017496
-GCN-LSTM-Attention   0.230832  0.054526  0.200681 0.061306  0.056257 0.026666
-    LSTM-Attention   0.202191  0.091296  0.169894 0.084209  0.049216 0.042527
+     GCN-Attention   0.224027  0.065532  0.201641 0.073986  0.054482 0.032139
+          GCN-LSTM   0.201994  0.046352  0.176191 0.053215  0.042950 0.020054
+GCN-LSTM-Attention   0.206056  0.098588  0.185987 0.101487  0.052179 0.047483
+    LSTM-Attention   0.202423  0.081566  0.175448 0.074203  0.047628 0.036997
 Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\gcn\gcn_ablation_metrics.csv
