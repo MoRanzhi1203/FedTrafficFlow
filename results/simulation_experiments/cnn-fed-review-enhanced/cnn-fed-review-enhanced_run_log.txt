@@ -1,5 +1,5 @@
 [setup] Using device: cpu
-[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_run_log.txt
+[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn-fed-review-enhanced\cnn-fed-review-enhanced_run_log.txt
 
 ===== CCN Overview =====
 [overview] round 1/6
@@ -50,5 +50,5 @@ Client 2:
   CCN-FedAvg   - MSE: 0.0219, MAE: 0.1105
   Independent - MSE: 0.0179, MAE: 0.1123
   Mean attention weight: 0.5
-Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_overview_figure.png
-Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\ccn-base\ccn-base_overview_metrics.csv
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn-fed-review-enhanced\cnn-fed-review-enhanced_overview_figure.png
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn-fed-review-enhanced\cnn-fed-review-enhanced_overview_metrics.csv

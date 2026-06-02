@@ -1,0 +1,23 @@
+[setup] Using device: cpu
+[setup] Writing experiment log: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn-fed-review-enhanced\cnn_enhanced_run_log.txt
+[setup] PROJECT_NAME: cnn-fed-review-enhanced
+
+============================================================
+Workflow: client_scale -- Client Count Experiment
+============================================================
+
+--- Num Clients = 3 ---
+
+--- Num Clients = 5 ---
+
+--- Num Clients = 8 ---
+
+=== Client Scale Results ===
+ Client_Number    MSE_mean  RMSE_mean  RMSE_std  MAE_mean  Final_Global_Loss
+             3 4961.165527  69.740032  9.873881 69.124805        3565.156025
+             5 4380.889136  64.645169 14.208845 63.913132        2982.501710
+             8 4454.459534  65.424841 13.192788 64.751474        3045.022204
+Saved table: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn-fed-review-enhanced\cnn_enhanced_client_scale_metrics.csv
+Saved figure: E:\Jupter_Notebook\FedTrafficFlow\results\simulation_experiments\cnn-fed-review-enhanced\cnn_enhanced_client_scale_figure.png
+
+=== All client_scale workflows completed ===

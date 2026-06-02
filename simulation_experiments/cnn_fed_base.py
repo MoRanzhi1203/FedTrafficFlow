@@ -1302,7 +1302,7 @@ def run_fedavg_ablation(
     figure_name: str,
     metrics_file_name: str,
 ) -> Dict[str, Dict[str, float]]:
-    """执行带加权聚合的联邦消融实验。
+    """执行样本量加权 FedAvg 消融实验。
 
     参数:
         workflow_name: 当前实验名称。
