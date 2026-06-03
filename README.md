@@ -5,7 +5,7 @@
 This repository focuses on two main areas:
 
 1. **Real Traffic Data Pipeline** — preprocessing, speed analysis, Greenshields-based density/flow estimation, node-level flow construction, intra-day curve fitting, and curve-cluster visualization.
-2. **Federated Simulation Experiments** — CNN + BiLSTM + Attention / GCN + BiLSTM + Attention based FedAvg traffic flow prediction using synthetic heterogeneous client data.
+2. **Federated Simulation Experiments** — base and enhanced CNN/GCN federated traffic flow prediction experiments on synthetic heterogeneous client data, with unified academic-style visualization outputs.
 
 ## Directory Layout
 
@@ -17,6 +17,9 @@ FedTrafficFlow/
  simulation_experiments/               # 联邦仿真实验脚本
    cnn_fed_base.py                     #   CNN + BiLSTM + Attention 基础仿真
    gcn_fed_base.py                     #   GCN + BiLSTM + Attention 基础仿真 (图结构)
+  cnn_fed_enhanced_experiments.py     #   CNN 增强仿真
+  gcn_fed_enhanced_experiments.py     #   GCN 增强仿真
+  fed_robustness_experiments.py       #   鲁棒性仿真
  data/
    raw/                               # 原始数据
    processed/                         # 预处理后的标准化数据与速度分块
@@ -25,8 +28,11 @@ FedTrafficFlow/
  preprocessing_scripts/                # 原始路网与速度数据预处理
  results/
    simulation_experiments/
-     cnn/                             # CCN/C 仿真结果 (PNG/CSV/TXT)
-     gcn/                             # GCN 仿真结果 (PNG/CSV/TXT)
+    cnn_fed_base/                    # 基础 CNN 仿真结果
+    gcn_fed_base/                    # 基础 GCN 仿真结果
+    cnn_fed_enhanced/                # 增强 CNN 仿真结果
+    gcn_fed_enhanced/                # 增强 GCN 仿真结果
+    fed_robustness/                  # 鲁棒性仿真结果
  test/                                # Jupyter Notebook 实验文件
  README.md
  requirements.txt
@@ -57,13 +63,21 @@ python analysis_scripts/visualize_node_flow_daily_curve_fit.py
 ### Federated Simulation Experiments
 
 ```powershell
-conda activate analysis
-cd simulation_experiments
-python cnn_fed_base.py --workflow all
-python gcn_fed_base.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_base.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_base.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_enhanced_experiments.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_enhanced_experiments.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/fed_robustness_experiments.py --workflow all
 ```
 
-Workflow options: `all` (default, overview + ablation), `overview`, `ablation`.
+Common workflow examples:
+
+```powershell
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_base.py --workflow data_viz
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_base.py --workflow convergence
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_enhanced_experiments.py --workflow client_metrics
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_enhanced_experiments.py --workflow fixed_vs_dynamic
+```
 
 **Aggregation method**: Standard sample-weighted FedAvg.
 
@@ -72,6 +86,12 @@ global_model = sum(n_i / total_n * local_model_i)
 ```
 
 **Model architecture**: CNN/GCN + BiLSTM + MultiheadAttention + LayerNorm + AdaptiveSwish activation.
+
+Each simulation output directory now includes:
+
+- publication-ready PNG figures saved at `300 dpi`
+- CSV metric summaries
+- `figure_index.csv` for figure cataloging and paper selection
 
 See `docs/simulation_experiments.md` for detailed documentation.
 
@@ -84,8 +104,11 @@ See `docs/simulation_experiments.md` for detailed documentation.
 - `data/analysis/node_intersection_flow_parquet/`
 - `data/analysis/node_flow_curve_fit/`
 - `data/analysis/date_type_curve_method_comparison/`
-- `results/simulation_experiments/cnn/` (CCN/C simulation overview + ablation)
-- `results/simulation_experiments/gcn/` (GCN simulation overview + ablation)
+- `results/simulation_experiments/cnn_fed_base/`
+- `results/simulation_experiments/gcn_fed_base/`
+- `results/simulation_experiments/cnn_fed_enhanced/`
+- `results/simulation_experiments/gcn_fed_enhanced/`
+- `results/simulation_experiments/fed_robustness/`
 
 ## Environment
 

@@ -27,6 +27,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -42,6 +43,78 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+METHOD_PALETTE = {
+    "Independent": "#4C72B0",
+    "FedAvg": "#DD8452",
+    "CNN-FedAvg": "#DD8452",
+    "CNN-Proposed": "#55A868",
+    "Proposed": "#55A868",
+    "Loss-weighted": "#C44E52",
+    "Data-loss weighted": "#8172B3",
+    "Similarity-aware": "#937860",
+}
+CLIENT_PALETTE = sns.color_palette("tab10")
+SPLIT_PALETTE = ["#55A868", "#DD8452", "#C44E52"]
+
+FIGURE_INDEX_ENTRIES = [
+    {
+        "figure_file": "base_dataset_client_timeseries.png",
+        "workflow": "data_viz",
+        "figure_type": "line",
+        "description": "Per-client average traffic flow time series for the base dataset.",
+        "source_csv": "base_dataset_summary.csv",
+        "used_in_paper": "recommended",
+    },
+    {
+        "figure_file": "base_dataset_node_heatmap.png",
+        "workflow": "data_viz",
+        "figure_type": "heatmap",
+        "description": "Node-time traffic flow heatmap for a representative base client.",
+        "source_csv": "base_dataset_summary.csv",
+        "used_in_paper": "recommended",
+    },
+    {
+        "figure_file": "base_dataset_client_boxplot.png",
+        "workflow": "data_viz",
+        "figure_type": "box",
+        "description": "Traffic flow distribution comparison across clients in the base dataset.",
+        "source_csv": "base_dataset_summary.csv",
+        "used_in_paper": "recommended",
+    },
+    {
+        "figure_file": "base_dataset_split_overview.png",
+        "workflow": "data_viz",
+        "figure_type": "bar",
+        "description": "Train, validation, and test split overview for the base dataset.",
+        "source_csv": "base_dataset_summary.csv",
+        "used_in_paper": "yes",
+    },
+    {
+        "figure_file": "base_dataset_client_sample_size.png",
+        "workflow": "data_viz",
+        "figure_type": "bar",
+        "description": "Sample size comparison across clients in the base dataset.",
+        "source_csv": "base_dataset_summary.csv",
+        "used_in_paper": "yes",
+    },
+    {
+        "figure_file": "cnn_base_main_comparison.png",
+        "workflow": "main",
+        "figure_type": "bar",
+        "description": "Client-level MSE, RMSE, and MAE comparison between Independent and FedAvg.",
+        "source_csv": "cnn_base_metrics_summary.csv",
+        "used_in_paper": "recommended",
+    },
+    {
+        "figure_file": "cnn_base_convergence.png",
+        "workflow": "convergence",
+        "figure_type": "line",
+        "description": "Global validation RMSE and local training loss across communication rounds.",
+        "source_csv": "cnn_base_convergence.csv",
+        "used_in_paper": "recommended",
+    },
+]
 
 # ──────────────────────────────────────────────────────────
 # 基础实验共享超参数（与 gcn_fed_base.py 保持一致）
@@ -77,6 +150,29 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+def configure_academic_plot_style() -> None:
+    """Configure a unified seaborn style for paper-ready figures."""
+    sns.set_theme(
+        style="whitegrid",
+        context="paper",
+        font_scale=1.2,
+        rc={
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "axes.unicode_minus": False,
+            "axes.edgecolor": "0.2",
+            "axes.linewidth": 0.8,
+            "grid.linewidth": 0.5,
+            "grid.alpha": 0.4,
+            "legend.frameon": True,
+            "legend.framealpha": 0.9,
+            "legend.edgecolor": "0.8",
+            "figure.autolayout": False,
+        },
+    )
+    plt.rcParams["font.family"] = "DejaVu Sans"
+
+
 def ensure_output_dir(output_dir: Path) -> Path:
     """创建并返回输出目录。"""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -85,10 +181,11 @@ def ensure_output_dir(output_dir: Path) -> Path:
 
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
     """保存图像并关闭图对象。"""
-    path = ensure_output_dir(output_dir) / file_name
-    fig.savefig(path, dpi=300, bbox_inches="tight")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
-    print(f"[saved] {path}")
+    print(f"Saved figure: {path}")
     return path
 
 
@@ -98,6 +195,11 @@ def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
     df.to_csv(path, index=False, encoding="utf-8")
     print(f"[saved] {path}")
     return path
+
+
+def export_figure_index(output_dir: Path) -> Path:
+    """Export figure metadata for paper curation."""
+    return save_dataframe(pd.DataFrame(FIGURE_INDEX_ENTRIES), output_dir, "figure_index.csv")
 
 
 # ──────────────────────────────────────────────────────────
@@ -468,16 +570,23 @@ def run_data_visualization_base(output_dir: Path) -> None:
     ensure_output_dir(output_dir)
 
     # ── 1. 每个 client 的平均交通流时间序列 ──
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     for cid in range(meta["num_clients"]):
-        # 对该 client 所有样本、所有节点取平均
         ts_mean = all_X[cid].mean(axis=(0, 1))  # shape [seq_len,]
-        ax.plot(ts_mean, label=f"Client {cid}", linewidth=1.5)
+        sns.lineplot(
+            x=np.arange(len(ts_mean)),
+            y=ts_mean,
+            ax=ax,
+            linewidth=2.0,
+            alpha=0.9,
+            color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)],
+            label=f"Client {cid}",
+        )
     ax.set_xlabel("Time Step")
-    ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title("Base Dataset: Per-Client Average Traffic Flow Time Series")
-    ax.legend(loc="upper right", frameon=True, fontsize=8)
-    ax.set_xlim(0, min(200, meta["seq_len"]))
+    ax.set_ylabel("Traffic Flow")
+    ax.set_title("Per-client average traffic flow")
+    ax.legend(loc="best", ncol=2, fontsize=8)
+    ax.set_xlim(0, meta["seq_len"] - 1)
     save_figure(fig, output_dir, "base_dataset_client_timeseries.png")
 
     # ── 2. 代表性 client 的节点-时间热力图 ──
@@ -485,27 +594,42 @@ def run_data_visualization_base(output_dir: Path) -> None:
     X_rep = all_X[rep_cid]  # [samples, nodes, seq_len]
     node_time_matrix = X_rep.mean(axis=0)  # [nodes, seq_len]
 
-    fig, ax = plt.subplots(figsize=(14, 6))
-    im = ax.imshow(node_time_matrix, aspect="auto", cmap="YlOrRd", origin="lower")
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    sns.heatmap(
+        node_time_matrix,
+        ax=ax,
+        cmap="viridis",
+        cbar_kws={"label": "Traffic flow"},
+        xticklabels=1,
+        yticklabels=1,
+    )
     ax.set_xlabel("Time Step")
     ax.set_ylabel("Node ID")
-    ax.set_title(f"Base Dataset: Node-Time Heatmap (Client {rep_cid})")
-    plt.colorbar(im, ax=ax, label="Traffic Flow")
+    ax.set_title(f"Node-time traffic heatmap for client {rep_cid}")
     save_figure(fig, output_dir, "base_dataset_node_heatmap.png")
 
     # ── 3. 不同 client 的流量分布箱线图 ──
-    fig, ax = plt.subplots(figsize=(12, 6))
-    box_data = []
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    dist_rows = []
     for cid in range(meta["num_clients"]):
-        # 所有样本、所有节点、所有时间步展平
-        box_data.append(all_X[cid].ravel())
-    bp = ax.boxplot(box_data, tick_labels=[f"Client {i}" for i in range(meta["num_clients"])],
-                    patch_artist=True, showfliers=False)
-    for patch, color in zip(bp["boxes"], plt.cm.Set2(np.linspace(0, 1, meta["num_clients"]))):
-        patch.set_facecolor(color)
+        sampled_values = all_X[cid].ravel()[::8]
+        dist_rows.extend(
+            {"client": f"Client {cid}", "traffic_flow": float(value)}
+            for value in sampled_values
+        )
+    df_dist = pd.DataFrame(dist_rows)
+    sns.boxplot(
+        data=df_dist,
+        x="client",
+        y="traffic_flow",
+        ax=ax,
+        palette=CLIENT_PALETTE[: meta["num_clients"]],
+        showfliers=False,
+        linewidth=1.0,
+    )
     ax.set_xlabel("Client")
-    ax.set_ylabel("Traffic Flow Value")
-    ax.set_title("Base Dataset: Per-Client Traffic Flow Distribution")
+    ax.set_ylabel("Traffic flow")
+    ax.set_title("Non-IID traffic distribution by client")
     save_figure(fig, output_dir, "base_dataset_client_boxplot.png")
 
     # ── 4. train / val / test 划分概览 ──
@@ -514,27 +638,34 @@ def run_data_visualization_base(output_dir: Path) -> None:
     train_n = int(total_samples * BASE_TRAIN_RATIO)
     val_n = int(total_samples * BASE_VAL_RATIO)
     test_n = total_samples - train_n - val_n
-    colors = ["#2ecc71", "#f39c12", "#e74c3c"]
     labels = [f"Train ({BASE_TRAIN_RATIO*100:.0f}%)",
               f"Val ({BASE_VAL_RATIO*100:.0f}%)",
               f"Test ({BASE_TEST_RATIO*100:.0f}%)"]
     sizes = [train_n, val_n, test_n]
-    ax.barh(["Dataset Split"], [sizes[0]], color=colors[0], label=labels[0])
-    ax.barh(["Dataset Split"], [sizes[1]], left=[sizes[0]], color=colors[1], label=labels[1])
-    ax.barh(["Dataset Split"], [sizes[2]], left=[sizes[0] + sizes[1]], color=colors[2], label=labels[2])
+    left = 0
+    for size, label, color in zip(sizes, labels, SPLIT_PALETTE):
+        ax.barh(["Dataset split"], [size], left=[left], color=color, label=label)
+        left += size
     ax.set_xlabel("Number of Samples")
-    ax.set_title("Base Dataset: Train / Validation / Test Split")
+    ax.set_title("Train, validation, and test split")
     ax.legend(loc="upper right")
     ax.set_xlim(0, total_samples + 50)
     save_figure(fig, output_dir, "base_dataset_split_overview.png")
 
     # ── 5. 每个 client 的样本量 ──
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(8, 4.8))
     client_ids = [f"Client {i}" for i in range(meta["num_clients"])]
-    ax.bar(client_ids, meta["samples_per_client"], color=plt.cm.Set2(np.linspace(0, 1, meta["num_clients"])))
+    df_counts = pd.DataFrame({"client": client_ids, "samples": meta["samples_per_client"]})
+    sns.barplot(
+        data=df_counts,
+        x="client",
+        y="samples",
+        ax=ax,
+        palette=CLIENT_PALETTE[: meta["num_clients"]],
+    )
     ax.set_xlabel("Client")
     ax.set_ylabel("Number of Samples")
-    ax.set_title("Base Dataset: Samples per Client")
+    ax.set_title("Sample size by client")
     for i, v in enumerate(meta["samples_per_client"]):
         ax.text(i, v + 2, str(v), ha="center", fontsize=10)
     save_figure(fig, output_dir, "base_dataset_client_sample_size.png")
@@ -692,24 +823,39 @@ def run_main_experiment(output_dir: Path) -> None:
     print("\n[main] Summary:\n", df_summary.to_string(index=False))
 
     # ── 绘制对比柱状图 ──
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     client_labels = [f"Client {i}" for i in range(num_clients)]
-    x = np.arange(num_clients)
-    width = 0.35
-
     for idx, metric in enumerate(["mse", "rmse", "mae"]):
         ax = axes[idx]
-        fed_vals = [fed_metrics[c][metric] for c in range(num_clients)]
-        ind_vals = [ind_metrics[c][metric] for c in range(num_clients)]
-        ax.bar(x - width/2, fed_vals, width, label="FedAvg", color="#3498db")
-        ax.bar(x + width/2, ind_vals, width, label="Independent", color="#e74c3c")
-        ax.set_xticks(x)
+        plot_df = pd.DataFrame(
+            {
+                "client": client_labels * 2,
+                "method": ["Independent"] * num_clients + ["FedAvg"] * num_clients,
+                "value": [ind_metrics[c][metric] for c in range(num_clients)]
+                + [fed_metrics[c][metric] for c in range(num_clients)],
+            }
+        )
+        sns.barplot(
+            data=plot_df,
+            x="client",
+            y="value",
+            hue="method",
+            hue_order=["Independent", "FedAvg"],
+            palette=METHOD_PALETTE,
+            ax=ax,
+            errorbar=None,
+        )
         ax.set_xticklabels(client_labels, rotation=30, ha="right")
         ax.set_title(metric.upper())
-        ax.set_ylabel(metric.upper())
-        ax.legend(fontsize=8)
-    fig.suptitle("CNN Base Experiment: FedAvg vs Independent", fontsize=14)
-    plt.tight_layout()
+        ylabel = f"{metric.upper()} (lower is better)" if metric in {"rmse", "mae", "mse"} else metric.upper()
+        ax.set_ylabel(ylabel)
+        ax.set_xlabel("Client")
+        if idx == 0:
+            ax.legend(loc="best", fontsize=8, title=None)
+        else:
+            ax.get_legend().remove()
+    fig.suptitle("CNN base method comparison", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_base_main_comparison.png")
     print("[main] Done.\n")
 
@@ -800,38 +946,58 @@ def run_convergence_experiment(output_dir: Path) -> None:
     save_dataframe(df_conv, output_dir, "cnn_base_convergence.csv")
 
     # 绘制收敛曲线
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
     # 左图：全局平均 train loss 和 validation RMSE
     ax = axes[0]
-    ax.plot(round_data["round"], round_data["avg_train_loss"],
-            "o-", label="Avg Train Loss (MSE)", color="#3498db", linewidth=2)
+    sns.lineplot(
+        x=round_data["round"],
+        y=round_data["avg_train_loss"],
+        ax=ax,
+        marker="o",
+        linewidth=2.0,
+        color=METHOD_PALETTE["FedAvg"],
+        label="Average train loss",
+    )
     ax.set_xlabel("Communication Round")
-    ax.set_ylabel("Train Loss (MSE)", color="#3498db")
-    ax.tick_params(axis="y", labelcolor="#3498db")
+    ax.set_ylabel("Training loss (MSE)", color=METHOD_PALETTE["FedAvg"])
+    ax.tick_params(axis="y", labelcolor=METHOD_PALETTE["FedAvg"])
 
     ax2 = ax.twinx()
-    ax2.plot(round_data["round"], round_data["avg_val_rmse"],
-             "s-", label="Avg Val RMSE", color="#e74c3c", linewidth=2)
-    ax2.set_ylabel("Validation RMSE", color="#e74c3c")
-    ax2.tick_params(axis="y", labelcolor="#e74c3c")
+    sns.lineplot(
+        x=round_data["round"],
+        y=round_data["avg_val_rmse"],
+        ax=ax2,
+        marker="s",
+        linewidth=2.0,
+        color=METHOD_PALETTE["Independent"],
+        label="Average validation RMSE",
+    )
+    ax2.set_ylabel("Validation RMSE", color=METHOD_PALETTE["Independent"])
+    ax2.tick_params(axis="y", labelcolor=METHOD_PALETTE["Independent"])
 
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
-    ax.set_title("Global Convergence: Train Loss & Val RMSE")
+    ax.set_title("Global validation RMSE across communication rounds")
 
     # 右图：每个 client 的 local training loss
     ax = axes[1]
     for cid in range(num_clients):
-        ax.plot(round_data["round"], round_data[f"client_{cid}_train_loss"],
-                "o-", label=f"Client {cid}", linewidth=1.5, markersize=3)
+        sns.lineplot(
+            x=round_data["round"],
+            y=round_data[f"client_{cid}_train_loss"],
+            ax=ax,
+            linewidth=2.0,
+            alpha=0.8,
+            color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)],
+            label=f"Client {cid}",
+        )
     ax.set_xlabel("Communication Round")
-    ax.set_ylabel("Local Train Loss (MSE)")
-    ax.set_title("Per-Client Local Training Loss")
+    ax.set_ylabel("Training loss (MSE)")
+    ax.set_title("Per-client local training loss")
     ax.legend(fontsize=8)
-
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_base_convergence.png")
     print("[convergence] Done.\n")
 
@@ -842,7 +1008,9 @@ def run_convergence_experiment(output_dir: Path) -> None:
 
 def run_project(workflow: str, output_dir: Path) -> None:
     """按工作流执行 CNN 基础实验。"""
+    configure_academic_plot_style()
     ensure_output_dir(output_dir)
+    export_figure_index(output_dir)
     print(f"[cnn_fed_base] workflow={workflow}, output={output_dir}")
     print(f"[cnn_fed_base] device={DEVICE}")
 

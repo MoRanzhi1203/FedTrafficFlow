@@ -34,6 +34,7 @@ plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -49,6 +50,42 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+METHOD_PALETTE = {
+    "Independent": "#4C72B0",
+    "FedAvg": "#DD8452",
+    "CNN-FedAvg": "#DD8452",
+    "GCN-FedAvg": "#DD8452",
+    "Proposed": "#55A868",
+    "CNN-Proposed": "#55A868",
+    "GCN-Proposed": "#55A868",
+    "Loss-weighted": "#C44E52",
+    "Data-loss weighted": "#8172B3",
+    "Similarity-aware": "#937860",
+}
+CLIENT_PALETTE = sns.color_palette("tab10")
+
+FIGURE_INDEX_ENTRIES = [
+    {"figure_file": "enhanced_dataset_client_timeseries.png", "workflow": "data_viz", "figure_type": "line", "description": "Per-client average traffic flow time series for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_distribution_comparison.png", "workflow": "data_viz", "figure_type": "box", "description": "Client-level traffic flow distribution comparison for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_client_config.png", "workflow": "data_viz", "figure_type": "bar", "description": "Client configuration overview for sample size, noise, base flow, and incident probability.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "yes"},
+    {"figure_file": "enhanced_dataset_peak_pattern.png", "workflow": "data_viz", "figure_type": "line", "description": "Twenty-four-hour peak traffic patterns across enhanced clients.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_incident_example.png", "workflow": "data_viz", "figure_type": "line", "description": "Incident example with shaded disruption periods for the incident-prone client.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "yes"},
+    {"figure_file": "enhanced_dataset_client_correlation_matrix.png", "workflow": "data_viz", "figure_type": "heatmap", "description": "Inter-client traffic correlation matrix for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_node_correlation_matrix.png", "workflow": "data_viz", "figure_type": "heatmap", "description": "Node correlation matrix for a representative enhanced client.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_main_rmse_comparison.png", "workflow": "main", "figure_type": "bar", "description": "Main comparison of Independent, FedAvg, and Proposed using MSE, RMSE, and MAE.", "source_csv": "cnn_enhanced_main_metrics_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_aggregation_ablation.png", "workflow": "aggregation", "figure_type": "bar", "description": "Aggregation strategy ablation on RMSE and MAE.", "source_csv": "cnn_enhanced_aggregation_ablation_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_lambda_sensitivity.png", "workflow": "lambda", "figure_type": "line", "description": "Lambda sensitivity analysis for the data-loss weighted aggregation strategy.", "source_csv": "cnn_enhanced_lambda_sensitivity_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_global_validation_rmse.png", "workflow": "convergence", "figure_type": "line", "description": "Global validation RMSE across communication rounds.", "source_csv": "cnn_enhanced_convergence_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_client_training_loss.png", "workflow": "convergence", "figure_type": "line", "description": "Per-client training loss across communication rounds for FedAvg and Proposed.", "source_csv": "cnn_enhanced_convergence_round_metrics.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_convergence_overview.png", "workflow": "convergence", "figure_type": "line", "description": "Combined convergence overview including validation metrics and per-client losses.", "source_csv": "cnn_enhanced_convergence_summary.csv", "used_in_paper": "yes"},
+    {"figure_file": "cnn_enhanced_client_scale.png", "workflow": "client_scale", "figure_type": "line", "description": "Client-scale sensitivity analysis for RMSE and MAE.", "source_csv": "cnn_enhanced_client_scale_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_noniid_strength.png", "workflow": "noniid", "figure_type": "bar", "description": "Method comparison under different Non-IID strengths.", "source_csv": "cnn_enhanced_noniid_strength_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_client_rmse_comparison.png", "workflow": "client_metrics", "figure_type": "bar", "description": "Per-client RMSE comparison across Independent, FedAvg, and Proposed.", "source_csv": "cnn_enhanced_client_metrics.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_client_improvement.png", "workflow": "client_metrics", "figure_type": "bar", "description": "RMSE improvement of Proposed over baselines for each client.", "source_csv": "cnn_enhanced_client_metrics.csv", "used_in_paper": "yes"},
+    {"figure_file": "cnn_enhanced_peak_offpeak_comparison.png", "workflow": "peak", "figure_type": "bar", "description": "Performance comparison across peak, off-peak, and incident periods.", "source_csv": "cnn_enhanced_peak_offpeak_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_feature_ablation.png", "workflow": "feature_ablation", "figure_type": "bar", "description": "Feature ablation comparison for FedAvg and Proposed.", "source_csv": "cnn_enhanced_feature_ablation_summary.csv", "used_in_paper": "recommended"},
+]
 
 # 增强数据集超参数（与 gcn_fed_enhanced_experiments.py 共享）
 NUM_NODES = 8
@@ -75,16 +112,41 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+def configure_academic_plot_style() -> None:
+    """Configure a unified seaborn style for paper-ready figures."""
+    sns.set_theme(
+        style="whitegrid",
+        context="paper",
+        font_scale=1.2,
+        rc={
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "axes.unicode_minus": False,
+            "axes.edgecolor": "0.2",
+            "axes.linewidth": 0.8,
+            "grid.linewidth": 0.5,
+            "grid.alpha": 0.4,
+            "legend.frameon": True,
+            "legend.framealpha": 0.9,
+            "legend.edgecolor": "0.8",
+            "figure.autolayout": False,
+        },
+    )
+    plt.rcParams["font.family"] = "DejaVu Sans"
+    plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
+
+
 def ensure_output_dir(output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
-    path = ensure_output_dir(output_dir) / file_name
-    fig.savefig(path, dpi=300, bbox_inches="tight")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
-    print(f"[saved] {path}")
+    print(f"Saved figure: {path}")
     return path
 
 
@@ -93,6 +155,11 @@ def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
     df.to_csv(path, index=False, encoding="utf-8")
     print(f"[saved] {path}")
     return path
+
+
+def export_figure_index(output_dir: Path) -> Path:
+    """Export figure metadata for paper curation."""
+    return save_dataframe(pd.DataFrame(FIGURE_INDEX_ENTRIES), output_dir, "figure_index.csv")
 
 
 def compute_metrics(preds, truths):
@@ -964,80 +1031,118 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
         raw_masks.append(mask)
 
     # ── 1. 每个 client 的平均时间序列 ──
-    fig, ax = plt.subplots(figsize=(14, 6))
-    colors = plt.cm.tab10(np.linspace(0, 1, num_clients))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    colors = CLIENT_PALETTE[:num_clients]
     for cid in range(num_clients):
         ts = raw_signals[cid].mean(axis=1)[:200]
-        ax.plot(ts, color=colors[cid], linewidth=1.5,
-                label=f"C{cid} ({cfgs[cid]['pattern']})")
+        sns.lineplot(
+            x=np.arange(len(ts)),
+            y=ts,
+            ax=ax,
+            color=colors[cid],
+            linewidth=2.0,
+            alpha=0.85,
+            label=f"Client {cid}",
+        )
     ax.set_xlabel("Time Step")
-    ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title("Enhanced Dataset: Per-Client Average Traffic Flow Time Series")
-    ax.legend(fontsize=7, loc="upper right")
+    ax.set_ylabel("Traffic Flow")
+    ax.set_title("Per-client average traffic flow")
+    ax.legend(fontsize=8, loc="best", ncol=2)
     save_figure(fig, output_dir, "enhanced_dataset_client_timeseries.png")
 
     # ── 2. 分布对比 ──
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    # 箱线图
-    box_data = [raw_signals[cid].ravel() for cid in range(num_clients)]
-    bp = axes[0].boxplot(box_data, tick_labels=[f"C{cid}\n{cfgs[cid]['dist']}"
-                          for cid in range(num_clients)],
-                          patch_artist=True, showfliers=False)
-    for patch, c in zip(bp["boxes"], colors):
-        patch.set_facecolor(c)
-    axes[0].set_title("Traffic Flow Distribution by Client (Boxplot)")
-    axes[0].set_ylabel("Traffic Flow")
-    # 直方图
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    dist_rows = []
     for cid in range(num_clients):
-        axes[1].hist(raw_signals[cid].ravel(), bins=40, alpha=0.4,
-                     color=colors[cid], label=f"C{cid} ({cfgs[cid]['dist']})")
-    axes[1].set_title("Traffic Flow Distribution (Histogram)")
-    axes[1].set_xlabel("Traffic Flow")
+        sampled_values = raw_signals[cid].ravel()[::10]
+        dist_rows.extend(
+            {"client": f"Client {cid}", "traffic_flow": float(value)}
+            for value in sampled_values
+        )
+    dist_df = pd.DataFrame(dist_rows)
+    sns.boxplot(
+        data=dist_df,
+        x="client",
+        y="traffic_flow",
+        ax=axes[0],
+        palette=colors,
+        showfliers=False,
+        linewidth=1.0,
+    )
+    axes[0].set_title("Non-IID traffic distribution by client")
+    axes[0].set_xlabel("Client")
+    axes[0].set_ylabel("Traffic flow")
+    for cid in range(num_clients):
+        sns.histplot(
+            raw_signals[cid].ravel(),
+            bins=35,
+            alpha=0.25,
+            stat="density",
+            element="step",
+            fill=True,
+            color=colors[cid],
+            ax=axes[1],
+            label=f"Client {cid}",
+        )
+    axes[1].set_title("Traffic flow density comparison")
+    axes[1].set_xlabel("Traffic flow")
+    axes[1].set_ylabel("Density")
     axes[1].legend(fontsize=7)
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_dataset_distribution_comparison.png")
 
     # ── 3. client 配置概览 ──
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
     cids = np.arange(num_clients)
-    # sample size
-    axes[0, 0].bar(cids, [c["n_samples"] for c in cfgs], color=colors)
-    axes[0, 0].set_title("Sample Size per Client")
-    axes[0, 0].set_xticks(cids)
-    # noise level
-    axes[0, 1].bar(cids, [c["noise"] for c in cfgs], color=colors)
-    axes[0, 1].set_title("Noise Level per Client")
-    axes[0, 1].set_xticks(cids)
-    # base flow
-    axes[1, 0].bar(cids, [c["base"] for c in cfgs], color=colors)
-    axes[1, 0].set_title("Base Flow per Client")
-    axes[1, 0].set_xticks(cids)
-    # incident prob
-    axes[1, 1].bar(cids, [c.get("incident_prob", 0) for c in cfgs], color=colors)
-    axes[1, 1].set_title("Incident Probability per Client")
-    axes[1, 1].set_xticks(cids)
-    plt.tight_layout()
+    config_specs = [
+        ("sample_size", [c["n_samples"] for c in cfgs], "Sample size"),
+        ("noise_level", [c["noise"] for c in cfgs], "Noise level"),
+        ("base_flow", [c["base"] for c in cfgs], "Base traffic flow"),
+        ("incident_prob", [c.get("incident_prob", 0) for c in cfgs], "Incident probability"),
+    ]
+    for ax, (_, values, title) in zip(axes.flatten(), config_specs):
+        cfg_df = pd.DataFrame({"client": [f"Client {i}" for i in range(num_clients)], "value": values})
+        sns.barplot(data=cfg_df, x="client", y="value", ax=ax, palette=colors, errorbar=None)
+        ax.set_title(title)
+        ax.set_xlabel("Client")
+        ax.set_ylabel(title)
+        ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_dataset_client_config.png")
 
     # ── 4. 高峰模式 ──
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     for cid in range(num_clients):
         ts = raw_signals[cid].mean(axis=1)
-        ax.plot(ts[:24], "o-", color=colors[cid], linewidth=2, markersize=4,
-                label=f"C{cid}: {cfgs[cid]['pattern']}")
+        sns.lineplot(
+            x=np.arange(24),
+            y=ts[:24],
+            ax=ax,
+            color=colors[cid],
+            linewidth=2.0,
+            alpha=0.85,
+            label=f"Client {cid}",
+        )
     ax.set_xlabel("Hour of Day")
-    ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title("Enhanced Dataset: 24-Hour Peak Patterns")
-    ax.legend(fontsize=8)
+    ax.set_ylabel("Traffic Flow")
+    ax.set_title("Peak-period traffic patterns")
+    ax.legend(fontsize=8, ncol=2)
     save_figure(fig, output_dir, "enhanced_dataset_peak_pattern.png")
 
     # ── 5. incident 示例 ──
     incident_cid = 4  # 突发拥堵型
-    fig, ax = plt.subplots(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     ts = raw_signals[incident_cid].mean(axis=1)
     mask = raw_masks[incident_cid]
     t = np.arange(len(ts))
-    ax.plot(t, ts, color="#3498db", linewidth=1, label="Traffic Flow")
+    sns.lineplot(
+        x=t,
+        y=ts,
+        ax=ax,
+        color=METHOD_PALETTE["FedAvg"],
+        linewidth=2.0,
+        label="Traffic flow",
+    )
     # 找到 incident 区间
     in_incident = False
     start = 0
@@ -1050,9 +1155,8 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
     if in_incident:
         ax.axvspan(start, len(mask) - 1, alpha=0.3, color="#e74c3c")
     ax.set_xlabel("Time Step")
-    ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title(f"Enhanced Dataset: Client {incident_cid} ({cfgs[incident_cid]['pattern']}) "
-                 "with Incident Periods Shaded")
+    ax.set_ylabel("Traffic flow")
+    ax.set_title(f"Incident example for client {incident_cid}")
     ax.legend()
     save_figure(fig, output_dir, "enhanced_dataset_incident_example.png")
 
@@ -1060,30 +1164,45 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
     min_len = min(len(raw_signals[cid]) for cid in range(num_clients))
     client_ts = np.array([raw_signals[cid].mean(axis=1)[:min_len] for cid in range(num_clients)])
     corr_client = np.corrcoef(client_ts)
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(corr_client, cmap="coolwarm", vmin=-1, vmax=1, aspect="equal")
-    ax.set_xticks(range(num_clients))
-    ax.set_yticks(range(num_clients))
-    ax.set_xticklabels([f"C{cid}" for cid in range(num_clients)])
-    ax.set_yticklabels([f"C{cid}" for cid in range(num_clients)])
-    for i in range(num_clients):
-        for j in range(num_clients):
-            ax.text(j, i, f"{corr_client[i, j]:.2f}", ha="center", va="center", fontsize=9)
-    ax.set_title("Enhanced Dataset: Inter-Client Correlation Matrix")
-    plt.colorbar(im, ax=ax)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(
+        corr_client,
+        ax=ax,
+        cmap="vlag",
+        vmin=-1,
+        vmax=1,
+        center=0,
+        square=True,
+        annot=True,
+        fmt=".2f",
+        xticklabels=[f"Client {cid}" for cid in range(num_clients)],
+        yticklabels=[f"Client {cid}" for cid in range(num_clients)],
+        cbar_kws={"label": "Correlation"},
+    )
+    ax.set_title("Inter-client correlation matrix")
+    ax.set_xlabel("Client ID")
+    ax.set_ylabel("Client ID")
     save_figure(fig, output_dir, "enhanced_dataset_client_correlation_matrix.png")
 
     # ── 7. 节点间相关系数矩阵 ──
     rep_cid = 0
     node_corr = np.corrcoef(raw_signals[rep_cid].T)  # (n_nodes, n_nodes)
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(node_corr, cmap="coolwarm", vmin=-1, vmax=1, aspect="equal")
-    for i in range(num_nodes):
-        for j in range(num_nodes):
-            ax.text(j, i, f"{node_corr[i, j]:.2f}", ha="center", va="center", fontsize=8)
-    ax.set_title(f"Enhanced Dataset: Node Correlation Matrix (Client {rep_cid})")
-    ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-    plt.colorbar(im, ax=ax)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(
+        node_corr,
+        ax=ax,
+        cmap="vlag",
+        vmin=-1,
+        vmax=1,
+        center=0,
+        square=True,
+        annot=True,
+        fmt=".2f",
+        cbar_kws={"label": "Correlation"},
+    )
+    ax.set_title(f"Node correlation matrix for client {rep_cid}")
+    ax.set_xlabel("Node ID")
+    ax.set_ylabel("Node ID")
     save_figure(fig, output_dir, "enhanced_dataset_node_correlation_matrix.png")
 
     # ── 8. 汇总 CSV ──
@@ -1166,23 +1285,42 @@ def run_main_experiment(output_dir: Path) -> None:
     print("\n[main] Summary:\n", agg.to_string(index=False))
 
     # 绘制对比图
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     methods = ["Independent", "FedAvg", "Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
     for idx, metric in enumerate(["mse", "rmse", "mae"]):
         ax = axes[idx]
-        vals = [agg[agg["method"] == m][f"{metric}_mean"].values[0] for m in methods]
-        errs = [agg[agg["method"] == m][f"{metric}_std"].values[0] for m in methods]
-        x = np.arange(len(methods))
-        ax.bar(x, vals, color=[bar_colors[m] for m in methods],
-               yerr=errs, capsize=5)
-        ax.set_xticks(x)
-        ax.set_xticklabels(methods)
+        plot_df = pd.DataFrame(
+            {
+                "method": methods,
+                "value": [agg[agg["method"] == m][f"{metric}_mean"].values[0] for m in methods],
+                "error": [agg[agg["method"] == m][f"{metric}_std"].values[0] for m in methods],
+            }
+        )
+        sns.barplot(
+            data=plot_df,
+            x="method",
+            y="value",
+            order=methods,
+            palette=METHOD_PALETTE,
+            ax=ax,
+            errorbar=None,
+        )
+        ax.errorbar(
+            x=np.arange(len(methods)),
+            y=plot_df["value"],
+            yerr=plot_df["error"],
+            fmt="none",
+            ecolor="0.25",
+            elinewidth=1.0,
+            capsize=4,
+        )
         ax.set_title(metric.upper())
-        ax.set_ylabel(metric.upper())
-    fig.suptitle("CNN Enhanced: Main Experiment Results", fontsize=14)
-    plt.tight_layout()
-    save_figure(fig, output_dir, "cnn_enhanced_main_comparison.png")
+        ax.set_xlabel("Method")
+        ax.set_ylabel(f"{metric.upper()} (lower is better)")
+        ax.tick_params(axis="x", rotation=15)
+    fig.suptitle("CNN enhanced main comparison", fontsize=13)
+    fig.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_main_rmse_comparison.png")
     print("[main] Done.\n")
 
 
@@ -1223,19 +1361,24 @@ def run_aggregation_experiment(output_dir: Path) -> None:
     save_dataframe(agg, output_dir, "cnn_enhanced_aggregation_ablation_summary.csv")
     print("\n[aggregation] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for idx, metric in enumerate(["rmse", "mae"]):
         ax = axes[idx]
-        x = np.arange(len(agg_labels))
-        vals = [agg[agg["aggregation_method"] == l][f"{metric}_mean"].values[0] for l in agg_labels]
-        errs = [agg[agg["aggregation_method"] == l][f"{metric}_std"].values[0] for l in agg_labels]
-        ax.bar(x, vals, capsize=5,
-               color=plt.cm.viridis(np.linspace(0.1, 0.9, len(agg_labels))))
-        ax.set_xticks(x)
+        plot_df = pd.DataFrame(
+            {
+                "aggregation_method": agg_labels,
+                "value": [agg[agg["aggregation_method"] == l][f"{metric}_mean"].values[0] for l in agg_labels],
+                "error": [agg[agg["aggregation_method"] == l][f"{metric}_std"].values[0] for l in agg_labels],
+            }
+        )
+        palette = [METHOD_PALETTE.get(label, CLIENT_PALETTE[i % len(CLIENT_PALETTE)]) for i, label in enumerate(agg_labels)]
+        sns.barplot(data=plot_df, x="aggregation_method", y="value", ax=ax, palette=palette, errorbar=None)
+        ax.errorbar(np.arange(len(plot_df)), plot_df["value"], yerr=plot_df["error"], fmt="none", ecolor="0.25", elinewidth=1.0, capsize=4)
         ax.set_xticklabels(agg_labels, rotation=20, ha="right", fontsize=8)
-        ax.set_title(f"{metric.upper()} by Aggregation Method")
-        ax.set_ylabel(metric.upper())
-    plt.tight_layout()
+        ax.set_title(f"{metric.upper()} by aggregation strategy")
+        ax.set_xlabel("Aggregation strategy")
+        ax.set_ylabel(f"{metric.upper()} (lower is better)")
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_aggregation_ablation.png")
     print("[aggregation] Done.\n")
 
@@ -1277,20 +1420,20 @@ def run_lambda_experiment(output_dir: Path) -> None:
     save_dataframe(agg, output_dir, "cnn_enhanced_lambda_sensitivity_summary.csv")
     print("\n[lambda] Summary:\n", agg.to_string(index=False))
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     ax.errorbar(lam_vals, agg["rmse_mean"], yerr=agg["rmse_std"],
-                fmt="o-", capsize=5, label="RMSE", linewidth=2, color="#3498db")
+                fmt="o-", capsize=5, label="RMSE", linewidth=2, color=METHOD_PALETTE["FedAvg"])
     ax2 = ax.twinx()
     ax2.errorbar(lam_vals, agg["mae_mean"], yerr=agg["mae_std"],
-                 fmt="s-", capsize=5, label="MAE", linewidth=2, color="#e74c3c")
+                 fmt="s-", capsize=5, label="MAE", linewidth=2, color=METHOD_PALETTE["Independent"])
     ax.set_xlabel("Lambda (data_weight fraction)")
-    ax.set_ylabel("RMSE", color="#3498db")
-    ax2.set_ylabel("MAE", color="#e74c3c")
+    ax.set_ylabel("RMSE (lower is better)", color=METHOD_PALETTE["FedAvg"])
+    ax2.set_ylabel("MAE (lower is better)", color=METHOD_PALETTE["Independent"])
     ax.set_title("Data-Loss Weighted: Lambda Sensitivity")
     lines1, labels1 = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax.legend(lines1 + lines2, labels1 + labels2, loc="center right")
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_lambda_sensitivity.png")
     print("[lambda] Done.\n")
 
@@ -1347,53 +1490,79 @@ def run_convergence_experiment(output_dir: Path) -> None:
     print(last.to_string(index=False))
 
     # ── 图 1: Global Validation RMSE ──
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for method, color in [("FedAvg", "#3498db"), ("Proposed", "#2ecc71")]:
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for method in ["FedAvg", "Proposed"]:
         sub = agg[agg["method"] == method]
-        ax.plot(sub["round"], sub["val_rmse_mean"], "o-",
-                color=color, linewidth=2, label=f"{method} val RMSE")
+        color = METHOD_PALETTE[method]
+        sns.lineplot(
+            data=sub,
+            x="round",
+            y="val_rmse_mean",
+            marker="o",
+            linewidth=2.0,
+            color=color,
+            ax=ax,
+            label=method,
+        )
         ax.fill_between(sub["round"],
                          sub["val_rmse_mean"] - sub["val_rmse_std"],
                          sub["val_rmse_mean"] + sub["val_rmse_std"],
                          alpha=0.15, color=color)
     ax.set_xlabel("Communication Round")
-    ax.set_ylabel("Validation RMSE (real scale)")
-    ax.set_title("CNN Enhanced: Global Validation RMSE Convergence")
-    ax.legend()
-    plt.tight_layout()
+    ax.set_ylabel("Validation RMSE")
+    ax.set_title("Global validation RMSE across communication rounds")
+    ax.legend(title=None)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_global_validation_rmse.png")
 
     # ── 图 2: Client Training Loss ──
     fedavg_sub = df_round[df_round["method"] == "FedAvg"]
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for cid in range(num_clients):
         cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
-        axes[0].plot(cdata["round"], cdata["train_loss"], "o-",
-                     label=f"Client {cid}", linewidth=1.5, markersize=3)
+        sns.lineplot(
+            data=cdata,
+            x="round",
+            y="train_loss",
+            ax=axes[0],
+            linewidth=2.0,
+            alpha=0.8,
+            color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)],
+            label=f"Client {cid}",
+        )
     axes[0].set_xlabel("Communication Round")
-    axes[0].set_ylabel("Local Train Loss (MSE)")
-    axes[0].set_title("FedAvg: Per-Client Training Loss")
+    axes[0].set_ylabel("Training loss (MSE)")
+    axes[0].set_title("FedAvg client training loss")
     axes[0].legend(fontsize=7)
 
     prop_sub = df_round[df_round["method"] == "Proposed"]
     for cid in range(num_clients):
         cdata = prop_sub[prop_sub["client_id"] == cid]
-        axes[1].plot(cdata["round"], cdata["train_loss"], "s--",
-                     label=f"Client {cid}", linewidth=1.5, markersize=3)
+        sns.lineplot(
+            data=cdata,
+            x="round",
+            y="train_loss",
+            ax=axes[1],
+            linewidth=2.0,
+            alpha=0.8,
+            color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)],
+            label=f"Client {cid}",
+        )
     axes[1].set_xlabel("Communication Round")
-    axes[1].set_ylabel("Local Train Loss (MSE)")
-    axes[1].set_title("Proposed: Per-Client Training Loss")
+    axes[1].set_ylabel("Training loss (MSE)")
+    axes[1].set_title("Proposed client training loss")
     axes[1].legend(fontsize=7)
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_client_training_loss.png")
 
     # ── 图 3: Convergence Overview ──
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     # (a) Global val RMSE
     ax = axes[0, 0]
-    for method, color in [("FedAvg", "#3498db"), ("Proposed", "#2ecc71")]:
+    for method in ["FedAvg", "Proposed"]:
         sub = agg[agg["method"] == method]
-        ax.plot(sub["round"], sub["val_rmse_mean"], "o-", color=color, linewidth=2, label=method)
+        color = METHOD_PALETTE[method]
+        sns.lineplot(data=sub, x="round", y="val_rmse_mean", marker="o", color=color, linewidth=2.0, ax=ax, label=method)
         ax.fill_between(sub["round"],
                          sub["val_rmse_mean"] - sub["val_rmse_std"],
                          sub["val_rmse_mean"] + sub["val_rmse_std"],
@@ -1403,9 +1572,9 @@ def run_convergence_experiment(output_dir: Path) -> None:
 
     # (b) Global val MAE
     ax = axes[0, 1]
-    for method, color in [("FedAvg", "#3498db"), ("Proposed", "#2ecc71")]:
+    for method in ["FedAvg", "Proposed"]:
         sub = agg[agg["method"] == method]
-        ax.plot(sub["round"], sub["val_mae_mean"], "s--", color=color, linewidth=2, label=method)
+        sns.lineplot(data=sub, x="round", y="val_mae_mean", marker="s", color=METHOD_PALETTE[method], linewidth=2.0, ax=ax, label=method)
     ax.set_xlabel("Communication Round"); ax.set_ylabel("Val MAE")
     ax.set_title("(b) Global Validation MAE"); ax.legend()
 
@@ -1413,7 +1582,7 @@ def run_convergence_experiment(output_dir: Path) -> None:
     ax = axes[1, 0]
     for cid in range(num_clients):
         cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
-        ax.plot(cdata["round"], cdata["train_loss"], "o-", label=f"C{cid}", markersize=3)
+        sns.lineplot(data=cdata, x="round", y="train_loss", ax=ax, color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)], linewidth=1.8, alpha=0.8, label=f"C{cid}")
     ax.set_xlabel("Communication Round"); ax.set_ylabel("Train Loss")
     ax.set_title("(c) FedAvg: Client Training Loss"); ax.legend(fontsize=7)
 
@@ -1421,12 +1590,12 @@ def run_convergence_experiment(output_dir: Path) -> None:
     ax = axes[1, 1]
     for cid in range(num_clients):
         cdata = prop_sub[prop_sub["client_id"] == cid]
-        ax.plot(cdata["round"], cdata["train_loss"], "s--", label=f"C{cid}", markersize=3)
+        sns.lineplot(data=cdata, x="round", y="train_loss", ax=ax, color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)], linewidth=1.8, alpha=0.8, label=f"C{cid}")
     ax.set_xlabel("Communication Round"); ax.set_ylabel("Train Loss")
     ax.set_title("(d) Proposed: Client Training Loss"); ax.legend(fontsize=7)
 
     fig.suptitle("CNN Enhanced: Convergence Overview", fontsize=14)
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_convergence_overview.png")
     print("[convergence] Done.\n")
 
@@ -1484,18 +1653,16 @@ def run_client_scale_experiment(output_dir: Path) -> None:
 
     # 绘制对比图
     methods = ["Independent", "FedAvg", "Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
-
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    for m_idx, method in enumerate(methods):
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for method in methods:
         sub = agg[agg["method"] == method].sort_values("num_clients")
-        xs = sub["num_clients"].astype(str)
-        axes[0].errorbar(range(len(xs)), sub["rmse_mean"], yerr=sub["rmse_std"],
+        x_pos = np.arange(len(sub))
+        axes[0].errorbar(x_pos, sub["rmse_mean"], yerr=sub["rmse_std"],
                          fmt="o-", capsize=5, label=method, linewidth=2,
-                         color=bar_colors[method])
-        axes[1].errorbar(range(len(xs)), sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt="s--", capsize=5, label=method, linewidth=2,
-                         color=bar_colors[method])
+                         color=METHOD_PALETTE[method])
+        axes[1].errorbar(x_pos, sub["mae_mean"], yerr=sub["mae_std"],
+                         fmt="s-", capsize=5, label=method, linewidth=2,
+                         color=METHOD_PALETTE[method])
     for ax in axes:
         ax.set_xticks(range(len(client_nums)))
         ax.set_xticklabels([str(n) for n in client_nums])
@@ -1505,8 +1672,8 @@ def run_client_scale_experiment(output_dir: Path) -> None:
     axes[0].set_ylabel("RMSE")
     axes[1].set_title("MAE vs Client Count")
     axes[1].set_ylabel("MAE")
-    fig.suptitle("CNN Enhanced: Client Scale Sensitivity", fontsize=14)
-    plt.tight_layout()
+    fig.suptitle("Client scale sensitivity", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_client_scale.png")
     print("[client_scale] Done.\n")
 
@@ -1564,31 +1731,32 @@ def run_noniid_experiment(output_dir: Path) -> None:
     print("\n[noniid] Summary:\n", agg.to_string(index=False))
 
     # 绘制对比图 — 横轴固定顺序 low -> medium -> high
-    methods = ["Independent", "FedAvg", "Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
     level_order = ["low", "medium", "high"]
-
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    x = np.arange(len(methods))
-    width = 0.25
-    for l_idx, level in enumerate(level_order):
-        sub = agg[agg["noniid_level"] == level]
-        offset = (l_idx - 1) * width
-        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] for m in methods]
-        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] for m in methods]
-        axes[0].bar(x + offset, rmse_vals, width, label=level, alpha=0.85)
-        axes[1].bar(x + offset, mae_vals, width, label=level, alpha=0.85)
-    for ax in axes:
-        ax.set_xticks(x)
-        ax.set_xticklabels(methods)
-        ax.set_xlabel("Method")
-        ax.legend(title="Non-IID Level", fontsize=8)
-    axes[0].set_title("RMSE by Non-IID Strength")
-    axes[0].set_ylabel("RMSE")
-    axes[1].set_title("MAE by Non-IID Strength")
-    axes[1].set_ylabel("MAE")
-    fig.suptitle("CNN Enhanced: Non-IID Strength Sensitivity", fontsize=14)
-    plt.tight_layout()
+    methods = ["Independent", "FedAvg", "Proposed"]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    for idx, metric in enumerate(["rmse", "mae"]):
+        plot_df = agg.copy()
+        plot_df["noniid_level"] = pd.Categorical(plot_df["noniid_level"], categories=level_order, ordered=True)
+        plot_df = plot_df.sort_values("noniid_level")
+        sns.barplot(
+            data=plot_df,
+            x="noniid_level",
+            y=f"{metric}_mean",
+            hue="method",
+            hue_order=methods,
+            palette=METHOD_PALETTE,
+            ax=axes[idx],
+            errorbar=None,
+        )
+        axes[idx].set_title(f"{metric.upper()} by Non-IID strength")
+        axes[idx].set_xlabel("Non-IID level")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+        if idx == 0:
+            axes[idx].legend(title=None, fontsize=8)
+        else:
+            axes[idx].get_legend().remove()
+    fig.suptitle("Non-IID strength sensitivity", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_noniid_strength.png")
     print("[noniid] Done.\n")
 
@@ -1669,42 +1837,53 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
     print(df.to_string(index=False))
 
     # ── 图 1: 每个 client 的 RMSE 对比 ──
-    fig, ax = plt.subplots(figsize=(14, 6))
-    x = np.arange(num_clients)
-    width = 0.25
-    methods_data = [
-        ("Independent", "#e74c3c", ind_results),
-        ("FedAvg", "#3498db", fed_results),
-        ("Proposed", "#2ecc71", prop_results),
-    ]
-    for m_idx, (name, color, m_list) in enumerate(methods_data):
-        rmse_vals = [r["rmse"] for r in m_list]
-        ax.bar(x + (m_idx - 1) * width, rmse_vals, width, label=name, color=color, alpha=0.9)
-    ax.set_xticks(x)
-    labels = [f"C{cid}\n{cfgs[cid]['dist']}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)]
-    ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("RMSE")
-    ax.set_title("CNN Enhanced: Per-Client RMSE Comparison")
-    ax.legend(fontsize=10)
-    plt.tight_layout()
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    rmse_plot_df = df[["method", "client_id", "rmse"]].copy()
+    rmse_plot_df["client"] = rmse_plot_df["client_id"].map(lambda cid: f"Client {cid}")
+    sns.barplot(
+        data=rmse_plot_df,
+        x="client",
+        y="rmse",
+        hue="method",
+        hue_order=["Independent", "FedAvg", "Proposed"],
+        palette=METHOD_PALETTE,
+        ax=ax,
+        errorbar=None,
+    )
+    ax.set_ylabel("RMSE (lower is better)")
+    ax.set_xlabel("Client")
+    ax.set_title("Per-client RMSE comparison")
+    ax.legend(title=None, fontsize=8)
+    ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_client_rmse_comparison.png")
 
     # ── 图 2: Proposed 改善率 ──
     prop_df = df[df["method"] == "Proposed"]
-    fig, ax = plt.subplots(figsize=(12, 6))
-    x = np.arange(num_clients)
-    width = 0.3
-    ax.bar(x - width / 2, prop_df["improvement_over_fedavg_rmse"], width,
-           label="vs FedAvg", color="#3498db")
-    ax.bar(x + width / 2, prop_df["improvement_over_independent_rmse"], width,
-           label="vs Independent", color="#2ecc71")
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    imp_df = pd.DataFrame(
+        {
+            "client": [f"Client {cid}" for cid in prop_df["client_id"]],
+            "vs FedAvg": prop_df["improvement_over_fedavg_rmse"].values,
+            "vs Independent": prop_df["improvement_over_independent_rmse"].values,
+        }
+    ).melt(id_vars="client", var_name="baseline", value_name="improvement")
+    sns.barplot(
+        data=imp_df,
+        x="client",
+        y="improvement",
+        hue="baseline",
+        palette={"vs FedAvg": METHOD_PALETTE["FedAvg"], "vs Independent": METHOD_PALETTE["Proposed"]},
+        ax=ax,
+        errorbar=None,
+    )
     ax.axhline(0, color="black", linewidth=0.8)
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"C{cid}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)], fontsize=9)
     ax.set_ylabel("RMSE Improvement (%)")
-    ax.set_title("CNN Enhanced: Proposed RMSE Improvement by Client")
-    ax.legend()
-    plt.tight_layout()
+    ax.set_xlabel("Client")
+    ax.set_title("RMSE improvement of Proposed by client")
+    ax.legend(title=None)
+    ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_client_improvement.png")
     print("[client_metrics] Done.\n")
 
@@ -1792,30 +1971,31 @@ def run_peak_experiment(output_dir: Path) -> None:
     print("\n[peak] Summary:\n", agg_sum.to_string(index=False))
 
     # 绘图
-    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
     methods = ["Independent", "FedAvg", "Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
-    x = np.arange(len(methods))
-    width = 0.2
     period_order = ["morning_peak", "evening_peak", "off_peak", "incident_period"]
-    for p_idx, period in enumerate(period_order):
-        sub = agg_sum[agg_sum["period"] == period]
-        offset = (p_idx - 1.5) * width
-        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] if m in sub["method"].values else np.nan for m in methods]
-        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] if m in sub["method"].values else np.nan for m in methods]
-        axes[0].bar(x + offset, rmse_vals, width, label=period, alpha=0.85)
-        axes[1].bar(x + offset, mae_vals, width, label=period, alpha=0.85)
-    for ax in axes:
-        ax.set_xticks(x)
-        ax.set_xticklabels(methods)
-        ax.set_xlabel("Method")
-        ax.legend(fontsize=7, title="Period")
-    axes[0].set_title("RMSE by Traffic Period")
-    axes[0].set_ylabel("RMSE")
-    axes[1].set_title("MAE by Traffic Period")
-    axes[1].set_ylabel("MAE")
-    fig.suptitle("CNN Enhanced: Peak / Off-peak / Incident Analysis", fontsize=14)
-    plt.tight_layout()
+    agg_sum["period"] = pd.Categorical(agg_sum["period"], categories=period_order, ordered=True)
+    for idx, metric in enumerate(["rmse", "mae"]):
+        sns.barplot(
+            data=agg_sum.sort_values("period"),
+            x="period",
+            y=f"{metric}_mean",
+            hue="method",
+            hue_order=methods,
+            palette=METHOD_PALETTE,
+            ax=axes[idx],
+            errorbar=None,
+        )
+        axes[idx].set_title(f"{metric.upper()} across traffic periods")
+        axes[idx].set_xlabel("Traffic period")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+        axes[idx].tick_params(axis="x", rotation=20)
+        if idx == 0:
+            axes[idx].legend(title=None, fontsize=8)
+        else:
+            axes[idx].get_legend().remove()
+    fig.suptitle("Peak, off-peak, and incident comparison", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_peak_offpeak_comparison.png")
     print("[peak] Done.\n")
 
@@ -1869,25 +2049,35 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
                  "flow_event": "+ Event", "flow_region": "+ Region", "full": "Full"}
     fs_order = list(feature_sets)
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    for m_idx, method in enumerate(["FedAvg", "Proposed"]):
-        sub = agg[agg["method"] == method]
-        x = np.arange(len(fs_order))
-        rmse_vals = [sub[sub["feature_set"] == fs]["rmse_mean"].values[0] for fs in fs_order]
-        mae_vals = [sub[sub["feature_set"] == fs]["mae_mean"].values[0] for fs in fs_order]
-        axes[0].plot(x, rmse_vals, "o-", label=method, linewidth=2)
-        axes[1].plot(x, mae_vals, "s--", label=method, linewidth=2)
-    for ax in axes:
-        ax.set_xticks(range(len(fs_order)))
-        ax.set_xticklabels([fs_labels[fs] for fs in fs_order], rotation=20, ha="right")
-        ax.set_xlabel("Feature Set")
-        ax.legend()
-    axes[0].set_title("RMSE by Feature Set")
-    axes[0].set_ylabel("RMSE")
-    axes[1].set_title("MAE by Feature Set")
-    axes[1].set_ylabel("MAE")
-    fig.suptitle("CNN Enhanced: Feature Ablation", fontsize=14)
-    plt.tight_layout()
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    plot_df = agg.copy()
+    plot_df["feature_label"] = plot_df["feature_set"].map(fs_labels)
+    plot_df["feature_label"] = pd.Categorical(
+        plot_df["feature_label"],
+        categories=[fs_labels[fs] for fs in fs_order],
+        ordered=True,
+    )
+    for idx, metric in enumerate(["rmse", "mae"]):
+        sns.barplot(
+            data=plot_df.sort_values("feature_label"),
+            x="feature_label",
+            y=f"{metric}_mean",
+            hue="method",
+            hue_order=["FedAvg", "Proposed"],
+            palette=METHOD_PALETTE,
+            ax=axes[idx],
+            errorbar=None,
+        )
+        axes[idx].set_title(f"{metric.upper()} by feature set")
+        axes[idx].set_xlabel("Feature set")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+        axes[idx].tick_params(axis="x", rotation=20)
+        if idx == 0:
+            axes[idx].legend(title=None)
+        else:
+            axes[idx].get_legend().remove()
+    fig.suptitle("Feature ablation", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_feature_ablation.png")
     print("[feature_ablation] Done.\n")
 
@@ -1927,7 +2117,9 @@ WORKFLOW_FUNCTIONS = {
 
 
 def run_project(workflow: str, output_dir: Path) -> None:
+    configure_academic_plot_style()
     ensure_output_dir(output_dir)
+    export_figure_index(output_dir)
     print(f"[cnn_fed_enhanced] workflow={workflow}, device={DEVICE}")
     print(f"[cnn_fed_enhanced] output={output_dir}")
 

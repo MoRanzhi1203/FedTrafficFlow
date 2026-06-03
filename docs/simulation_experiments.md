@@ -1,8 +1,8 @@
-# 基础仿真实验文档
+# 仿真实验文档
 
 ## 1. 概述
 
-本目录包含两个自包含的联邦学习基础仿真实验脚本，基于合成交通数据验证 CNN/GCN + BiLSTM + Attention 模型在联邦场景下的性能。
+本目录包含 5 个联邦学习仿真实验脚本，覆盖基础 CNN/GCN、增强 CNN/GCN 以及鲁棒性实验。所有实验均基于合成交通数据，统一采用论文风格可视化输出，便于直接用于结果汇报和论文制图。
 
 ## 2. 文件结构
 
@@ -10,20 +10,39 @@
 simulation_experiments/
     cnn_fed_base.py          # CNN + BiLSTM + Attention 基础联邦仿真
     gcn_fed_base.py          # GCN + BiLSTM + Attention 基础联邦仿真 (图结构)
-    requirements_ccn.txt     # CCN/C 仿真依赖
+    cnn_fed_enhanced_experiments.py   # CNN 增强联邦仿真
+    gcn_fed_enhanced_experiments.py   # GCN 增强联邦仿真
+    fed_robustness_experiments.py     # 鲁棒性实验
+    requirements_ccn.txt     # CNN 仿真依赖
     requirements_gcn.txt     # GCN 仿真依赖
 ```
 
 ## 3. 运行命令
 
 ```powershell
-conda activate analysis
-cd simulation_experiments
-python cnn_fed_base.py --workflow all
-python gcn_fed_base.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_base.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_base.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_enhanced_experiments.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_enhanced_experiments.py --workflow all
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/fed_robustness_experiments.py --workflow all
 ```
 
-workflow 选项：`all`（默认）、`overview`（仅总览）、`ablation`（仅消融）。
+常用 workflow 示例：
+
+```powershell
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_base.py --workflow data_viz
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_base.py --workflow convergence
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/cnn_fed_enhanced_experiments.py --workflow client_metrics
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/gcn_fed_enhanced_experiments.py --workflow fixed_vs_dynamic
+E:\anaconda3\envs\analysis\python.exe simulation_experiments/fed_robustness_experiments.py --workflow communication_delay
+```
+
+说明：
+
+- 基础实验支持 `all`、`data_viz`、`main`、`convergence`
+- CNN 增强实验支持 `all`、`data_viz`、`main`、`aggregation`、`lambda`、`client_scale`、`noniid`、`convergence`、`client_metrics`、`peak`、`feature_ablation`
+- GCN 增强实验支持 `all`、`data_viz`、`fixed_vs_dynamic`、`main`、`aggregation`、`lambda`、`client_scale`、`noniid`、`convergence`、`client_metrics`、`peak`、`congestion_delay`
+- 鲁棒性实验支持 `all`、`communication_cost`、`client_dropout`、`communication_delay`、`dp_noise`
 
 ## 4. 核心架构
 
@@ -104,29 +123,78 @@ global_model = sum(n_i / total_n * local_model_i)
 | `SEED` | 42 (统一) |
 | train/val/test 比例 | 70%/10%/20% (时间顺序，不打乱) |
 
-## 6. 输出文件
+## 6. 可视化规范
 
-### CCN/C 输出 (`results/simulation_experiments/cnn/`)
+所有实验脚本内部统一配置 `configure_academic_plot_style()`，核心规范如下：
+
+- 使用 `seaborn` 的 `whitegrid` + `paper` 主题
+- 默认输出分辨率为 `300 dpi`
+- 统一方法颜色映射，确保 `Independent`、`FedAvg`、`Proposed` 及其 CNN/GCN 变体跨图一致
+- 所有图片通过 `save_figure(fig, output_dir, file_name)` 保存，统一 `bbox_inches="tight"` 并自动关闭图对象
+- 图题、坐标轴和图例尽量使用英文，避免论文排版中的中文字体乱码
+- 每个结果目录额外生成 `figure_index.csv`，用于图表检索和论文选图
+
+## 7. 输出文件
+
+### 基础 CNN 输出 (`results/simulation_experiments/cnn_fed_base/`)
 
 | 文件 | 内容 |
 |---|---|
-| `cnn_overview_figure.png` | overview 总览对比图 (6 子图) |
-| `cnn_overview_metrics.csv` | overview 指标表 |
-| `cnn_ablation_figure.png` | ablation 消融对比图 (4 子图) |
-| `cnn_ablation_metrics.csv` | ablation 消融汇总表 |
-| `cnn_run_log.txt` | 运行日志 |
+| `base_dataset_*.png` | 基础数据集时间序列、热力图、箱线图与样本统计图 |
+| `cnn_base_main_comparison.png` | 基础 CNN 主结果对比图 |
+| `cnn_base_convergence.png` | 收敛与训练损失图 |
+| `cnn_base_metrics*.csv` | 指标结果与汇总 |
+| `figure_index.csv` | 图表索引 |
 
-### GCN 输出 (`results/simulation_experiments/gcn/`)
+### 基础 GCN 输出 (`results/simulation_experiments/gcn_fed_base/`)
 
 | 文件 | 内容 |
 |---|---|
-| `gcn_overview_figure.png` | overview 总览对比图 |
-| `gcn_overview_metrics.csv` | overview 指标表 |
-| `gcn_ablation_figure.png` | ablation 消融对比图 |
-| `gcn_ablation_metrics.csv` | ablation 消融汇总表 |
-| `gcn_run_log.txt` | 运行日志 |
+| `base_dataset_*.png` | 基础数据集可视化 |
+| `base_gcn_*.png` | 固定邻接矩阵与节点度分布 |
+| `gcn_base_main_comparison.png` | 基础 GCN 主结果对比图 |
+| `gcn_base_convergence.png` | 收敛与训练损失图 |
+| `gcn_base_metrics*.csv` | 指标结果与汇总 |
+| `figure_index.csv` | 图表索引 |
 
-## 7. 消融实验模型变体
+### 增强 CNN 输出 (`results/simulation_experiments/cnn_fed_enhanced/`)
+
+| 文件 | 内容 |
+|---|---|
+| `enhanced_dataset_*.png` | 增强数据集分布、峰值模式、相关性与事件示例 |
+| `cnn_enhanced_main_rmse_comparison.png` | 主结果对比图 |
+| `cnn_enhanced_global_validation_rmse.png` | 全局验证 RMSE 收敛图 |
+| `cnn_enhanced_client_training_loss.png` | 客户端训练损失图 |
+| `cnn_enhanced_client_rmse_comparison.png` | 按客户端 RMSE 对比图 |
+| `cnn_enhanced_peak_offpeak_comparison.png` | 峰值/平峰/事件时段对比图 |
+| `cnn_enhanced_feature_ablation.png` | 特征消融图 |
+| `figure_index.csv` | 图表索引 |
+
+### 增强 GCN 输出 (`results/simulation_experiments/gcn_fed_enhanced/`)
+
+| 文件 | 内容 |
+|---|---|
+| `enhanced_dataset_*.png` | 增强数据集可视化 |
+| `enhanced_gcn_*.png` | 固定/动态图结构、功能相似、拥堵延迟相关图 |
+| `gcn_enhanced_main_rmse_comparison.png` | 主结果对比图 |
+| `gcn_enhanced_fixed_vs_dynamic_comparison.png` | 固定图与动态图对比 |
+| `gcn_enhanced_global_validation_rmse.png` | 全局验证 RMSE 收敛图 |
+| `gcn_enhanced_client_rmse_comparison.png` | 按客户端 RMSE 对比图 |
+| `gcn_enhanced_peak_offpeak_comparison.png` | 峰值/平峰/事件时段对比图 |
+| `gcn_enhanced_congestion_delay_comparison.png` | 拥堵延迟图结构对比 |
+| `figure_index.csv` | 图表索引 |
+
+### 鲁棒性实验输出 (`results/simulation_experiments/fed_robustness/`)
+
+| 文件 | 内容 |
+|---|---|
+| `fed_robustness_communication_cost.png` | 通信开销图 |
+| `fed_robustness_client_dropout.png` | 客户端掉线鲁棒性图 |
+| `fed_robustness_communication_delay.png` | 通信延迟鲁棒性图 |
+| `fed_robustness_dp_noise.png` | 隐私噪声敏感性图 |
+| `figure_index.csv` | 图表索引 |
+
+## 8. 消融实验模型变体
 
 | CCN/C 变体 | GCN 变体 | 说明 |
 |---|---|---|
@@ -135,7 +203,7 @@ global_model = sum(n_i / total_n * local_model_i)
 | LSTM-Attention | LSTM-Attention | 移除空间编码器 |
 | CCN-Attention | GCN-Attention | 移除 LSTM 时序分支 |
 
-## 8. 历史变更记录
+## 9. 历史变更记录
 
 | 日期 | 变更 |
 |---|---|
@@ -148,3 +216,5 @@ global_model = sum(n_i / total_n * local_model_i)
 | 2026-06 | **动量混合**：FedAvg 聚合增加 0.9/0.1 动量混合 |
 | 2026-06 | **StepLR**：增加学习率调度器 (step_size=3, gamma=0.9) |
 | 2026-06 | **seaborn 可视化**：dpi 150→300, whitegrid 主题 |
+| 2026-06 | **文档同步**：补充基础/增强/鲁棒性实验脚本、结果目录、workflow 与 figure_index 说明 |
+| 2026-06 | **图表规范**：统一论文风格 PNG 命名、300 dpi 输出与学术风格保存函数 |

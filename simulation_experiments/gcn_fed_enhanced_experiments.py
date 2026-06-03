@@ -41,6 +41,7 @@ plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 import torch.nn as nn
 
@@ -60,6 +61,48 @@ from cnn_fed_enhanced_experiments import (
 )
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+METHOD_PALETTE = {
+    "Independent": "#4C72B0",
+    "FedAvg": "#DD8452",
+    "CNN-FedAvg": "#DD8452",
+    "GCN-FedAvg": "#DD8452",
+    "Proposed": "#55A868",
+    "CNN-Proposed": "#55A868",
+    "GCN-Proposed": "#55A868",
+    "Loss-weighted": "#C44E52",
+    "Data-loss weighted": "#8172B3",
+    "Similarity-aware": "#937860",
+}
+CLIENT_PALETTE = sns.color_palette("tab10")
+
+FIGURE_INDEX_ENTRIES = [
+    {"figure_file": "enhanced_dataset_client_timeseries.png", "workflow": "data_viz", "figure_type": "line", "description": "Per-client average traffic flow time series for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_distribution_comparison.png", "workflow": "data_viz", "figure_type": "box", "description": "Client-level traffic flow distribution comparison for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_client_config.png", "workflow": "data_viz", "figure_type": "bar", "description": "Client configuration overview for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "yes"},
+    {"figure_file": "enhanced_dataset_peak_pattern.png", "workflow": "data_viz", "figure_type": "line", "description": "Twenty-four-hour peak traffic patterns across enhanced clients.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_incident_example.png", "workflow": "data_viz", "figure_type": "line", "description": "Incident example with shaded disruption periods for the incident-prone client.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "yes"},
+    {"figure_file": "enhanced_dataset_client_correlation_matrix.png", "workflow": "data_viz", "figure_type": "heatmap", "description": "Inter-client traffic correlation matrix for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_dataset_node_correlation_matrix.png", "workflow": "data_viz", "figure_type": "heatmap", "description": "Node correlation matrix for a representative enhanced client.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_fixed_adjacency_matrix.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Fixed adjacency matrix used by the enhanced GCN experiment.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_dynamic_adjacency_peak.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Dynamic adjacency matrix during peak traffic.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_dynamic_adjacency_offpeak.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Dynamic adjacency matrix during off-peak traffic.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_fixed_dynamic_adjacency_comparison.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Comparison of fixed and dynamic graph structures across traffic periods.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_functional_similarity_matrix.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Functional similarity matrix estimated from node traffic profiles.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_congestion_delay_matrix.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Congestion propagation delay matrix for the enhanced GCN setting.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "enhanced_gcn_peak_graph_change.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Graph structure changes across off-peak and peak traffic periods.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "yes"},
+    {"figure_file": "gcn_enhanced_fixed_vs_dynamic_comparison.png", "workflow": "fixed_vs_dynamic", "figure_type": "bar", "description": "Performance comparison under fixed, dynamic, and functional graph definitions.", "source_csv": "gcn_enhanced_fixed_vs_dynamic_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_congestion_delay_comparison.png", "workflow": "congestion_delay", "figure_type": "bar", "description": "Performance comparison across congestion-delay-related graph definitions.", "source_csv": "gcn_enhanced_congestion_delay_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_main_rmse_comparison.png", "workflow": "main", "figure_type": "bar", "description": "Main comparison of Independent, GCN-FedAvg, and GCN-Proposed.", "source_csv": "gcn_enhanced_main_metrics_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_aggregation_ablation.png", "workflow": "aggregation", "figure_type": "bar", "description": "Aggregation strategy ablation on RMSE and MAE.", "source_csv": "gcn_enhanced_aggregation_ablation_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_lambda_sensitivity.png", "workflow": "lambda", "figure_type": "line", "description": "Lambda sensitivity analysis for the data-loss weighted GCN aggregation strategy.", "source_csv": "gcn_enhanced_lambda_sensitivity_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_client_scale.png", "workflow": "client_scale", "figure_type": "line", "description": "Client-scale sensitivity analysis for the enhanced GCN setting.", "source_csv": "gcn_enhanced_client_scale_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_noniid_strength.png", "workflow": "noniid", "figure_type": "bar", "description": "Method comparison under different Non-IID strengths for enhanced GCN.", "source_csv": "gcn_enhanced_noniid_strength_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_global_validation_rmse.png", "workflow": "convergence", "figure_type": "line", "description": "Global validation RMSE across communication rounds for enhanced GCN.", "source_csv": "gcn_enhanced_convergence_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_client_training_loss.png", "workflow": "convergence", "figure_type": "line", "description": "Per-client training loss across communication rounds for GCN-FedAvg and GCN-Proposed.", "source_csv": "gcn_enhanced_convergence_round_metrics.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_client_rmse_comparison.png", "workflow": "client_metrics", "figure_type": "bar", "description": "Per-client RMSE comparison across Independent, GCN-FedAvg, and GCN-Proposed.", "source_csv": "gcn_enhanced_client_metrics.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_peak_offpeak_comparison.png", "workflow": "peak", "figure_type": "bar", "description": "Performance comparison across peak, off-peak, and incident periods for enhanced GCN.", "source_csv": "gcn_enhanced_peak_offpeak_summary.csv", "used_in_paper": "recommended"},
+]
 
 # 全局常量（与 CNN 增强实验保持一致）
 NUM_NODES = 8
@@ -81,16 +124,41 @@ def set_global_seed(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
+def configure_academic_plot_style() -> None:
+    """Configure a unified seaborn style for paper-ready figures."""
+    sns.set_theme(
+        style="whitegrid",
+        context="paper",
+        font_scale=1.2,
+        rc={
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "axes.unicode_minus": False,
+            "axes.edgecolor": "0.2",
+            "axes.linewidth": 0.8,
+            "grid.linewidth": 0.5,
+            "grid.alpha": 0.4,
+            "legend.frameon": True,
+            "legend.framealpha": 0.9,
+            "legend.edgecolor": "0.8",
+            "figure.autolayout": False,
+        },
+    )
+    plt.rcParams["font.family"] = "DejaVu Sans"
+    plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
+
+
 def ensure_output_dir(output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
-    path = ensure_output_dir(output_dir) / file_name
-    fig.savefig(path, dpi=300, bbox_inches="tight")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
     plt.close(fig)
-    print(f"[saved] {path}")
+    print(f"Saved figure: {path}")
     return path
 
 
@@ -99,6 +167,47 @@ def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
     df.to_csv(path, index=False, encoding="utf-8")
     print(f"[saved] {path}")
     return path
+
+
+def export_figure_index(output_dir: Path) -> Path:
+    """Export figure metadata for paper curation."""
+    return save_dataframe(pd.DataFrame(FIGURE_INDEX_ENTRIES), output_dir, "figure_index.csv")
+
+
+def plot_heatmap(
+    ax,
+    matrix,
+    *,
+    title: str,
+    xlabel: str,
+    ylabel: str,
+    cmap: str,
+    cbar_label: str,
+    vmin=None,
+    vmax=None,
+    center=None,
+    square: bool = True,
+    annot: bool = False,
+    fmt: str = ".2f",
+    mask=None,
+):
+    """Draw a consistent academic heatmap."""
+    sns.heatmap(
+        matrix,
+        ax=ax,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        center=center,
+        square=square,
+        annot=annot,
+        fmt=fmt,
+        mask=mask,
+        cbar_kws={"label": cbar_label},
+    )
+    ax.set_title(title)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
 
 
 # ══════════════════════════════════════════════════════════════
@@ -859,76 +968,79 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
     raw_signals, raw_masks, cfgs = get_enhanced_raw_data()
     num_clients = len(cfgs)
     ensure_output_dir(output_dir)
-    colors = plt.cm.tab10(np.linspace(0, 1, num_clients))
+    colors = CLIENT_PALETTE[:num_clients]
 
     # ── 1. client 平均时间序列 ──
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     for cid in range(num_clients):
         ts = raw_signals[cid].mean(axis=1)[:200]
-        ax.plot(ts, color=colors[cid], linewidth=1.5,
-                label=f"C{cid} ({cfgs[cid]['pattern']})")
-    ax.set_xlabel("Time Step"); ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title("Enhanced Dataset (GCN): Per-Client Average Traffic Flow Time Series")
-    ax.legend(fontsize=7, loc="upper right")
+        sns.lineplot(x=np.arange(len(ts)), y=ts, ax=ax, color=colors[cid], linewidth=2.0, alpha=0.85, label=f"Client {cid}")
+    ax.set_xlabel("Time Step"); ax.set_ylabel("Traffic Flow")
+    ax.set_title("Per-client average traffic flow")
+    ax.legend(fontsize=8, loc="best", ncol=2)
     save_figure(fig, output_dir, "enhanced_dataset_client_timeseries.png")
 
     # ── 2. 分布对比 ──
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    box_data = [raw_signals[cid].ravel() for cid in range(num_clients)]
-    bp = axes[0].boxplot(box_data, tick_labels=[f"C{cid}\n{cfgs[cid]['dist']}"
-                          for cid in range(num_clients)], patch_artist=True, showfliers=False)
-    for patch, c in zip(bp["boxes"], colors):
-        patch.set_facecolor(c)
-    axes[0].set_title("Traffic Flow Distribution by Client (Boxplot)")
-    axes[0].set_ylabel("Traffic Flow")
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    dist_rows = []
     for cid in range(num_clients):
-        axes[1].hist(raw_signals[cid].ravel(), bins=40, alpha=0.4,
-                     color=colors[cid], label=f"C{cid} ({cfgs[cid]['dist']})")
-    axes[1].set_title("Traffic Flow Distribution (Histogram)")
-    axes[1].set_xlabel("Traffic Flow"); axes[1].legend(fontsize=7)
-    plt.tight_layout()
+        sampled_values = raw_signals[cid].ravel()[::10]
+        dist_rows.extend({"client": f"Client {cid}", "traffic_flow": float(v)} for v in sampled_values)
+    dist_df = pd.DataFrame(dist_rows)
+    sns.boxplot(data=dist_df, x="client", y="traffic_flow", ax=axes[0], palette=colors, showfliers=False, linewidth=1.0)
+    axes[0].set_title("Non-IID traffic distribution by client")
+    axes[0].set_xlabel("Client")
+    axes[0].set_ylabel("Traffic flow")
+    for cid in range(num_clients):
+        sns.histplot(raw_signals[cid].ravel(), bins=35, alpha=0.25, stat="density", element="step", fill=True, color=colors[cid], ax=axes[1], label=f"Client {cid}")
+    axes[1].set_title("Traffic flow density comparison")
+    axes[1].set_xlabel("Traffic flow"); axes[1].set_ylabel("Density"); axes[1].legend(fontsize=7)
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_dataset_distribution_comparison.png")
 
     # ── 3. client 配置概览 ──
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    cids = np.arange(num_clients)
-    axes[0, 0].bar(cids, [c["n_samples"] for c in cfgs], color=colors)
-    axes[0, 0].set_title("Sample Size per Client"); axes[0, 0].set_xticks(cids)
-    axes[0, 1].bar(cids, [c["noise"] for c in cfgs], color=colors)
-    axes[0, 1].set_title("Noise Level per Client"); axes[0, 1].set_xticks(cids)
-    axes[1, 0].bar(cids, [c["base"] for c in cfgs], color=colors)
-    axes[1, 0].set_title("Base Flow per Client"); axes[1, 0].set_xticks(cids)
-    axes[1, 1].bar(cids, [c.get("incident_prob", 0) for c in cfgs], color=colors)
-    axes[1, 1].set_title("Incident Probability per Client"); axes[1, 1].set_xticks(cids)
-    plt.tight_layout()
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+    config_specs = [
+        ([c["n_samples"] for c in cfgs], "Sample size"),
+        ([c["noise"] for c in cfgs], "Noise level"),
+        ([c["base"] for c in cfgs], "Base traffic flow"),
+        ([c.get("incident_prob", 0) for c in cfgs], "Incident probability"),
+    ]
+    for ax, (values, title) in zip(axes.flatten(), config_specs):
+        cfg_df = pd.DataFrame({"client": [f"Client {i}" for i in range(num_clients)], "value": values})
+        sns.barplot(data=cfg_df, x="client", y="value", ax=ax, palette=colors, errorbar=None)
+        ax.set_title(title)
+        ax.set_xlabel("Client")
+        ax.set_ylabel(title)
+        ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_dataset_client_config.png")
 
     # ── 4. 高峰模式 ──
-    fig, ax = plt.subplots(figsize=(14, 6))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     for cid in range(num_clients):
         ts = raw_signals[cid].mean(axis=1)
-        ax.plot(ts[:24], "o-", color=colors[cid], linewidth=2, markersize=4,
-                label=f"C{cid}: {cfgs[cid]['pattern']}")
-    ax.set_xlabel("Hour of Day"); ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title("Enhanced Dataset (GCN): 24-Hour Peak Patterns")
-    ax.legend(fontsize=8)
+        sns.lineplot(x=np.arange(24), y=ts[:24], ax=ax, color=colors[cid], linewidth=2.0, alpha=0.85, label=f"Client {cid}")
+    ax.set_xlabel("Hour of Day"); ax.set_ylabel("Traffic Flow")
+    ax.set_title("Peak-period traffic patterns")
+    ax.legend(fontsize=8, ncol=2)
     save_figure(fig, output_dir, "enhanced_dataset_peak_pattern.png")
 
     # ── 5. incident 示例 ──
     incident_cid = 4
-    fig, ax = plt.subplots(figsize=(14, 5))
+    fig, ax = plt.subplots(figsize=(7, 4.5))
     ts = raw_signals[incident_cid].mean(axis=1)
     mask = raw_masks[incident_cid]
     t = np.arange(len(ts))
-    ax.plot(t, ts, color="#3498db", linewidth=1, label="Traffic Flow")
+    sns.lineplot(x=t, y=ts, ax=ax, color=METHOD_PALETTE["FedAvg"], linewidth=2.0, label="Traffic flow")
     in_inc = False; start = 0
     for i in range(len(mask)):
         if mask[i] and not in_inc: start = i; in_inc = True
         elif not mask[i] and in_inc:
             ax.axvspan(start, i, alpha=0.3, color="#e74c3c"); in_inc = False
     if in_inc: ax.axvspan(start, len(mask) - 1, alpha=0.3, color="#e74c3c")
-    ax.set_xlabel("Time Step"); ax.set_ylabel("Avg Traffic Flow")
-    ax.set_title(f"Enhanced Dataset (GCN): Client {incident_cid} ({cfgs[incident_cid]['pattern']}) with Incidents")
+    ax.set_xlabel("Time Step"); ax.set_ylabel("Traffic flow")
+    ax.set_title(f"Incident example for client {incident_cid}")
     ax.legend()
     save_figure(fig, output_dir, "enhanced_dataset_incident_example.png")
 
@@ -936,23 +1048,15 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
     min_len = min(len(s) for s in raw_signals)
     client_ts = np.array([raw_signals[cid].mean(axis=1)[:min_len] for cid in range(num_clients)])
     corr_client = np.corrcoef(client_ts)
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(corr_client, cmap="coolwarm", vmin=-1, vmax=1, aspect="equal")
-    for i in range(num_clients):
-        for j in range(num_clients):
-            ax.text(j, i, f"{corr_client[i, j]:.2f}", ha="center", va="center", fontsize=9)
-    ax.set_title("Enhanced Dataset (GCN): Inter-Client Correlation Matrix"); plt.colorbar(im, ax=ax)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plot_heatmap(ax, corr_client, title="Inter-client correlation matrix", xlabel="Client ID", ylabel="Client ID", cmap="vlag", cbar_label="Correlation", vmin=-1, vmax=1, center=0, annot=True, fmt=".2f")
     save_figure(fig, output_dir, "enhanced_dataset_client_correlation_matrix.png")
 
     # ── 7. 节点间相关系数矩阵 ──
     rep_cid = 0
     node_corr = np.corrcoef(raw_signals[rep_cid].T)
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(node_corr, cmap="coolwarm", vmin=-1, vmax=1, aspect="equal")
-    for i in range(NUM_NODES):
-        for j in range(NUM_NODES):
-            ax.text(j, i, f"{node_corr[i, j]:.2f}", ha="center", va="center", fontsize=8)
-    ax.set_title(f"Enhanced Dataset (GCN): Node Correlation Matrix (Client {rep_cid})"); plt.colorbar(im, ax=ax)
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plot_heatmap(ax, node_corr, title=f"Node correlation matrix for client {rep_cid}", xlabel="Node ID", ylabel="Node ID", cmap="vlag", cbar_label="Correlation", vmin=-1, vmax=1, center=0, annot=True, fmt=".2f")
     save_figure(fig, output_dir, "enhanced_dataset_node_correlation_matrix.png")
 
     # ── 8. 汇总 CSV ──
@@ -1000,43 +1104,22 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
     A_delay_raw, _, meta_delay = build_congestion_delay_matrix(data, max_lag=5)
 
     # ── 1. 固定邻接矩阵热力图 ──
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(A_fixed_raw, cmap="Blues", aspect="equal", vmin=0, vmax=1)
-    ax.set_title("Enhanced GCN: Fixed Adjacency Matrix (Road Network Topology)")
-    ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-    for i in range(num_nodes):
-        for j in range(num_nodes):
-            if A_fixed_raw[i, j] > 0:
-                ax.text(j, i, f"{A_fixed_raw[i, j]:.2f}", ha="center", va="center", fontsize=7)
-    plt.colorbar(im, ax=ax, label="Weight")
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plot_heatmap(ax, A_fixed_raw, title="Fixed adjacency matrix", xlabel="Node ID", ylabel="Node ID", cmap="mako", cbar_label="Adjacency weight", vmin=0, vmax=1, annot=True, fmt=".2f")
     save_figure(fig, output_dir, "enhanced_gcn_fixed_adjacency_matrix.png")
 
     # ── 2. 高峰期动态邻接矩阵（早高峰） ──
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(A_dyn_morning_raw, cmap="Oranges", aspect="equal", vmin=0, vmax=1)
-    ax.set_title("Enhanced GCN: Dynamic Adjacency (Morning Peak, 07:00-09:00)")
-    ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-    for i in range(num_nodes):
-        for j in range(num_nodes):
-            if A_dyn_morning_raw[i, j] > 0:
-                ax.text(j, i, f"{A_dyn_morning_raw[i, j]:.2f}", ha="center", va="center", fontsize=6)
-    plt.colorbar(im, ax=ax, label="Correlation")
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plot_heatmap(ax, A_dyn_morning_raw, title="Dynamic adjacency during morning peak", xlabel="Node ID", ylabel="Node ID", cmap="viridis", cbar_label="Correlation", vmin=0, vmax=1, annot=True, fmt=".2f")
     save_figure(fig, output_dir, "enhanced_gcn_dynamic_adjacency_peak.png")
 
     # ── 3. 平峰期动态邻接矩阵 ──
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(A_dyn_offpeak_raw, cmap="Greens", aspect="equal", vmin=0, vmax=1)
-    ax.set_title("Enhanced GCN: Dynamic Adjacency (Off-Peak)")
-    ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-    for i in range(num_nodes):
-        for j in range(num_nodes):
-            if A_dyn_offpeak_raw[i, j] > 0:
-                ax.text(j, i, f"{A_dyn_offpeak_raw[i, j]:.2f}", ha="center", va="center", fontsize=6)
-    plt.colorbar(im, ax=ax, label="Correlation")
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plot_heatmap(ax, A_dyn_offpeak_raw, title="Dynamic adjacency during off-peak", xlabel="Node ID", ylabel="Node ID", cmap="viridis", cbar_label="Correlation", vmin=0, vmax=1, annot=True, fmt=".2f")
     save_figure(fig, output_dir, "enhanced_gcn_dynamic_adjacency_offpeak.png")
 
     # ── 4. 固定 vs 动态对比图 ──
-    fig, axes = plt.subplots(1, 4, figsize=(22, 5.5))
+    fig, axes = plt.subplots(1, 4, figsize=(12, 4))
     adj_list = [
         (A_fixed_raw, "Fixed Topology", "Blues"),
         (A_dyn_morning_raw, "Dynamic Morning Peak", "Oranges"),
@@ -1045,51 +1128,30 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
     ]
     for idx, (mat, title, cmap) in enumerate(adj_list):
         ax = axes[idx]
-        im = ax.imshow(mat, cmap=cmap, aspect="equal", vmin=0, vmax=1)
-        ax.set_title(title, fontsize=10)
-        ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-        plt.colorbar(im, ax=ax, fraction=0.046)
-    plt.tight_layout()
+        plot_heatmap(ax, mat, title=title, xlabel="Node ID", ylabel="Node ID", cmap="mako" if idx == 0 else "viridis", cbar_label="Weight", vmin=0, vmax=1)
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_gcn_fixed_dynamic_adjacency_comparison.png")
 
     # ── 5. 功能相似矩阵 ──
-    fig, ax = plt.subplots(figsize=(8, 7))
-    im = ax.imshow(A_func_raw, cmap="Purples", aspect="equal", vmin=0, vmax=1)
-    ax.set_title("Enhanced GCN: Functional Similarity Matrix (Pearson Correlation)")
-    ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-    for i in range(num_nodes):
-        for j in range(num_nodes):
-            if A_func_raw[i, j] > 0.3:
-                ax.text(j, i, f"{A_func_raw[i, j]:.2f}", ha="center", va="center", fontsize=6)
-    plt.colorbar(im, ax=ax, label="|Correlation|")
+    fig, ax = plt.subplots(figsize=(6, 5))
+    plot_heatmap(ax, A_func_raw, title="Functional similarity matrix", xlabel="Node ID", ylabel="Node ID", cmap="mako", cbar_label="Similarity", vmin=0, vmax=1, annot=True, fmt=".2f")
     save_figure(fig, output_dir, "enhanced_gcn_functional_similarity_matrix.png")
 
     # ── 6. 拥堵传播延迟矩阵 ──
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6.5))
-    im0 = axes[0].imshow(A_delay_raw, cmap="YlOrRd", aspect="equal", vmin=0, vmax=5)
-    axes[0].set_title("Enhanced GCN: Congestion Delay Matrix (lag steps)")
-    axes[0].set_xlabel("Target Node ID"); axes[0].set_ylabel("Source Node ID")
-    plt.colorbar(im0, ax=axes[0], label="Delay (steps)")
-    for i in range(num_nodes):
-        for j in range(num_nodes):
-            if A_delay_raw[i, j] < float(5):
-                axes[0].text(j, i, f"{A_delay_raw[i, j]:.0f}", ha="center", va="center", fontsize=7)
-
-    im1 = axes[1].imshow(A_delay_raw, cmap="YlOrRd", aspect="equal", vmin=0, vmax=5)
-    axes[1].set_title("Enhanced GCN: Congestion Delay (annotated)")
-    axes[1].set_xlabel("Target Node ID"); axes[1].set_ylabel("Source Node ID")
-    plt.colorbar(im1, ax=axes[1], label="Delay (steps)")
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    plot_heatmap(axes[0], A_delay_raw, title="Congestion delay matrix", xlabel="Target Node ID", ylabel="Source Node ID", cmap="rocket_r", cbar_label="Delay (steps)", vmin=0, vmax=5, annot=True, fmt=".0f")
+    plot_heatmap(axes[1], A_delay_raw, title="Annotated congestion delay matrix", xlabel="Target Node ID", ylabel="Source Node ID", cmap="rocket_r", cbar_label="Delay (steps)", vmin=0, vmax=5, annot=False, fmt=".0f")
     # 标注 source->target 的方向
     for i in range(num_nodes):
         for j in range(num_nodes):
             if i != j and A_delay_raw[i, j] < 3:
                 axes[1].annotate("", xy=(j, i), xytext=(j - 0.15, i - 0.15),
                                  arrowprops=dict(arrowstyle="->", color="red", lw=0.8))
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_gcn_congestion_delay_matrix.png")
 
     # ── 7. 高峰/平峰图结构变化对比 ──
-    fig, axes = plt.subplots(1, 3, figsize=(20, 6))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     period_mats = [
         (A_dyn_offpeak_raw, "Off-Peak", "Greens"),
         (A_dyn_morning_raw, "Morning Peak (07-09)", "Oranges"),
@@ -1097,12 +1159,9 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
     ]
     for idx, (mat, title, cmap) in enumerate(period_mats):
         ax = axes[idx]
-        im = ax.imshow(mat, cmap=cmap, aspect="equal", vmin=0, vmax=1)
-        ax.set_title(title, fontsize=11)
-        ax.set_xlabel("Node ID"); ax.set_ylabel("Node ID")
-        plt.colorbar(im, ax=ax, fraction=0.046)
-    fig.suptitle("Enhanced GCN: Graph Structure Changes Across Traffic Periods", fontsize=13)
-    plt.tight_layout()
+        plot_heatmap(ax, mat, title=title, xlabel="Node ID", ylabel="Node ID", cmap="viridis", cbar_label="Weight", vmin=0, vmax=1)
+    fig.suptitle("Graph structure changes across traffic periods", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "enhanced_gcn_peak_graph_change.png")
 
     # ── 8. 图结构汇总 CSV ──
@@ -1354,21 +1413,23 @@ def run_main_experiment(output_dir: Path) -> None:
     print("\n[main] Summary:\n", agg.to_string(index=False))
 
     methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
-    colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    for m_idx, method in enumerate(methods):
-        sub = agg[agg["method"] == method]
-        if len(sub) > 0:
-            x = [m_idx]
-            axes[0].bar(x, sub["rmse_mean"], yerr=sub["rmse_std"], capsize=5, color=colors[method], label=method)
-            axes[1].bar(x, sub["mae_mean"], yerr=sub["mae_std"], capsize=5, color=colors[method], label=method)
-    axes[0].set_xticks(range(len(methods))); axes[0].set_xticklabels(methods, rotation=15, ha="right", fontsize=9)
-    axes[1].set_xticks(range(len(methods))); axes[1].set_xticklabels(methods, rotation=15, ha="right", fontsize=9)
-    axes[0].set_title("RMSE"); axes[0].set_ylabel("RMSE")
-    axes[1].set_title("MAE"); axes[1].set_ylabel("MAE")
-    axes[0].legend(fontsize=7); axes[1].legend(fontsize=7)
-    fig.suptitle("GCN Enhanced: Main Experiment (fixed_adjacency)", fontsize=14)
-    plt.tight_layout()
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for idx, metric in enumerate(["rmse", "mae"]):
+        plot_df = pd.DataFrame(
+            {
+                "method": methods,
+                "value": [agg[agg["method"] == m][f"{metric}_mean"].values[0] for m in methods],
+                "error": [agg[agg["method"] == m][f"{metric}_std"].values[0] for m in methods],
+            }
+        )
+        sns.barplot(data=plot_df, x="method", y="value", order=methods, palette=METHOD_PALETTE, ax=axes[idx], errorbar=None)
+        axes[idx].errorbar(np.arange(len(plot_df)), plot_df["value"], yerr=plot_df["error"], fmt="none", ecolor="0.25", elinewidth=1.0, capsize=4)
+        axes[idx].set_title(metric.upper())
+        axes[idx].set_xlabel("Method")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+        axes[idx].tick_params(axis="x", rotation=15)
+    fig.suptitle("GCN enhanced main comparison", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_main_rmse_comparison.png")
     print("[main] Done.\n")
 
@@ -1404,18 +1465,23 @@ def run_aggregation_experiment(output_dir: Path) -> None:
     save_dataframe(agg, output_dir, "gcn_enhanced_aggregation_ablation_summary.csv")
     print("\n[aggregation] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    x = np.arange(len(agg_labels))
-    rmse_vals = [agg[agg["aggregation_method"] == l]["rmse_mean"].values[0] for l in agg_labels]
-    mae_vals = [agg[agg["aggregation_method"] == l]["mae_mean"].values[0] for l in agg_labels]
-    rmse_err = [agg[agg["aggregation_method"] == l]["rmse_std"].values[0] for l in agg_labels]
-    mae_err = [agg[agg["aggregation_method"] == l]["mae_std"].values[0] for l in agg_labels]
-    axes[0].bar(x, rmse_vals, yerr=rmse_err, capsize=5, color=plt.cm.viridis(np.linspace(0.1, 0.9, len(agg_labels))))
-    axes[1].bar(x, mae_vals, yerr=mae_err, capsize=5, color=plt.cm.viridis(np.linspace(0.1, 0.9, len(agg_labels))))
-    axes[0].set_xticks(x); axes[0].set_xticklabels(agg_labels, rotation=20, ha="right", fontsize=8)
-    axes[1].set_xticks(x); axes[1].set_xticklabels(agg_labels, rotation=20, ha="right", fontsize=8)
-    axes[0].set_title("RMSE by Aggregation"); axes[1].set_title("MAE by Aggregation")
-    plt.tight_layout()
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    for idx, metric in enumerate(["rmse", "mae"]):
+        plot_df = pd.DataFrame(
+            {
+                "aggregation_method": agg_labels,
+                "value": [agg[agg["aggregation_method"] == l][f"{metric}_mean"].values[0] for l in agg_labels],
+                "error": [agg[agg["aggregation_method"] == l][f"{metric}_std"].values[0] for l in agg_labels],
+            }
+        )
+        palette = [METHOD_PALETTE.get(label, CLIENT_PALETTE[i % len(CLIENT_PALETTE)]) for i, label in enumerate(agg_labels)]
+        sns.barplot(data=plot_df, x="aggregation_method", y="value", ax=axes[idx], palette=palette, errorbar=None)
+        axes[idx].errorbar(np.arange(len(plot_df)), plot_df["value"], yerr=plot_df["error"], fmt="none", ecolor="0.25", elinewidth=1.0, capsize=4)
+        axes[idx].set_xticklabels(agg_labels, rotation=20, ha="right", fontsize=8)
+        axes[idx].set_title(f"{metric.upper()} by aggregation strategy")
+        axes[idx].set_xlabel("Aggregation strategy")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_aggregation_ablation.png")
     print("[aggregation] Done.\n")
 
@@ -1450,16 +1516,16 @@ def run_lambda_experiment(output_dir: Path) -> None:
     save_dataframe(agg, output_dir, "gcn_enhanced_lambda_sensitivity_summary.csv")
     print("\n[lambda] Summary:\n", agg.to_string(index=False))
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    ax.errorbar(lam_vals, agg["rmse_mean"], yerr=agg["rmse_std"], fmt="o-", capsize=5, label="RMSE", linewidth=2, color="#3498db")
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ax.errorbar(lam_vals, agg["rmse_mean"], yerr=agg["rmse_std"], fmt="o-", capsize=5, label="RMSE", linewidth=2, color=METHOD_PALETTE["GCN-FedAvg"])
     ax2 = ax.twinx()
-    ax2.errorbar(lam_vals, agg["mae_mean"], yerr=agg["mae_std"], fmt="s-", capsize=5, label="MAE", linewidth=2, color="#e74c3c")
-    ax.set_xlabel("Lambda (data_weight fraction)"); ax.set_ylabel("RMSE", color="#3498db")
-    ax2.set_ylabel("MAE", color="#e74c3c")
+    ax2.errorbar(lam_vals, agg["mae_mean"], yerr=agg["mae_std"], fmt="s-", capsize=5, label="MAE", linewidth=2, color=METHOD_PALETTE["Independent"])
+    ax.set_xlabel("Lambda (data_weight fraction)"); ax.set_ylabel("RMSE (lower is better)", color=METHOD_PALETTE["GCN-FedAvg"])
+    ax2.set_ylabel("MAE (lower is better)", color=METHOD_PALETTE["Independent"])
     ax.set_title("GCN Data-Loss Weighted: Lambda Sensitivity")
     l1, lb1 = ax.get_legend_handles_labels(); l2, lb2 = ax2.get_legend_handles_labels()
     ax.legend(l1 + l2, lb1 + lb2, loc="center right")
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_lambda_sensitivity.png")
     print("[lambda] Done.\n")
 
@@ -1511,23 +1577,22 @@ def run_client_scale_experiment(output_dir: Path) -> None:
     print("\n[client_scale] Summary:\n", agg.to_string(index=False))
 
     methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for method in methods:
         sub = agg[agg["method"] == method].sort_values("num_clients")
-        xs = sub["num_clients"].astype(str)
-        axes[0].errorbar(range(len(xs)), sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt="o-", capsize=5, label=method, linewidth=2, color=bar_colors[method])
-        axes[1].errorbar(range(len(xs)), sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt="s--", capsize=5, label=method, linewidth=2, color=bar_colors[method])
+        x_pos = np.arange(len(sub))
+        axes[0].errorbar(x_pos, sub["rmse_mean"], yerr=sub["rmse_std"],
+                         fmt="o-", capsize=5, label=method, linewidth=2, color=METHOD_PALETTE[method])
+        axes[1].errorbar(x_pos, sub["mae_mean"], yerr=sub["mae_std"],
+                         fmt="s-", capsize=5, label=method, linewidth=2, color=METHOD_PALETTE[method])
     for ax in axes:
         ax.set_xticks(range(len(client_nums)))
         ax.set_xticklabels([str(n) for n in client_nums])
         ax.set_xlabel("Number of Clients"); ax.legend(fontsize=9)
     axes[0].set_title("GCN RMSE vs Client Count"); axes[0].set_ylabel("RMSE")
     axes[1].set_title("GCN MAE vs Client Count"); axes[1].set_ylabel("MAE")
-    fig.suptitle("GCN Enhanced: Client Scale Sensitivity", fontsize=14)
-    plt.tight_layout()
+    fig.suptitle("Client scale sensitivity", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_client_scale.png")
     print("[client_scale] Done.\n")
 
@@ -1579,29 +1644,23 @@ def run_noniid_experiment(output_dir: Path) -> None:
     save_dataframe(agg, output_dir, "gcn_enhanced_noniid_strength_summary.csv")
     print("\n[noniid] Summary:\n", agg.to_string(index=False))
 
-    methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
     level_order = ["low", "medium", "high"]
-
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    x = np.arange(len(methods))
-    width = 0.25
-    for l_idx, level in enumerate(level_order):
-        sub = agg[agg["noniid_level"] == level]
-        offset = (l_idx - 1) * width
-        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] for m in methods]
-        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] for m in methods]
-        axes[0].bar(x + offset, rmse_vals, width, label=level, alpha=0.85)
-        axes[1].bar(x + offset, mae_vals, width, label=level, alpha=0.85)
-    for ax in axes:
-        ax.set_xticks(x)
-        ax.set_xticklabels(methods)
-        ax.set_xlabel("Method")
-        ax.legend(title="Non-IID Level", fontsize=8)
-    axes[0].set_title("GCN RMSE by Non-IID Strength"); axes[0].set_ylabel("RMSE")
-    axes[1].set_title("GCN MAE by Non-IID Strength"); axes[1].set_ylabel("MAE")
-    fig.suptitle("GCN Enhanced: Non-IID Strength Sensitivity", fontsize=14)
-    plt.tight_layout()
+    methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    plot_df = agg.copy()
+    plot_df["noniid_level"] = pd.Categorical(plot_df["noniid_level"], categories=level_order, ordered=True)
+    plot_df = plot_df.sort_values("noniid_level")
+    for idx, metric in enumerate(["rmse", "mae"]):
+        sns.barplot(data=plot_df, x="noniid_level", y=f"{metric}_mean", hue="method", hue_order=methods, palette=METHOD_PALETTE, ax=axes[idx], errorbar=None)
+        axes[idx].set_title(f"{metric.upper()} by Non-IID strength")
+        axes[idx].set_xlabel("Non-IID level")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+        if idx == 0:
+            axes[idx].legend(title=None, fontsize=8)
+        else:
+            axes[idx].get_legend().remove()
+    fig.suptitle("Non-IID strength sensitivity", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_noniid_strength.png")
     print("[noniid] Done.\n")
 
@@ -1650,35 +1709,36 @@ def run_convergence_experiment(output_dir: Path) -> None:
     print(last.to_string(index=False))
 
     # ── 图 1: Global Validation RMSE ──
-    fig, ax = plt.subplots(figsize=(10, 6))
-    for method, color in [("GCN-FedAvg", "#3498db"), ("GCN-Proposed", "#2ecc71")]:
+    fig, ax = plt.subplots(figsize=(7, 4.5))
+    for method in ["GCN-FedAvg", "GCN-Proposed"]:
         sub = agg[agg["method"] == method]
-        ax.plot(sub["round"], sub["val_rmse_mean"], "o-", color=color, linewidth=2, label=method)
+        color = METHOD_PALETTE[method]
+        sns.lineplot(data=sub, x="round", y="val_rmse_mean", marker="o", color=color, linewidth=2.0, ax=ax, label=method)
         ax.fill_between(sub["round"],
                          sub["val_rmse_mean"] - sub["val_rmse_std"],
                          sub["val_rmse_mean"] + sub["val_rmse_std"],
                          alpha=0.15, color=color)
-    ax.set_xlabel("Communication Round"); ax.set_ylabel("Validation RMSE (real scale)")
-    ax.set_title("GCN Enhanced: Global Validation RMSE Convergence")
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Validation RMSE")
+    ax.set_title("Global validation RMSE across communication rounds")
     ax.legend()
-    plt.tight_layout()
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_global_validation_rmse.png")
 
     # ── 图 2: Client Training Loss ──
     fedavg_sub = df_round[df_round["method"] == "GCN-FedAvg"]
     prop_sub = df_round[df_round["method"] == "GCN-Proposed"]
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
     for cid in range(num_clients):
         cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
-        axes[0].plot(cdata["round"], cdata["train_loss"], "o-", label=f"C{cid}", markersize=3)
-    axes[0].set_xlabel("Comm Round"); axes[0].set_ylabel("Local Train Loss")
-    axes[0].set_title("GCN-FedAvg: Client Training Loss"); axes[0].legend(fontsize=7)
+        sns.lineplot(data=cdata, x="round", y="train_loss", ax=axes[0], color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)], linewidth=2.0, alpha=0.8, label=f"C{cid}")
+    axes[0].set_xlabel("Communication Round"); axes[0].set_ylabel("Training loss")
+    axes[0].set_title("GCN-FedAvg client training loss"); axes[0].legend(fontsize=7)
     for cid in range(num_clients):
         cdata = prop_sub[prop_sub["client_id"] == cid]
-        axes[1].plot(cdata["round"], cdata["train_loss"], "s--", label=f"C{cid}", markersize=3)
-    axes[1].set_xlabel("Comm Round"); axes[1].set_ylabel("Local Train Loss")
-    axes[1].set_title("GCN-Proposed: Client Training Loss"); axes[1].legend(fontsize=7)
-    plt.tight_layout()
+        sns.lineplot(data=cdata, x="round", y="train_loss", ax=axes[1], color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)], linewidth=2.0, alpha=0.8, label=f"C{cid}")
+    axes[1].set_xlabel("Communication Round"); axes[1].set_ylabel("Training loss")
+    axes[1].set_title("GCN-Proposed client training loss"); axes[1].legend(fontsize=7)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_client_training_loss.png")
 
     # ── 图 3: Convergence Overview ──
@@ -1778,34 +1838,35 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
     methods_data = [("Independent", "#e74c3c", ind_results),
                     ("GCN-FedAvg", "#3498db", fed_results),
                     ("GCN-Proposed", "#2ecc71", prop_results)]
-    fig, ax = plt.subplots(figsize=(14, 6))
-    x = np.arange(num_clients); width = 0.25
-    for m_idx, (name, color, m_list) in enumerate(methods_data):
-        rmse_vals = [r["rmse"] for r in m_list]
-        ax.bar(x + (m_idx - 1) * width, rmse_vals, width, label=name, color=color, alpha=0.9)
-    ax.set_xticks(x)
-    labels = [f"C{cid}\n{cfgs[cid]['dist']}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)]
-    ax.set_xticklabels(labels, fontsize=8)
-    ax.set_ylabel("RMSE"); ax.set_title("GCN Enhanced: Per-Client RMSE Comparison")
-    ax.legend(fontsize=9)
-    plt.tight_layout()
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    rmse_plot_df = df[["method", "client_id", "rmse"]].copy()
+    rmse_plot_df["client"] = rmse_plot_df["client_id"].map(lambda cid: f"Client {cid}")
+    sns.barplot(data=rmse_plot_df, x="client", y="rmse", hue="method", hue_order=["Independent", "GCN-FedAvg", "GCN-Proposed"], palette=METHOD_PALETTE, ax=ax, errorbar=None)
+    ax.set_ylabel("RMSE (lower is better)"); ax.set_xlabel("Client")
+    ax.set_title("Per-client RMSE comparison")
+    ax.legend(title=None, fontsize=8)
+    ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_client_rmse_comparison.png")
 
     # 图 2: Proposed 改善率
     prop_df = df[df["method"] == "GCN-Proposed"]
-    fig, ax = plt.subplots(figsize=(12, 6))
-    x = np.arange(num_clients); width = 0.3
-    ax.bar(x - width / 2, prop_df["improvement_over_fedavg_rmse"], width,
-           label="vs GCN-FedAvg", color="#3498db")
-    ax.bar(x + width / 2, prop_df["improvement_over_independent_rmse"], width,
-           label="vs Independent", color="#2ecc71")
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    imp_df = pd.DataFrame(
+        {
+            "client": [f"Client {cid}" for cid in prop_df["client_id"]],
+            "vs GCN-FedAvg": prop_df["improvement_over_fedavg_rmse"].values,
+            "vs Independent": prop_df["improvement_over_independent_rmse"].values,
+        }
+    ).melt(id_vars="client", var_name="baseline", value_name="improvement")
+    sns.barplot(data=imp_df, x="client", y="improvement", hue="baseline", palette={"vs GCN-FedAvg": METHOD_PALETTE["GCN-FedAvg"], "vs Independent": METHOD_PALETTE["GCN-Proposed"]}, ax=ax, errorbar=None)
     ax.axhline(0, color="black", linewidth=0.8)
-    ax.set_xticks(x)
-    ax.set_xticklabels([f"C{cid}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)], fontsize=9)
     ax.set_ylabel("RMSE Improvement (%)")
-    ax.set_title("GCN Enhanced: GCN-Proposed RMSE Improvement by Client")
-    ax.legend()
-    plt.tight_layout()
+    ax.set_xlabel("Client")
+    ax.set_title("RMSE improvement of GCN-Proposed by client")
+    ax.legend(title=None)
+    ax.tick_params(axis="x", rotation=15)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_client_improvement.png")
     print("[client_metrics] Done.\n")
 
@@ -1936,27 +1997,22 @@ def run_peak_experiment(output_dir: Path) -> None:
     print("\n[peak] Summary:\n", agg_sum.to_string(index=False))
 
     # 图
-    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
     methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
-    bar_colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
-    x = np.arange(len(methods)); width = 0.2
     period_order = ["morning_peak", "evening_peak", "off_peak", "incident_period"]
-    for p_idx, period in enumerate(period_order):
-        sub = agg_sum[agg_sum["period"] == period]
-        offset = (p_idx - 1.5) * width
-        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] if m in sub["method"].values
-                     else np.nan for m in methods]
-        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] if m in sub["method"].values
-                    else np.nan for m in methods]
-        axes[0].bar(x + offset, rmse_vals, width, label=period, alpha=0.85)
-        axes[1].bar(x + offset, mae_vals, width, label=period, alpha=0.85)
-    for ax in axes:
-        ax.set_xticks(x); ax.set_xticklabels(methods); ax.set_xlabel("Method")
-        ax.legend(fontsize=7, title="Period")
-    axes[0].set_title("GCN RMSE by Traffic Period"); axes[0].set_ylabel("RMSE")
-    axes[1].set_title("GCN MAE by Traffic Period"); axes[1].set_ylabel("MAE")
-    fig.suptitle("GCN Enhanced: Peak / Off-peak / Incident Analysis", fontsize=14)
-    plt.tight_layout()
+    agg_sum["period"] = pd.Categorical(agg_sum["period"], categories=period_order, ordered=True)
+    for idx, metric in enumerate(["rmse", "mae"]):
+        sns.barplot(data=agg_sum.sort_values("period"), x="period", y=f"{metric}_mean", hue="method", hue_order=methods, palette=METHOD_PALETTE, ax=axes[idx], errorbar=None)
+        axes[idx].set_title(f"{metric.upper()} across traffic periods")
+        axes[idx].set_xlabel("Traffic period")
+        axes[idx].set_ylabel(f"{metric.upper()} (lower is better)")
+        axes[idx].tick_params(axis="x", rotation=20)
+        if idx == 0:
+            axes[idx].legend(title=None, fontsize=8)
+        else:
+            axes[idx].get_legend().remove()
+    fig.suptitle("Peak, off-peak, and incident comparison", fontsize=13)
+    fig.tight_layout()
     save_figure(fig, output_dir, "gcn_enhanced_peak_offpeak_comparison.png")
     print("[peak] Done.\n")
 
@@ -1998,7 +2054,9 @@ WORKFLOW_FUNCTIONS = {
 
 
 def run_project(workflow: str, output_dir: Path) -> None:
+    configure_academic_plot_style()
     ensure_output_dir(output_dir)
+    export_figure_index(output_dir)
     print(f"[gcn_fed_enhanced] workflow={workflow}, device={DEVICE}")
     print(f"[gcn_fed_enhanced] output={output_dir}")
 

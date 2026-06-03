@@ -1,0 +1,5 @@
+figure_file,workflow,figure_type,description,source_csv,used_in_paper
+fed_robustness_communication_cost.png,communication_cost,line,Communication cost comparison under different client counts and communication rounds.,fed_communication_cost.csv,recommended
+fed_robustness_client_dropout.png,client_dropout,line,Robustness to client dropout measured by RMSE and MAE.,fed_client_dropout_summary.csv,recommended
+fed_robustness_communication_delay.png,communication_delay,line,Robustness to communication delay measured by RMSE and MAE.,fed_communication_delay_summary.csv,recommended
+fed_robustness_dp_noise.png,dp_noise,line,Sensitivity to privacy-preserving noise measured by RMSE and MAE.,fed_dp_noise_summary.csv,recommended

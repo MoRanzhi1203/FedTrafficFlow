@@ -30,6 +30,7 @@ plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
 import numpy as np
 import pandas as pd
+import seaborn as sns
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -50,6 +51,17 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 NUM_NODES = 8; SEQ_LEN = 12; PRED_LEN = 1; BATCH_SIZE = 32; HIDDEN_DIM = 64
 COMM_ROUNDS = 3; LOCAL_EPOCHS = 2; LR = 0.001
 
+METHOD_PALETTE = {
+    "FedAvg": "#DD8452",
+    "Proposed": "#55A868",
+}
+FIGURE_INDEX_ENTRIES = [
+    {"figure_file": "fed_robustness_communication_cost.png", "workflow": "communication_cost", "figure_type": "line", "description": "Communication cost comparison under different client counts and communication rounds.", "source_csv": "fed_communication_cost.csv", "used_in_paper": "recommended"},
+    {"figure_file": "fed_robustness_client_dropout.png", "workflow": "client_dropout", "figure_type": "line", "description": "Robustness to client dropout measured by RMSE and MAE.", "source_csv": "fed_client_dropout_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "fed_robustness_communication_delay.png", "workflow": "communication_delay", "figure_type": "line", "description": "Robustness to communication delay measured by RMSE and MAE.", "source_csv": "fed_communication_delay_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "fed_robustness_dp_noise.png", "workflow": "dp_noise", "figure_type": "line", "description": "Sensitivity to privacy-preserving noise measured by RMSE and MAE.", "source_csv": "fed_dp_noise_summary.csv", "used_in_paper": "recommended"},
+]
+
 # ══════════════════════════════════════════════════════════════
 # 工具
 # ══════════════════════════════════════════════════════════════
@@ -57,13 +69,40 @@ COMM_ROUNDS = 3; LOCAL_EPOCHS = 2; LR = 0.001
 def ensure_output_dir(d: Path) -> Path:
     d.mkdir(parents=True, exist_ok=True); return d
 
+def configure_academic_plot_style() -> None:
+    sns.set_theme(
+        style="whitegrid",
+        context="paper",
+        font_scale=1.2,
+        rc={
+            "figure.dpi": 300,
+            "savefig.dpi": 300,
+            "axes.unicode_minus": False,
+            "axes.edgecolor": "0.2",
+            "axes.linewidth": 0.8,
+            "grid.linewidth": 0.5,
+            "grid.alpha": 0.4,
+            "legend.frameon": True,
+            "legend.framealpha": 0.9,
+            "legend.edgecolor": "0.8",
+            "figure.autolayout": False,
+        },
+    )
+    plt.rcParams["font.family"] = "DejaVu Sans"
+    plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
+
 def save_dataframe(df: pd.DataFrame, d: Path, n: str) -> Path:
     p = ensure_output_dir(d) / n; df.to_csv(p, index=False, encoding="utf-8")
     print(f"[saved] {p}"); return p
 
 def save_figure(fig, d: Path, n: str) -> Path:
-    p = ensure_output_dir(d) / n; fig.savefig(p, dpi=300, bbox_inches="tight")
-    plt.close(fig); print(f"[saved] {p}"); return p
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / n
+    fig.savefig(p, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    plt.close(fig); print(f"Saved figure: {p}"); return p
+
+def export_figure_index(output_dir: Path) -> Path:
+    return save_dataframe(pd.DataFrame(FIGURE_INDEX_ENTRIES), output_dir, "figure_index.csv")
 
 def compute_metrics(preds, truths):
     mse = float(np.mean((preds - truths) ** 2))
@@ -231,7 +270,7 @@ def run_communication_cost_experiment(out: Path) -> None:
         ax.set_xlabel("Num Clients"); ax.set_ylabel("Total Communication (MB)")
         ax.set_title(f"{model_name} Communication Cost"); ax.legend()
     plt.tight_layout()
-    save_figure(fig, out, "fed_communication_cost.png")
+    save_figure(fig, out, "fed_robustness_communication_cost.png")
     print("[communication_cost] Done.\n")
 
 
@@ -300,7 +339,7 @@ def run_client_dropout_experiment(out: Path) -> None:
     axes[1].set_xlabel("Dropout Rate"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Dropout")
     axes[0].legend(); axes[1].legend()
     plt.tight_layout()
-    save_figure(fig, out, "fed_client_dropout.png")
+    save_figure(fig, out, "fed_robustness_client_dropout.png")
     print("[client_dropout] Done.\n")
 
 
@@ -374,7 +413,7 @@ def run_communication_delay_experiment(out: Path) -> None:
     axes[1].set_xlabel("Delay Rate"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Delay")
     axes[0].legend(); axes[1].legend()
     plt.tight_layout()
-    save_figure(fig, out, "fed_communication_delay.png")
+    save_figure(fig, out, "fed_robustness_communication_delay.png")
     print("[communication_delay] Done.\n")
 
 
@@ -447,7 +486,7 @@ def run_dp_noise_experiment(out: Path) -> None:
     axes[1].text(0.5, -0.25, "(Lightweight privacy-noise simulation, NOT formal DP proof)",
                  ha="center", transform=axes[1].transAxes, fontsize=8, color="gray")
     plt.tight_layout()
-    save_figure(fig, out, "fed_dp_noise.png")
+    save_figure(fig, out, "fed_robustness_dp_noise.png")
     print("[dp_noise] Done.\n")
 
 
@@ -470,7 +509,9 @@ WORKFLOW_FUNCTIONS = {
 }
 
 def run_project(workflow: str, out: Path) -> None:
+    configure_academic_plot_style()
     ensure_output_dir(out)
+    export_figure_index(out)
     print(f"[fed_robustness] workflow={workflow}, device={DEVICE}")
     for step in WORKFLOW_MAP[workflow]:
         print(f"\n>>> Running step: {step}")
