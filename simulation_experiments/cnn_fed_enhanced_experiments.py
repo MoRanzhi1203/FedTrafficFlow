@@ -443,6 +443,24 @@ class FederatedClient:
         self.val_losses.append(avg)
         return avg
 
+    @torch.no_grad()
+    def validate_metrics(self, y_mean, y_std, loader=None):
+        """在指定 loader 上计算真实尺度 MSE/RMSE/MAE。"""
+        if loader is None:
+            loader = self.val_loader
+        self.model.eval()
+        preds, truths = [], []
+        for x, y in loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
+            preds.append(pred.view(-1).cpu().numpy())
+            truths.append(y.cpu().numpy())
+        preds = np.concatenate(preds)
+        truths = np.concatenate(truths)
+        preds_raw = preds * y_std + y_mean
+        truths_raw = truths * y_std + y_mean
+        return compute_metrics(preds_raw, truths_raw)
+
     def train_local(self, epochs=3, global_model=None, verbose=False, prefix="Local"):
         if global_model is not None:
             self.model.load_state_dict(global_model.state_dict())
@@ -613,10 +631,13 @@ def run_federated_training(client_data, agg_method="fedavg", lam=0.5,
     server = AggregationServer(_make_model(), num_clients, agg_method=agg_method, lam=lam)
     server.set_client_data_sizes(train_sizes)
 
-    convergence = {"round": [], "avg_train_loss": [], "avg_val_rmse": []}
+    convergence = {"round": [], "avg_train_loss": [], "avg_val_rmse": [], "avg_val_rmse_std": [],
+                    "avg_val_mae": [], "avg_val_mae_std": []}
     for cid in range(num_clients):
         convergence[f"c{cid}_train"] = []
+        convergence[f"c{cid}_val_mse"] = []
         convergence[f"c{cid}_val_rmse"] = []
+        convergence[f"c{cid}_val_mae"] = []
 
     for rnd in range(comm_rounds):
         client_weights, client_losses = [], []
@@ -628,17 +649,26 @@ def run_federated_training(client_data, agg_method="fedavg", lam=0.5,
         server.aggregate(client_weights, client_losses)
 
         if record_convergence:
-            val_rmses = []
-            for client in fed_clients:
+            val_mses, val_rmses, val_maes = [], [], []
+            for cid, client in enumerate(fed_clients):
                 client.model.load_state_dict(server.global_model.state_dict())
-                vl = client.validate(client.val_loader)
-                val_rmses.append(float(np.sqrt(vl)))
+                cd = client_data[cid]
+                mse, rmse, mae = client.validate_metrics(cd["y_mean"], cd["y_std"],
+                                                         client.val_loader)
+                val_mses.append(mse)
+                val_rmses.append(rmse)
+                val_maes.append(mae)
             convergence["round"].append(rnd + 1)
             convergence["avg_train_loss"].append(server.round_losses[-1])
             convergence["avg_val_rmse"].append(float(np.mean(val_rmses)))
+            convergence["avg_val_rmse_std"].append(float(np.std(val_rmses, ddof=0)))
+            convergence["avg_val_mae"].append(float(np.mean(val_maes)))
+            convergence["avg_val_mae_std"].append(float(np.std(val_maes, ddof=0)))
             for cid in range(num_clients):
                 convergence[f"c{cid}_train"].append(client_losses[cid])
+                convergence[f"c{cid}_val_mse"].append(val_mses[cid])
                 convergence[f"c{cid}_val_rmse"].append(val_rmses[cid])
+                convergence[f"c{cid}_val_mae"].append(val_maes[cid])
 
         if verbose:
             print(f"  Round {rnd+1}/{comm_rounds} "
@@ -1061,34 +1091,134 @@ def run_lambda_experiment(output_dir: Path) -> None:
 # ══════════════════════════════════════════════════════════════
 
 def run_convergence_experiment(output_dir: Path) -> None:
-    print("[convergence] Placeholder — to be implemented in next batch.")
-    ensure_output_dir(output_dir)
+    print("\n" + "=" * 60)
+    print("[convergence] FedAvg vs Proposed Convergence Analysis")
+    print("=" * 60)
+
     cfgs = list(CLIENT_CONFIGS_BASE)
-    client_data = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, 42)
-    _, conv = run_federated_training(client_data, agg_method="proposed",
-                                      seed=42, record_convergence=True)
+    num_clients = len(cfgs)
+    ensure_output_dir(output_dir)
 
-    df = pd.DataFrame(conv)
-    save_dataframe(df, output_dir, "cnn_enhanced_convergence.csv")
+    # 增加通信轮次以观察完整收敛
+    conv_rounds = 15
+    all_round_rows = []
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
-    ax = axes[0]
-    ax.plot(conv["round"], conv["avg_train_loss"], "o-", label="Avg Train Loss", color="#3498db")
-    ax.set_xlabel("Communication Round"); ax.set_ylabel("MSE")
-    ax2 = ax.twinx()
-    ax2.plot(conv["round"], conv["avg_val_rmse"], "s-", label="Avg Val RMSE", color="#e74c3c")
-    ax2.set_ylabel("RMSE")
-    l1, lb1 = ax.get_legend_handles_labels(); l2, lb2 = ax2.get_legend_handles_labels()
-    ax.legend(l1 + l2, lb1 + lb2)
-    ax.set_title("Global Convergence")
+    for method, agg_method in [("FedAvg", "fedavg"), ("Proposed", "proposed")]:
+        print(f"\n--- {method} Convergence (seed=42) ---")
+        set_global_seed(42)
+        client_data = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, 42)
+        _, conv = run_federated_training(
+            client_data, agg_method=agg_method, seed=42,
+            comm_rounds=conv_rounds, record_convergence=True)
 
-    ax = axes[1]
-    for cid in range(len(cfgs)):
-        ax.plot(conv["round"], conv[f"c{cid}_train"], "o-", label=f"Client {cid}", markersize=3)
-    ax.set_xlabel("Communication Round"); ax.set_ylabel("Local Train Loss")
-    ax.set_title("Per-Client Local Training Loss"); ax.legend(fontsize=7)
+        for r_idx in range(len(conv["round"])):
+            rnd = conv["round"][r_idx]
+            for cid in range(num_clients):
+                all_round_rows.append({
+                    "round": rnd,
+                    "method": method,
+                    "client_id": cid,
+                    "train_loss": conv[f"c{cid}_train"][r_idx],
+                    "val_mse": conv[f"c{cid}_val_mse"][r_idx],
+                    "val_rmse": conv[f"c{cid}_val_rmse"][r_idx],
+                    "val_mae": conv[f"c{cid}_val_mae"][r_idx],
+                })
+
+    df_round = pd.DataFrame(all_round_rows)
+    save_dataframe(df_round, output_dir, "cnn_enhanced_convergence_round_metrics.csv")
+
+    # 汇总
+    agg = df_round.groupby(["round", "method"]).agg(
+        val_rmse_mean=("val_rmse", "mean"), val_rmse_std=("val_rmse", "std"),
+        val_mae_mean=("val_mae", "mean"), val_mae_std=("val_mae", "std"),
+    ).reset_index()
+    save_dataframe(agg, output_dir, "cnn_enhanced_convergence_summary.csv")
+    print("\n[convergence] Summary (last round):")
+    last = agg[agg["round"] == agg["round"].max()]
+    print(last.to_string(index=False))
+
+    # ── 图 1: Global Validation RMSE ──
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for method, color in [("FedAvg", "#3498db"), ("Proposed", "#2ecc71")]:
+        sub = agg[agg["method"] == method]
+        ax.plot(sub["round"], sub["val_rmse_mean"], "o-",
+                color=color, linewidth=2, label=f"{method} val RMSE")
+        ax.fill_between(sub["round"],
+                         sub["val_rmse_mean"] - sub["val_rmse_std"],
+                         sub["val_rmse_mean"] + sub["val_rmse_std"],
+                         alpha=0.15, color=color)
+    ax.set_xlabel("Communication Round")
+    ax.set_ylabel("Validation RMSE (real scale)")
+    ax.set_title("CNN Enhanced: Global Validation RMSE Convergence")
+    ax.legend()
     plt.tight_layout()
-    save_figure(fig, output_dir, "cnn_enhanced_convergence.png")
+    save_figure(fig, output_dir, "cnn_enhanced_global_validation_rmse.png")
+
+    # ── 图 2: Client Training Loss ──
+    fedavg_sub = df_round[df_round["method"] == "FedAvg"]
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    for cid in range(num_clients):
+        cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
+        axes[0].plot(cdata["round"], cdata["train_loss"], "o-",
+                     label=f"Client {cid}", linewidth=1.5, markersize=3)
+    axes[0].set_xlabel("Communication Round")
+    axes[0].set_ylabel("Local Train Loss (MSE)")
+    axes[0].set_title("FedAvg: Per-Client Training Loss")
+    axes[0].legend(fontsize=7)
+
+    prop_sub = df_round[df_round["method"] == "Proposed"]
+    for cid in range(num_clients):
+        cdata = prop_sub[prop_sub["client_id"] == cid]
+        axes[1].plot(cdata["round"], cdata["train_loss"], "s--",
+                     label=f"Client {cid}", linewidth=1.5, markersize=3)
+    axes[1].set_xlabel("Communication Round")
+    axes[1].set_ylabel("Local Train Loss (MSE)")
+    axes[1].set_title("Proposed: Per-Client Training Loss")
+    axes[1].legend(fontsize=7)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_client_training_loss.png")
+
+    # ── 图 3: Convergence Overview ──
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    # (a) Global val RMSE
+    ax = axes[0, 0]
+    for method, color in [("FedAvg", "#3498db"), ("Proposed", "#2ecc71")]:
+        sub = agg[agg["method"] == method]
+        ax.plot(sub["round"], sub["val_rmse_mean"], "o-", color=color, linewidth=2, label=method)
+        ax.fill_between(sub["round"],
+                         sub["val_rmse_mean"] - sub["val_rmse_std"],
+                         sub["val_rmse_mean"] + sub["val_rmse_std"],
+                         alpha=0.12, color=color)
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Val RMSE")
+    ax.set_title("(a) Global Validation RMSE"); ax.legend()
+
+    # (b) Global val MAE
+    ax = axes[0, 1]
+    for method, color in [("FedAvg", "#3498db"), ("Proposed", "#2ecc71")]:
+        sub = agg[agg["method"] == method]
+        ax.plot(sub["round"], sub["val_mae_mean"], "s--", color=color, linewidth=2, label=method)
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Val MAE")
+    ax.set_title("(b) Global Validation MAE"); ax.legend()
+
+    # (c) FedAvg client training loss
+    ax = axes[1, 0]
+    for cid in range(num_clients):
+        cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
+        ax.plot(cdata["round"], cdata["train_loss"], "o-", label=f"C{cid}", markersize=3)
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Train Loss")
+    ax.set_title("(c) FedAvg: Client Training Loss"); ax.legend(fontsize=7)
+
+    # (d) Proposed client training loss
+    ax = axes[1, 1]
+    for cid in range(num_clients):
+        cdata = prop_sub[prop_sub["client_id"] == cid]
+        ax.plot(cdata["round"], cdata["train_loss"], "s--", label=f"C{cid}", markersize=3)
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Train Loss")
+    ax.set_title("(d) Proposed: Client Training Loss"); ax.legend(fontsize=7)
+
+    fig.suptitle("CNN Enhanced: Convergence Overview", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_convergence_overview.png")
     print("[convergence] Done.\n")
 
 
@@ -1255,8 +1385,119 @@ def run_noniid_experiment(output_dir: Path) -> None:
 
 
 def run_client_metrics_experiment(output_dir: Path) -> None:
-    print("[client_metrics] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[client_metrics] Per-Client Error Analysis")
+    print("=" * 60)
+
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    num_clients = len(cfgs)
     ensure_output_dir(output_dir)
+    seed = 42
+
+    set_global_seed(seed)
+    client_data = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+
+    # Independent
+    print("\n[Independent]")
+    ind_results = run_independent_training(client_data, total_epochs=10, lr=0.01, seed=seed)
+
+    # FedAvg
+    print("[FedAvg]")
+    fed_results, _ = run_federated_training(
+        client_data, agg_method="fedavg", seed=seed, verbose=False)
+
+    # Proposed
+    print("[Proposed]")
+    prop_results, _ = run_federated_training(
+        client_data, agg_method="proposed", seed=seed, verbose=False)
+
+    # 组装详细指标
+    rows = []
+    for cid in range(num_clients):
+        cfg = cfgs[cid]
+        im = ind_results[cid]
+        fm = fed_results[cid]
+        pm = prop_results[cid]
+
+        # Proposed 相对于 FedAvg 的改善率
+        imp_fedavg = (fm["rmse"] - pm["rmse"]) / (fm["rmse"] + 1e-12) * 100
+        imp_ind = (im["rmse"] - pm["rmse"]) / (im["rmse"] + 1e-12) * 100
+
+        rows.append({
+            "method": "Independent", "client_id": cid,
+            "distribution_type": cfg["dist"],
+            "traffic_pattern": cfg["pattern"],
+            "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
+            "incident_prob": cfg.get("incident_prob", 0),
+            "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"],
+            "improvement_over_fedavg_rmse": float("nan"),
+            "improvement_over_independent_rmse": float("nan"),
+        })
+        rows.append({
+            "method": "FedAvg", "client_id": cid,
+            "distribution_type": cfg["dist"],
+            "traffic_pattern": cfg["pattern"],
+            "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
+            "incident_prob": cfg.get("incident_prob", 0),
+            "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"],
+            "improvement_over_fedavg_rmse": float("nan"),
+            "improvement_over_independent_rmse": float("nan"),
+        })
+        rows.append({
+            "method": "Proposed", "client_id": cid,
+            "distribution_type": cfg["dist"],
+            "traffic_pattern": cfg["pattern"],
+            "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
+            "incident_prob": cfg.get("incident_prob", 0),
+            "mse": pm["mse"], "rmse": pm["rmse"], "mae": pm["mae"],
+            "improvement_over_fedavg_rmse": round(imp_fedavg, 2),
+            "improvement_over_independent_rmse": round(imp_ind, 2),
+        })
+
+    df = pd.DataFrame(rows)
+    save_dataframe(df, output_dir, "cnn_enhanced_client_metrics.csv")
+    print("\n[client_metrics] Per-client results:")
+    print(df.to_string(index=False))
+
+    # ── 图 1: 每个 client 的 RMSE 对比 ──
+    fig, ax = plt.subplots(figsize=(14, 6))
+    x = np.arange(num_clients)
+    width = 0.25
+    methods_data = [
+        ("Independent", "#e74c3c", ind_results),
+        ("FedAvg", "#3498db", fed_results),
+        ("Proposed", "#2ecc71", prop_results),
+    ]
+    for m_idx, (name, color, m_list) in enumerate(methods_data):
+        rmse_vals = [r["rmse"] for r in m_list]
+        ax.bar(x + (m_idx - 1) * width, rmse_vals, width, label=name, color=color, alpha=0.9)
+    ax.set_xticks(x)
+    labels = [f"C{cid}\n{cfgs[cid]['dist']}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)]
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylabel("RMSE")
+    ax.set_title("CNN Enhanced: Per-Client RMSE Comparison")
+    ax.legend(fontsize=10)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_client_rmse_comparison.png")
+
+    # ── 图 2: Proposed 改善率 ──
+    prop_df = df[df["method"] == "Proposed"]
+    fig, ax = plt.subplots(figsize=(12, 6))
+    x = np.arange(num_clients)
+    width = 0.3
+    ax.bar(x - width / 2, prop_df["improvement_over_fedavg_rmse"], width,
+           label="vs FedAvg", color="#3498db")
+    ax.bar(x + width / 2, prop_df["improvement_over_independent_rmse"], width,
+           label="vs Independent", color="#2ecc71")
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"C{cid}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)], fontsize=9)
+    ax.set_ylabel("RMSE Improvement (%)")
+    ax.set_title("CNN Enhanced: Proposed RMSE Improvement by Client")
+    ax.legend()
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_client_improvement.png")
+    print("[client_metrics] Done.\n")
 
 
 def run_peak_experiment(output_dir: Path) -> None:
