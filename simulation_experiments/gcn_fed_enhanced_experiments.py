@@ -448,12 +448,40 @@ class GCNEnhancedModel(nn.Module):
 # 数据处理（复用 CNN 增强框架）
 # ══════════════════════════════════════════════════════════════
 
-def build_sequences(data, seq_len, pred_len):
-    X, y = [], []
+def build_sequences(data, seq_len, pred_len, incident_mask=None):
+    """滑动窗口构建监督学习样本，同时返回 target_meta。
+
+    返回:
+        X: (N, seq_len, n_nodes)
+        y: (N,)
+        target_meta: dict with 'target_time_index', 'target_hour', 'target_incident_flag'
+    """
+    X, y, target_time_index = [], [], []
     for i in range(len(data) - seq_len - pred_len + 1):
         X.append(data[i:i + seq_len])
-        y.append(data[i + seq_len + pred_len - 1, 0])
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+        target_idx = i + seq_len + pred_len - 1
+        y.append(data[target_idx, 0])
+        target_time_index.append(target_idx)
+    X = np.array(X, dtype=np.float32)
+    y = np.array(y, dtype=np.float32)
+    t_idx = np.array(target_time_index, dtype=int)
+    n_ts = len(data)
+    target_hour = ((t_idx * 24.0 / n_ts) % 24).astype(np.float32)
+    if incident_mask is not None:
+        target_incident_flag = incident_mask[t_idx].astype(bool)
+    else:
+        target_incident_flag = np.zeros(len(y), dtype=bool)
+    meta = {"target_time_index": t_idx, "target_hour": target_hour,
+            "target_incident_flag": target_incident_flag}
+    return X, y, meta
+
+
+def classify_period_local(hour, incident_flag):
+    """根据真实 hour 和 incident flag 对样本分类。"""
+    if incident_flag: return "incident_period"
+    if 7 <= hour < 9: return "morning_peak"
+    if 17 <= hour < 19: return "evening_peak"
+    return "off_peak"
 
 
 class TimeSeriesDataset(torch.utils.data.Dataset):
@@ -475,12 +503,13 @@ def build_client_data(cfgs, num_nodes, seq_len, pred_len, seed):
     all_data = []
     for cid, cfg in enumerate(cfgs):
         n_ts = cfg["n_samples"] + buffer
-        data, _ = generate_traffic_flow(cfg, n_ts, num_nodes, seed + cid * 100)
-        X, y = build_sequences(data, seq_len, pred_len)
+        data, inc_mask = generate_traffic_flow(cfg, n_ts, num_nodes, seed + cid * 100)
+        X, y, meta = build_sequences(data, seq_len, pred_len, inc_mask)
         n = len(X); n_train = int(n * 0.70); n_val = int(n * 0.10)
         X_train, y_train = X[:n_train], y[:n_train]
         X_val, y_val = X[n_train:n_train + n_val], y[n_train:n_train + n_val]
         X_test, y_test = X[n_train + n_val:], y[n_train + n_val:]
+        meta_test = {k: v[n_train + n_val:] for k, v in meta.items()}
         x_mean = X_train.mean(axis=(0, 1), keepdims=True)
         x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
         y_mean = y_train.mean(); y_std = y_train.std() + 1e-8
@@ -496,7 +525,8 @@ def build_client_data(cfgs, num_nodes, seq_len, pred_len, seed):
             TimeSeriesDataset(X_test_n, y_test_n), batch_size=B, shuffle=False)
         all_data.append({"cid": cid, "train_loader": train_loader,
                           "val_loader": val_loader, "test_loader": test_loader,
-                          "train_size": len(X_train), "y_mean": y_mean, "y_std": y_std})
+                          "train_size": len(X_train), "y_mean": y_mean, "y_std": y_std,
+                          "meta_test": meta_test})
     return all_data
 
 
@@ -572,6 +602,20 @@ class FederatedClient:
         preds = np.concatenate(preds); truths = np.concatenate(truths)
         preds_raw = preds * y_std + y_mean; truths_raw = truths * y_std + y_mean
         return compute_metrics(preds_raw, truths_raw)
+
+    @torch.no_grad()
+    def test_predictions_raw(self, y_mean, y_std):
+        """返回 test_loader 上所有样本的逆标准化预测值和真实值。"""
+        self.model.eval()
+        preds, truths = [], []
+        for x, y in self.test_loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
+            preds.append(pred.view(-1).cpu().numpy())
+            truths.append(y.cpu().numpy())
+        preds = np.concatenate(preds); truths = np.concatenate(truths)
+        preds_raw = preds * y_std + y_mean; truths_raw = truths * y_std + y_mean
+        return preds_raw, truths_raw
 
     @torch.no_grad()
     def val_metrics(self, y_mean, y_std):
@@ -787,6 +831,17 @@ def _get_adj_matrix(data, graph_type, num_nodes):
         adj, _, _ = build_dynamic_adjacency(data, "off_peak")
     elif graph_type == "functional_similarity_adjacency":
         adj, _, _ = build_functional_similarity_matrix(data)
+    elif graph_type == "congestion_delay_adjacency":
+        delay_mat, strength_mat, _ = build_congestion_delay_matrix(data, max_lag=5)
+        # 将延迟矩阵转为邻接矩阵：延迟小 → 权重高
+        max_lag_val = 5.0
+        adj = np.maximum(0, 1.0 - delay_mat / max_lag_val) * strength_mat
+        adj = adj + np.eye(num_nodes)
+        deg = adj.sum(axis=1)
+        deg_inv_sqrt = np.power(deg + 1e-12, -0.5)
+        D_inv_sqrt = np.diag(deg_inv_sqrt)
+        adj = D_inv_sqrt @ adj @ D_inv_sqrt
+        adj = adj.astype(np.float32)
     else:
         adj = A_fixed_norm
     return adj
@@ -1199,6 +1254,58 @@ def run_congestion_delay_experiment(output_dir: Path) -> None:
                 })
     df_delay = pd.DataFrame(delay_rows)
     save_dataframe(df_delay, output_dir, "enhanced_gcn_congestion_delay.csv")
+
+    # ── 训练对比：fixed vs functional vs congestion_delay ──
+    print("\n[congestion_delay] Running graph-type training comparison...")
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    graph_types = ["fixed_adjacency", "functional_similarity_adjacency", "congestion_delay_adjacency"]
+    seed = 42
+    all_rows = []
+    for gt in graph_types:
+        print(f"  Graph: {gt}")
+        # FedAvg
+        fed, _ = run_federated_training(cfgs, gt, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
+        # Proposed
+        prop, _ = run_federated_training(cfgs, gt, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
+        for r in fed:
+            all_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-FedAvg",
+                             "client_id": r["client_id"],
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+        for r in prop:
+            all_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-Proposed",
+                             "client_id": r["client_id"],
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df_cd = pd.DataFrame(all_rows)
+    save_dataframe(df_cd, output_dir, "gcn_enhanced_congestion_delay_metrics.csv")
+    agg_cd = df_cd.groupby(["graph_type", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg_cd, output_dir, "gcn_enhanced_congestion_delay_summary.csv")
+    print("\n[congestion_delay] Training results:\n", agg_cd.to_string(index=False))
+
+    # 图：不同 graph_type 的 RMSE 对比
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    gt_short = {"fixed_adjacency": "Fixed", "functional_similarity_adjacency": "Func",
+                "congestion_delay_adjacency": "Delay"}
+    for gt in graph_types:
+        sub = agg_cd[agg_cd["graph_type"] == gt]
+        for method, color in [("GCN-FedAvg", "#3498db"), ("GCN-Proposed", "#2ecc71")]:
+            row = sub[sub["method"] == method]
+            if len(row) > 0:
+                x_idx = graph_types.index(gt) * 2 + (0 if method == "GCN-FedAvg" else 1)
+                axes[0].bar(x_idx, row["rmse_mean"].values[0], color=color, alpha=0.85)
+                axes[1].bar(x_idx, row["mae_mean"].values[0], color=color, alpha=0.85)
+    for ax in axes:
+        ax.set_xticks([i * 2 + 0.5 for i in range(len(graph_types))])
+        ax.set_xticklabels([gt_short[gt] for gt in graph_types], fontsize=9)
+        ax.set_xlabel("Graph Type")
+    axes[0].set_title("RMSE by Graph Type"); axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE by Graph Type"); axes[1].set_ylabel("MAE")
+    axes[0].legend(["GCN-FedAvg", "GCN-Proposed"], fontsize=8)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_congestion_delay_comparison.png")
     print("[congestion_delay] Done.\n")
 
 
@@ -1704,8 +1811,154 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
 
 
 def run_peak_experiment(output_dir: Path) -> None:
-    print("[peak] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[peak] GCN Peak / Off-peak / Incident Period Analysis")
+    print("=" * 60)
+
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    num_clients = len(cfgs)
+    graph_type = "fixed_adjacency"
     ensure_output_dir(output_dir)
+    seed = 42
+
+    set_global_seed(seed)
+    client_data = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+
+    # Independent（使用同一批数据）
+    print("[Independent]")
+    ind_results = run_independent_training(cfgs, graph_type, seed=seed,
+                                            total_epochs=10, lr=0.01)
+
+    # GCN-FedAvg
+    print("[GCN-FedAvg]")
+    fed_results, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
+                                              comm_rounds=5, local_epochs=2)
+
+    # GCN-Proposed
+    print("[GCN-Proposed]")
+    prop_results, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
+                                               comm_rounds=5, local_epochs=2)
+
+    # Re-train per client to get per-sample preds for peak analysis
+    all_rows = []
+    for cid in range(num_clients):
+        d = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)[cid]
+        meta = d["meta_test"]
+        hours = meta["target_hour"]
+        inc_flags = meta["target_incident_flag"]
+        sample_periods = [classify_period_local(h, f) for h, f in zip(hours, inc_flags)]
+        n_test = len(sample_periods)
+
+        # Re-train per client to get per-sample preds
+        adj = _get_adj_matrix(None, graph_type, NUM_NODES)
+        criterion = nn.MSELoss()
+        tr_sizes = [build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)[i]["train_size"]
+                    for i in range(num_clients)]
+
+        for method_label, agg_method in [("Independent", None), ("GCN-FedAvg", "fedavg"),
+                                          ("GCN-Proposed", "proposed")]:
+            set_global_seed(seed)
+            # Build all clients
+            all_cds = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+            if method_label == "Independent":
+                model = GCNEnhancedModel(k=NUM_NODES, t=SEQ_LEN, hidden_dim=64,
+                                          num_heads=4, fixed_adj=adj).to(DEVICE)
+                opt = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=1e-4)
+                for _ in range(10):
+                    model.train()
+                    for x, y in all_cds[cid]["train_loader"]:
+                        x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+                        opt.zero_grad()
+                        pred, _ = model(x)
+                        loss = criterion(pred.view(-1), y)
+                        loss.backward()
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                        opt.step()
+                model.eval()
+                p, t = [], []
+                for x, y in all_cds[cid]["test_loader"]:
+                    x = x.to(DEVICE).float()
+                    po, _ = model(x)
+                    p.append(po.detach().view(-1).cpu().numpy()); t.append(y.cpu().numpy())
+                p = np.concatenate(p); t = np.concatenate(t)
+                preds_raw = p * all_cds[cid]["y_std"] + all_cds[cid]["y_mean"]
+                truths_raw = t * all_cds[cid]["y_std"] + all_cds[cid]["y_mean"]
+            else:
+                model_func = lambda: GCNEnhancedModel(k=NUM_NODES, t=SEQ_LEN,
+                                                       hidden_dim=64, num_heads=4, fixed_adj=adj)
+                server = AggregationServer(model_func(), num_clients, agg_method=agg_method)
+                server.set_client_data_sizes(tr_sizes)
+                clients = []
+                for cid2 in range(num_clients):
+                    cd2 = all_cds[cid2]
+                    clients.append(FederatedClient(cd2["cid"], model_func(),
+                                                    cd2["train_loader"], cd2["val_loader"],
+                                                    cd2["test_loader"], criterion))
+                for _ in range(5):
+                    cw_l, cl_l = [], []
+                    for cl in clients:
+                        cll, cw = cl.train_local(epochs=2, global_model=server.global_model)
+                        cw_l.append(cw); cl_l.append(float(cll))
+                    server.aggregate(cw_l, cl_l)
+                clients[cid].model.load_state_dict(server.global_model.state_dict())
+                preds_raw, truths_raw = clients[cid].test_predictions_raw(
+                    all_cds[cid]["y_mean"], all_cds[cid]["y_std"])
+
+            # Accumulate per-sample errors
+            n_use = min(len(preds_raw), n_test)
+            for i in range(n_use):
+                period = sample_periods[i]
+                err = preds_raw[i] - truths_raw[i]
+                all_rows.append({"method": method_label, "graph_type": graph_type,
+                                 "client_id": cid, "period": period,
+                                 "mse": float(err ** 2), "rmse": float(abs(err)),
+                                 "mae": float(abs(err)), "num_samples": 1})
+
+    df = pd.DataFrame(all_rows)
+    # Aggregate
+    metrics_rows = []
+    for (method, cid, period), grp in df.groupby(["method", "client_id", "period"]):
+        mse_val = float(np.mean([r for r in grp["mse"]]))
+        metrics_rows.append({"method": method, "graph_type": graph_type, "client_id": cid,
+                             "period": period, "mse": mse_val,
+                             "rmse": float(np.sqrt(mse_val)),
+                             "mae": float(np.mean([r for r in grp["mae"]])),
+                             "num_samples": len(grp)})
+    df_metrics = pd.DataFrame(metrics_rows)
+    save_dataframe(df_metrics, output_dir, "gcn_enhanced_peak_offpeak_metrics.csv")
+
+    agg_sum = df_metrics.groupby(["method", "period"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        total_samples=("num_samples", "sum")).reset_index()
+    save_dataframe(agg_sum, output_dir, "gcn_enhanced_peak_offpeak_summary.csv")
+    print("\n[peak] Summary:\n", agg_sum.to_string(index=False))
+
+    # 图
+    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
+    bar_colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
+    x = np.arange(len(methods)); width = 0.2
+    period_order = ["morning_peak", "evening_peak", "off_peak", "incident_period"]
+    for p_idx, period in enumerate(period_order):
+        sub = agg_sum[agg_sum["period"] == period]
+        offset = (p_idx - 1.5) * width
+        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] if m in sub["method"].values
+                     else np.nan for m in methods]
+        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] if m in sub["method"].values
+                    else np.nan for m in methods]
+        axes[0].bar(x + offset, rmse_vals, width, label=period, alpha=0.85)
+        axes[1].bar(x + offset, mae_vals, width, label=period, alpha=0.85)
+    for ax in axes:
+        ax.set_xticks(x); ax.set_xticklabels(methods); ax.set_xlabel("Method")
+        ax.legend(fontsize=7, title="Period")
+    axes[0].set_title("GCN RMSE by Traffic Period"); axes[0].set_ylabel("RMSE")
+    axes[1].set_title("GCN MAE by Traffic Period"); axes[1].set_ylabel("MAE")
+    fig.suptitle("GCN Enhanced: Peak / Off-peak / Incident Analysis", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_peak_offpeak_comparison.png")
+    print("[peak] Done.\n")
 
 
 # ══════════════════════════════════════════════════════════════
