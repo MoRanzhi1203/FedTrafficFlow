@@ -1,20 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-CCN 仿真实验独立工程。
+CNN/CCN 基础联邦仿真实验。
 
-本文件实现了基于 CCN（卷积特征提取）主干的联邦仿真实验，包含以下内容：
-1. 联邦总览实验：比较联邦训练与独立训练在异构客户端上的误差表现；
-2. 消融实验：比较 CCN-LSTM-Attention 及其裁剪变体的性能差异；
-3. 可视化输出：将指标对比图、消融分析图、指标表格与运行日志统一写入输出目录。
+本文件实现基于 CNN-BiLSTM-Attention 的联邦仿真基础实验，包含：
+1. data_viz: 基础数据集可视化（时间序列、热力图、箱线图、划分概览、样本量）；
+2. main: Independent / FedAvg 主结果对比（MSE、RMSE、MAE）；
+3. convergence: 联邦训练收敛曲线；
+4. all: 依次运行上述全部工作流。
 
-主要依赖库：
-- PyTorch：模型定义、训练与联邦聚合；
-- NumPy / pandas：数值处理与表格整理；
-- matplotlib / seaborn：图表渲染与保存。
+与 gcn_fed_base.py 共享相同的数据生成逻辑和随机种子，保证基础对比公平。
 
-输入输出场景：
-- 输入：脚本内部生成的异构多客户端合成时序数据；
-- 输出：PNG 图像、CSV 指标文件、TXT 运行日志。
+主要依赖：PyTorch, NumPy, pandas, matplotlib。
 """
 
 import argparse
@@ -23,79 +19,55 @@ import os
 import random
 import sys
 from collections import OrderedDict
-from contextlib import redirect_stdout
 from pathlib import Path
-from typing import Callable, Dict, Optional, Sequence
+from typing import Optional, Sequence
 
 import matplotlib
-
-# 使用无界面后端，避免服务器或终端环境弹出交互式窗口。
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, random_split
 
-# 关闭 matplotlib 交互模式，确保绘图流程完全由文件保存驱动。
 plt.ioff()
 
-# 当前脚本目录。
+# ──────────────────────────────────────────────────────────
+# 全局路径与设备常量
+# ──────────────────────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent
-# 项目根目录，用于构造统一的结果输出根目录。
 PROJECT_ROOT = SCRIPT_DIR.parent
-# 统一的结果根目录。
 RESULTS_ROOT = PROJECT_ROOT / "results"
-# 仿真实验主目录，所有独立仿真实验均在此目录下建立各自子目录。
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
-# 自动选择 GPU 或 CPU，便于在不同环境中复用同一脚本。
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# 工程前缀，用于统一输出文件命名规则。
-PROJECT_NAME = "ccn-base"
-# CCN 实验默认输出目录。
-DEFAULT_OUTPUT_DIR = SIMULATION_RESULTS_ROOT / PROJECT_NAME
-# Windows 常见非法路径字符，用于阻止错误路径写入。
-INVALID_PATH_CHARS = set('<>:"|?*')
 
+# ──────────────────────────────────────────────────────────
+# 基础实验共享超参数（与 gcn_fed_base.py 保持一致）
+# ──────────────────────────────────────────────────────────
+BASE_SEED = 42
+BASE_NUM_CLIENTS = 5
+BASE_NUM_NODES = 8          # K: 交通传感器/观测节点数
+BASE_SEQ_LEN = 24           # T: 时间窗口长度（例如每小时一个点，共一天）
+BASE_PRED_LEN = 1           # 预测步长
+BASE_SAMPLES_PER_CLIENT = [200, 200, 200, 200, 200]  # 平衡样本
+BASE_NOISE = 0.05           # 观测噪声标准差
+BASE_TRAIN_RATIO = 0.70
+BASE_VAL_RATIO = 0.10
+BASE_TEST_RATIO = 0.20
+# 联邦训练超参数
+FED_ROUNDS = 10
+FED_LOCAL_EPOCHS = 3
+FED_BATCH_SIZE = 16
+FED_HIDDEN_DIM = 64
 
-def configure_plot_style() -> None:
-    """配置全局绘图样式。
-
-    该函数统一设置 seaborn 主题、字体和字号，保证总览图与消融图
-    在不同运行环境中的视觉风格一致，避免出现字号不统一或负号乱码。
-    """
-    sns.set_theme(
-        style="whitegrid",
-        context="notebook",
-        font="DejaVu Sans",
-        rc={
-            "axes.unicode_minus": False,
-            "figure.titlesize": 18,
-            "axes.titlesize": 16,
-            "axes.labelsize": 13,
-            "xtick.labelsize": 11,
-            "ytick.labelsize": 11,
-            "legend.fontsize": 11,
-            "legend.title_fontsize": 12,
-        },
-    )
-
+# ──────────────────────────────────────────────────────────
+# 工具函数
+# ──────────────────────────────────────────────────────────
 
 def set_global_seed(seed: int) -> None:
-    """设置全局随机种子。
-
-    参数:
-        seed: 用于控制 Python、NumPy 和 PyTorch 随机性的整数种子。
-
-    返回:
-        None
-
-    说明:
-        同时关闭 cuDNN 的非确定性优化，以便不同运行之间尽可能复现实验结果。
-    """
+    """设置全局随机种子，保证可复现性。"""
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -106,226 +78,174 @@ def set_global_seed(seed: int) -> None:
 
 
 def ensure_output_dir(output_dir: Path) -> Path:
-    """确保输出目录存在。
-
-    参数:
-        output_dir: 目标输出目录。
-
-    返回:
-        已确认存在的目录路径。
-    """
+    """创建并返回输出目录。"""
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
-def validate_output_subdir(output_subdir: str) -> None:
-    """校验相对子目录参数是否合法。
-
-    参数:
-        output_subdir: 用户传入的输出子目录。
-
-    返回:
-        None
-
-    异常:
-        ValueError: 当目录为空、包含路径遍历片段或非法字符时抛出。
-    """
-    if not output_subdir or not output_subdir.strip():
-        raise ValueError("The output directory must not be empty.")
-
-    candidate = Path(output_subdir)
-    if candidate.is_absolute():
-        raise ValueError("Only relative output subdirectories under results/simulation_experiments are allowed.")
-
-    for part in candidate.parts:
-        if part in ("", "."):
-            continue
-        if part == "..":
-            raise ValueError("Path traversal is not allowed in the output directory.")
-        if any(char in INVALID_PATH_CHARS for char in part):
-            raise ValueError(
-                "The output directory contains illegal characters for the current operating system."
-            )
-        if part.endswith(" ") or part.endswith("."):
-            raise ValueError("Directory names must not end with a space or dot.")
-
-
-def resolve_output_dir(output_subdir: Optional[str] = None) -> Path:
-    """解析并创建安全的输出目录。
-
-    参数:
-        output_subdir: 位于 `results/simulation_experiments` 下的相对子目录。
-            未传入时使用当前实验的默认子目录。
-
-    返回:
-        经校验并已创建的安全输出目录。
-    """
-    ensure_output_dir(SIMULATION_RESULTS_ROOT)
-    relative_subdir = output_subdir or PROJECT_NAME
-    validate_output_subdir(relative_subdir)
-
-    resolved_output_dir = (SIMULATION_RESULTS_ROOT / relative_subdir).resolve()
-    resolved_root = SIMULATION_RESULTS_ROOT.resolve()
-    if resolved_output_dir != resolved_root and resolved_root not in resolved_output_dir.parents:
-        raise ValueError("The resolved output directory escapes the simulation results root.")
-
-    return ensure_output_dir(resolved_output_dir)
-
-
-def build_output_file_name(
-    workflow_name: str,
-    artifact_name: str,
-    extension: str,
-) -> str:
-    """构造统一命名规则的输出文件名。
-
-    参数:
-        workflow_name: 工作流名称，例如 `overview` 或 `ablation`。
-        artifact_name: 产物名称，例如 `figure`、`metrics`、`log`。
-        extension: 文件扩展名，不包含点号。
-
-    返回:
-        符合 `cnn_<workflow>_<artifact>.<ext>` 规范的文件名。
-    """
-    return f"{PROJECT_NAME}_{workflow_name}_{artifact_name}.{extension}"
-
-
 def save_figure(fig: plt.Figure, output_dir: Path, file_name: str) -> Path:
-    """保存图像并关闭图对象。
-
-    参数:
-        fig: 待保存的 matplotlib 图对象。
-        output_dir: 输出目录。
-        file_name: 输出文件名。
-
-    返回:
-        图像最终保存路径。
-    """
-    output_path = ensure_output_dir(output_dir) / file_name
-    fig.savefig(output_path, dpi=300, bbox_inches="tight")
+    """保存图像并关闭图对象。"""
+    path = ensure_output_dir(output_dir) / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved figure: {output_path}")
-    return output_path
+    print(f"[saved] {path}")
+    return path
 
 
 def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
-    """保存表格结果为 CSV 文件。
-
-    参数:
-        df: 待保存的数据表。
-        output_dir: 输出目录。
-        file_name: 输出文件名。
-
-    返回:
-        CSV 最终保存路径。
-    """
-    output_path = ensure_output_dir(output_dir) / file_name
-    df.to_csv(output_path, index=False, encoding="utf-8")
-    print(f"Saved table: {output_path}")
-    return output_path
+    """保存 DataFrame 为 CSV。"""
+    path = ensure_output_dir(output_dir) / file_name
+    df.to_csv(path, index=False, encoding="utf-8")
+    print(f"[saved] {path}")
+    return path
 
 
-class TeeStream:
-    """将标准输出同时写入多个流对象。
+# ──────────────────────────────────────────────────────────
+# 基础数据集生成（与 gcn_fed_base.py 完全一致）
+# ──────────────────────────────────────────────────────────
 
-    该类用于把终端日志同步写入控制台与日志文件，方便实验跟踪与问题复现。
-    """
+def generate_base_traffic_data(
+    seed: int = BASE_SEED,
+    num_clients: int = BASE_NUM_CLIENTS,
+    num_nodes: int = BASE_NUM_NODES,
+    seq_len: int = BASE_SEQ_LEN,
+    pred_len: int = BASE_PRED_LEN,
+    samples_per_client: list = None,
+    noise: float = BASE_NOISE,
+):
+    """生成基础交通流仿真数据。
 
-    def __init__(self, *streams):
-        """初始化多路输出流。
+    生成逻辑：
+      - 为每个客户端生成一个基础的周期性交通流模式（双峰，模拟早晚高峰）；
+      - 不同客户端之间存在受控的轻微差异（相位偏移、幅度缩放、节点偏好）；
+      - 数据格式：X shape [num_clients, samples, num_nodes, seq_len]
+                  Y shape [num_clients, samples]  (预测下一个时间步的全局流量均值)
 
-        参数:
-            *streams: 任意数量的类文件对象，通常为标准输出和日志句柄。
-        """
-        self.streams = streams
-
-    def write(self, data: str) -> int:
-        """向所有输出流写入文本。"""
-        for stream in self.streams:
-            stream.write(data)
-        return len(data)
-
-    def flush(self) -> None:
-        """刷新所有输出流缓冲区。"""
-        for stream in self.streams:
-            stream.flush()
-
-
-def unpack_model_output(model_output):
-    """统一解析模型输出格式。
-
-    参数:
-        model_output: 模型原始输出，可能是单一张量，也可能是
-            `(prediction, attention_weights)` 元组。
+    该函数在 cnn_fed_base.py 和 gcn_fed_base.py 中实现完全一致，
+    仅在 GCN 文件中额外生成邻接矩阵。
 
     返回:
-        二元组 `(prediction, attention_weights)`。
+        all_X: list of np.ndarray, 每个元素 shape [num_samples_i, num_nodes, seq_len]
+        all_Y: list of np.ndarray, 每个元素 shape [num_samples_i,]
+        metadata: dict, 包含数据集的汇总信息
     """
-    if isinstance(model_output, tuple):
-        return model_output
-    return model_output, None
+    if samples_per_client is None:
+        samples_per_client = BASE_SAMPLES_PER_CLIENT
 
+    rng = np.random.RandomState(seed)
 
-def stability_stats(arr):
-    """计算跨客户端稳定性统计量。
+    # 时间轴 (0 到 seq_len-1)
+    t_axis = np.arange(seq_len)
 
-    参数:
-        arr: 一组误差值列表。
-
-    返回:
-        `(std, gap, cv)`，分别表示标准差、极差和变异系数。
-    """
-    arr = np.array(arr, dtype=float)
-    std = float(arr.std())
-    gap = float(arr.max() - arr.min())
-    mean = float(arr.mean())
-    cv = float(std / (mean + 1e-12))
-    return std, gap, cv
-
-
-def print_summary_table(results_summary: Dict[str, Dict[str, float]]) -> pd.DataFrame:
-    """打印并返回消融实验汇总表。
-
-    参数:
-        results_summary: 以模型名称为键、以统计指标字典为值的汇总结果。
-
-    返回:
-        排序后的 pandas.DataFrame，包含 MSE、RMSE、MAE 的均值与标准差。
-    """
-    df_sum = (
-        pd.DataFrame(results_summary)
-        .T.reset_index()
-        .rename(columns={"index": "Model"})
-        .sort_values("Model")
+    # 基础交通流模式：双峰曲线模拟早晚高峰
+    base_pattern = (
+        0.3 * np.sin(2 * np.pi * t_axis / seq_len)           # 日周期
+        + 0.5 * np.exp(-0.5 * ((t_axis - 8) / 2) ** 2)       # 早高峰 ~8h
+        + 0.6 * np.exp(-0.5 * ((t_axis - 17) / 2) ** 2)      # 晚高峰 ~17h
+        + 0.2 * np.sin(4 * np.pi * t_axis / seq_len + 1.0)   # 半日周期谐波
     )
-    df_sum = df_sum[
-        [
-            "Model",
-            "rmse_mean",
-            "rmse_std",
-            "mae_mean",
-            "mae_std",
-            "mse_mean",
-            "mse_std",
-        ]
-    ]
-    print("\n=== Final Test Metrics Summary (mean ± std across clients) ===")
-    print(df_sum.to_string(index=False))
-    return df_sum
 
+    all_X = []
+    all_Y = []
+    metadata = {
+        "num_clients": num_clients,
+        "num_nodes": num_nodes,
+        "seq_len": seq_len,
+        "pred_len": pred_len,
+        "samples_per_client": samples_per_client,
+        "noise": noise,
+    }
+
+    for cid in range(num_clients):
+        n_samples = samples_per_client[cid]
+        # 每个客户端的模式有轻微差异
+        phase_shift = 0.05 * cid                      # 相位偏移
+        amp_scale = 1.0 + 0.08 * (cid - num_clients // 2)  # 幅度缩放
+        # 不同节点对早晚高峰的敏感度不同
+        node_sensitivity = 0.7 + 0.3 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.3)
+
+        X_client = np.zeros((n_samples, num_nodes, seq_len), dtype=np.float32)
+        Y_client = np.zeros(n_samples, dtype=np.float32)
+
+        for i in range(n_samples):
+            # 每个样本基于基础模式并加入节点级变化和噪声
+            sample_noise = rng.randn(num_nodes, seq_len) * noise
+            for node in range(num_nodes):
+                # 节点级流量 = 敏感度 * 幅度 * 基础模式 + 噪声
+                node_flow = (
+                    node_sensitivity[node]
+                    * amp_scale
+                    * (base_pattern + 0.02 * rng.randn(seq_len))  # 样本间微小扰动
+                    + sample_noise[node]
+                )
+                X_client[i, node, :] = node_flow
+
+            # 目标值：最后 pred_len 个时间步内所有节点的平均流量
+            Y_client[i] = X_client[i, :, -pred_len:].mean()
+
+        all_X.append(X_client)
+        all_Y.append(Y_client)
+
+    return all_X, all_Y, metadata
+
+
+def split_train_val_test(
+    X: np.ndarray,
+    Y: np.ndarray,
+    seed: int = BASE_SEED,
+    train_ratio: float = BASE_TRAIN_RATIO,
+    val_ratio: float = BASE_VAL_RATIO,
+):
+    """按时间顺序划分训练/验证/测试集。
+
+    返回:
+        (X_train, Y_train, X_val, Y_val, X_test, Y_test)
+    """
+    rng = np.random.RandomState(seed)
+    n = len(X)
+    indices = np.arange(n)
+    rng.shuffle(indices)
+
+    n_train = int(n * train_ratio)
+    n_val = int(n * val_ratio)
+
+    train_idx = indices[:n_train]
+    val_idx = indices[n_train:n_train + n_val]
+    test_idx = indices[n_train + n_val:]
+
+    return (
+        X[train_idx], Y[train_idx],
+        X[val_idx], Y[val_idx],
+        X[test_idx], Y[test_idx],
+    )
+
+
+# ──────────────────────────────────────────────────────────
+# Dataset 类
+# ──────────────────────────────────────────────────────────
+
+class TrafficDataset(Dataset):
+    """交通流数据集封装。"""
+
+    def __init__(self, X: np.ndarray, Y: np.ndarray):
+        self.X = torch.tensor(X, dtype=torch.float32)
+        self.Y = torch.tensor(Y, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.Y[idx]
+
+
+# ──────────────────────────────────────────────────────────
+# 模型定义
+# ──────────────────────────────────────────────────────────
 
 class AdaptiveSwish(nn.Module):
-    """带可学习系数的 Swish 激活函数。
-
-    该激活函数允许模型自适应调整非线性强度，常用于替代固定形态的 ReLU。
-    """
+    """带可学习系数的 Swish 激活函数。"""
 
     def __init__(self, trainable: bool = True):
-        """初始化激活函数参数。
-
-        参数:
-            trainable: 是否将 `beta` 设为可训练参数。
-        """
         super().__init__()
         if trainable:
             self.beta = nn.Parameter(torch.ones(1, dtype=torch.float32))
@@ -333,649 +253,184 @@ class AdaptiveSwish(nn.Module):
             self.register_buffer("beta", torch.tensor(1.0, dtype=torch.float32))
 
     def forward(self, x):
-        """执行自适应 Swish 变换。"""
         return x * torch.sigmoid(self.beta * x)
 
 
-class WeakModel(nn.Module):
-    """独立训练基线模型。
+class CNNBaseModel(nn.Module):
+    """CNN-BiLSTM-Attention 基础联邦模型。
 
-    该模型不显式建模局部卷积结构、时序递归关系或注意力机制，
-    仅将输入展平后通过浅层全连接网络回归，用于作为性能下界参考。
+    结构：
+    1. CNN 分支：一维卷积提取局部时间邻域模式；
+    2. BiLSTM 分支：捕捉双向时序依赖；
+    3. 多头注意力融合两个分支特征。
     """
 
-    def __init__(self, k: int, t: int, hidden_dim: int = 16):
-        """初始化弱基线模型。
-
-        参数:
-            k: 节点或特征通道数。
-            t: 时间步长度。
-            hidden_dim: 隐层维度，保持较小以体现弱模型特性。
-        """
+    def __init__(self, k: int, t: int, hidden_dim: int = 64, num_heads: int = 4):
         super().__init__()
-        self.k = k
-        self.t = t
-        # 简单特征提取器仅做展平特征映射，故表达能力明显弱于主模型。
-        self.simple_extractor = nn.Sequential(
-            nn.Linear(k * t, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(0.8),
-        )
-        self.fc = nn.Linear(hidden_dim, 1)
-
-    def forward(self, x):
-        """前向传播，返回预测值与空注意力权重。"""
-        x = x.to(dtype=torch.float32)
-        batch_size, k, t = x.shape
-        x = x.view(batch_size, k * t)
-        x = self.simple_extractor(x)
-        return self.fc(x), None
-
-
-class CCNOverviewModel(nn.Module):
-    """CCN 总览实验主模型。
-
-    模型结构由三部分组成：
-    1. CCN 分支：利用一维卷积抽取局部时间邻域模式；
-    2. BiLSTM 分支：建模双向时序依赖；
-    3. 多头注意力融合：自适应整合卷积特征与时序特征。
-
-    这里的“网络拓扑”并非显式图结构，而是由卷积核在时间维上的局部连接
-    隐式表达时序邻接关系，适合刻画局部波动与短程依赖。
-    """
-
-    def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化 CCN 主模型。
-
-        参数:
-            k: 输入通道数，对应每个时间步的观测变量数量。
-            t: 时间窗口长度。
-            hidden_dim: 主干隐层维度。
-            num_heads: 多头注意力头数，用于融合两个分支的高层表示。
-        """
-        super().__init__()
-        # 卷积主干负责在时间维局部感受野内提取平滑且稳定的局部模式。
         self.cnn = nn.Sequential(
             nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
             nn.BatchNorm1d(hidden_dim),
             AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
+            nn.Conv1d(in_channels=hidden_dim, out_channels=hidden_dim, kernel_size=3, padding=1),
             nn.BatchNorm1d(hidden_dim),
             AdaptiveSwish(),
             nn.AdaptiveAvgPool1d(1),
             nn.Flatten(),
         )
-        # BiLSTM 双向编码整段时间序列，补足卷积分支对长程依赖建模不足的问题。
         self.lstm = nn.LSTM(
-            input_size=k,
-            hidden_size=hidden_dim // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
+            input_size=k, hidden_size=hidden_dim // 2,
+            num_layers=1, batch_first=True, bidirectional=True,
         )
-        # 将 LSTM 输出投影到与卷积分支一致的维度，便于后续融合。
         self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        # 多头注意力用于学习两条分支在不同样本上的相对重要性。
         self.multihead_attn = nn.MultiheadAttention(
-            embed_dim=hidden_dim,
-            num_heads=num_heads,
-            batch_first=True,
+            embed_dim=hidden_dim, num_heads=num_heads, batch_first=True,
         )
         self.attn_norm = nn.LayerNorm(hidden_dim)
-        # 回归头输出单一连续值，用于模拟交通状态相关回归目标。
         self.regression_head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
+            nn.Linear(hidden_dim, 32),
+            nn.LayerNorm(32),
             AdaptiveSwish(),
-            nn.Linear(64, 1),
+            nn.Linear(32, 1),
         )
 
     def forward(self, x):
-        """执行 CCN + BiLSTM + Attention 前向传播。"""
         x = x.to(dtype=torch.float32)
-        # CCN 分支直接在 `[B, K, T]` 张量上做一维卷积。
         x_cnn = self.cnn(x)
 
-        # LSTM 要求时间维位于中间位置，因此先变换为 `[B, T, K]`。
         x_lstm = x.permute(0, 2, 1)
         x_lstm, _ = self.lstm(x_lstm)
-        # 对整个时间序列取均值池化，构建全局时序状态。
         x_lstm = x_lstm.mean(dim=1)
         x_lstm = self.lstm_proj(x_lstm)
 
-        # 将两条高层分支特征组成长度为 2 的“特征序列”输入注意力层。
         feat_seq = torch.stack([x_cnn, x_lstm], dim=1)
         attn_output, attn_weights = self.multihead_attn(feat_seq, feat_seq, feat_seq)
-        # 残差连接与归一化有助于稳定融合阶段训练。
         attn_output = self.attn_norm(attn_output + feat_seq)
         x_fused = attn_output.mean(dim=1)
         return self.regression_head(x_fused), attn_weights
 
 
-class CCNAblationFull(nn.Module):
-    """CCN 消融实验中的完整模型。"""
+class IndependentBaseModel(nn.Module):
+    """独立训练基线模型（简单 MLP）。"""
 
-    def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化完整的 CCN-LSTM-Attention 模型。"""
+    def __init__(self, k: int, t: int, hidden_dim: int = 32):
         super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
-        self.lstm = nn.LSTM(
-            input_size=k,
-            hidden_size=hidden_dim // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        self.mha = nn.MultiheadAttention(
-            embed_dim=hidden_dim,
-            num_heads=num_heads,
-            batch_first=True,
-        )
-        self.attn_norm = nn.LayerNorm(hidden_dim)
-        self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
-            AdaptiveSwish(),
-            nn.Linear(64, 1),
+        self.net = nn.Sequential(
+            nn.Linear(k * t, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(0.3),
+            nn.Linear(hidden_dim, hidden_dim // 2),
+            nn.ReLU(),
+            nn.Linear(hidden_dim // 2, 1),
         )
 
     def forward(self, x):
-        """执行完整消融模型前向传播。"""
         x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
-        x_lstm = x.permute(0, 2, 1)
-        x_lstm, _ = self.lstm(x_lstm)
-        x_lstm = x_lstm.mean(dim=1)
-        x_lstm = self.lstm_proj(x_lstm)
-        feat_seq = torch.stack([x_cnn, x_lstm], dim=1)
-        attn_out, attn_w = self.mha(feat_seq, feat_seq, feat_seq)
-        attn_out = self.attn_norm(attn_out + feat_seq)
-        fused = attn_out.mean(dim=1)
-        return self.head(fused), attn_w
+        batch_size = x.shape[0]
+        x = x.view(batch_size, -1)
+        return self.net(x), None
 
 
-class CCNAblationCNNLSTM(nn.Module):
-    """移除注意力模块后的 CCN 消融模型。"""
-
-    def __init__(self, k: int, t: int, hidden_dim: int = 128):
-        """初始化 CCN-LSTM 变体。"""
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
-        self.lstm = nn.LSTM(
-            input_size=k,
-            hidden_size=hidden_dim // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        # 这里使用全连接融合代替注意力，便于评估注意力模块的真实贡献。
-        self.fuse = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            AdaptiveSwish(),
-        )
-        self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
-            AdaptiveSwish(),
-            nn.Linear(64, 1),
-        )
-
-    def forward(self, x):
-        """执行 CCN-LSTM 变体前向传播。"""
-        x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
-        x_lstm = x.permute(0, 2, 1)
-        x_lstm, _ = self.lstm(x_lstm)
-        x_lstm = x_lstm.mean(dim=1)
-        x_lstm = self.lstm_proj(x_lstm)
-        fused = self.fuse(torch.cat([x_cnn, x_lstm], dim=1))
-        return self.head(fused), None
-
-
-class LSTMAttentionHetero(nn.Module):
-    """移除卷积主干后的时序注意力模型。"""
-
-    def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化 LSTM-Attention 变体。"""
-        super().__init__()
-        self.lstm = nn.LSTM(
-            input_size=k,
-            hidden_size=hidden_dim // 2,
-            num_layers=1,
-            batch_first=True,
-            bidirectional=True,
-        )
-        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
-        self.mha = nn.MultiheadAttention(
-            embed_dim=hidden_dim,
-            num_heads=num_heads,
-            batch_first=True,
-        )
-        self.attn_norm = nn.LayerNorm(hidden_dim)
-        self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
-            AdaptiveSwish(),
-            nn.Linear(64, 1),
-        )
-
-    def forward(self, x):
-        """执行仅保留时序主干的前向传播。"""
-        x = x.to(dtype=torch.float32)
-        x_lstm = x.permute(0, 2, 1)
-        x_lstm, _ = self.lstm(x_lstm)
-        x_lstm = x_lstm.mean(dim=1)
-        x_lstm = self.lstm_proj(x_lstm)
-        feat_seq = x_lstm.unsqueeze(1)
-        attn_out, attn_w = self.mha(feat_seq, feat_seq, feat_seq)
-        attn_out = self.attn_norm(attn_out + feat_seq)
-        fused = attn_out.mean(dim=1)
-        return self.head(fused), attn_w
-
-
-class CCNAblationCNNAttention(nn.Module):
-    """移除 LSTM 分支后的 CCN-Attention 变体。"""
-
-    def __init__(self, k: int, t: int, hidden_dim: int = 128, num_heads: int = 4):
-        """初始化 CCN-Attention 变体。"""
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(
-                in_channels=hidden_dim,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                padding=1,
-            ),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
-        self.mha = nn.MultiheadAttention(
-            embed_dim=hidden_dim,
-            num_heads=num_heads,
-            batch_first=True,
-        )
-        self.attn_norm = nn.LayerNorm(hidden_dim)
-        self.head = nn.Sequential(
-            nn.Linear(hidden_dim, 64),
-            nn.LayerNorm(64),
-            AdaptiveSwish(),
-            nn.Linear(64, 1),
-        )
-
-    def forward(self, x):
-        """执行仅保留卷积主干的前向传播。"""
-        x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
-        feat_seq = x_cnn.unsqueeze(1)
-        attn_out, attn_w = self.mha(feat_seq, feat_seq, feat_seq)
-        attn_out = self.attn_norm(attn_out + feat_seq)
-        fused = attn_out.mean(dim=1)
-        return self.head(fused), attn_w
-
-
-class OverviewHeterogeneousDataset(Dataset):
-    """总览实验使用的异构客户端数据集。
-
-    每个客户端共享相同输入维度，但目标值生成函数不同，从而模拟联邦场景中
-    不同采集节点、不同道路结构或不同交通机理带来的非 IID 分布。
-    """
-
-    def __init__(
-        self,
-        client_id: int,
-        num_samples: int,
-        k: int,
-        t: int,
-        noise: float = 0.1,
-    ):
-        """构造异构数据集。
-
-        参数:
-            client_id: 客户端编号，用于决定目标生成函数。
-            num_samples: 样本数。
-            k: 节点或观测变量数。
-            t: 时间窗口长度。
-            noise: 观测噪声强度，用于模拟真实交通测量波动。
-        """
-        self.x = np.random.randn(num_samples, k, t)
-        # 中间时间片段均值被视为基础交通状态强度。
-        base_feature = self.x[:, :, t // 4 : t * 3 // 4].mean(axis=(1, 2))
-        if client_id == 0:
-            self.y = (
-                0.6 * np.sin(base_feature)
-                + 0.4 * np.sin(self.x[:, :, : t // 2].mean(axis=(1, 2)))
-                + noise * np.random.randn(num_samples)
-            )
-        elif client_id == 1:
-            self.y = (
-                0.6 * np.sin(base_feature)
-                + 0.4 * np.cos(self.x[:, :, t // 2 :].mean(axis=(1, 2)))
-                + noise * np.random.randn(num_samples)
-            )
-        else:
-            self.y = (
-                0.6 * np.sin(base_feature)
-                + 0.4 * np.tanh(self.x.max(axis=(1, 2)))
-                + noise * np.random.randn(num_samples)
-            )
-
-    def __len__(self):
-        """返回数据集长度。"""
-        return len(self.x)
-
-    def __getitem__(self, idx):
-        """返回单个样本及其标签。"""
-        return (
-            torch.tensor(self.x[idx], dtype=torch.float32),
-            torch.tensor(self.y[idx], dtype=torch.float32),
-        )
-
-
-class AblationHeterogeneousDataset(Dataset):
-    """消融实验使用的异构数据集。
-
-    与总览实验数据集基本一致，但在数值类型与标签构造上做了更明确的控制，
-    便于不同模型变体在相同数据生成规则下公平比较。
-    """
-
-    def __init__(
-        self,
-        client_id: int,
-        num_samples: int,
-        k: int,
-        t: int,
-        noise: float = 0.1,
-    ):
-        """构造消融实验数据集。"""
-        self.x = np.random.randn(num_samples, k, t).astype(np.float32)
-        base_feature = self.x[:, :, t // 4 : t * 3 // 4].mean(axis=(1, 2))
-        if client_id == 0:
-            y = 0.6 * np.sin(base_feature) + 0.4 * np.sin(
-                self.x[:, :, : t // 2].mean(axis=(1, 2))
-            )
-        elif client_id == 1:
-            y = 0.6 * np.sin(base_feature) + 0.4 * np.cos(
-                self.x[:, :, t // 2 :].mean(axis=(1, 2))
-            )
-        else:
-            y = 0.6 * np.sin(base_feature) + 0.4 * np.tanh(
-                self.x.max(axis=(1, 2))
-            )
-        # 额外叠加高斯噪声，以模拟真实环境中传感误差和随机扰动。
-        y = y + noise * np.random.randn(num_samples).astype(np.float32)
-        self.y = y.astype(np.float32)
-
-    def __len__(self):
-        """返回数据集长度。"""
-        return len(self.x)
-
-    def __getitem__(self, idx):
-        """返回单个样本及其标签。"""
-        return (
-            torch.tensor(self.x[idx], dtype=torch.float32),
-            torch.tensor(self.y[idx], dtype=torch.float32),
-        )
-
+# ──────────────────────────────────────────────────────────
+# 联邦客户端与服务端
+# ──────────────────────────────────────────────────────────
 
 class FederatedClient:
-    """联邦客户端封装类。
+    """联邦客户端。"""
 
-    每个客户端持有一份本地模型和数据加载器，负责：
-    1. 本地训练；
-    2. 本地验证；
-    3. 输出局部权重给联邦服务端聚合；
-    4. 在统一全局模型下计算测试指标。
-    """
-
-    def __init__(
-        self,
-        client_id,
-        model,
-        train_loader,
-        test_loader,
-        criterion,
-        lr: float = 1e-3,
-    ):
-        """初始化联邦客户端。
-
-        参数:
-            client_id: 客户端编号。
-            model: 当前客户端使用的模型实例。
-            train_loader: 本地训练集迭代器。
-            test_loader: 本地测试集迭代器。
-            criterion: 损失函数。
-            lr: 本地优化学习率。
-        """
+    def __init__(self, client_id, model, train_loader, val_loader, test_loader,
+                 criterion, lr: float = 1e-3):
         self.client_id = client_id
         self.model = model.to(DEVICE).float()
         self.train_loader = train_loader
+        self.val_loader = val_loader
         self.test_loader = test_loader
         self.criterion = criterion
-        # Adam 在这类小样本非线性回归上通常更稳定。
-        self.optimizer = optim.Adam(
-            self.model.parameters(),
-            lr=lr,
-            weight_decay=1e-4,
-        )
-        # 每 3 个 epoch 衰减一次学习率，用于平衡前期收敛速度和后期稳定性。
-        self.scheduler = optim.lr_scheduler.StepLR(
-            self.optimizer,
-            step_size=3,
-            gamma=0.9,
-        )
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
         self.train_losses = []
         self.val_losses = []
 
     def train_epoch(self):
-        """执行一个本地训练轮次。
-
-        返回:
-            当前 epoch 在本地训练集上的平均损失。
-        """
         self.model.train()
         total_loss = 0.0
         for x, y in self.train_loader:
-            x = x.to(DEVICE).float()
-            y = y.to(DEVICE).float().squeeze()
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
             self.optimizer.zero_grad()
-            pred, _ = unpack_model_output(self.model(x))
+            pred, _ = self.model(x)
             loss = self.criterion(pred.squeeze(), y)
             loss.backward()
-            # 梯度裁剪用于防止循环网络部分在训练初期出现梯度爆炸。
             torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             self.optimizer.step()
             total_loss += loss.item() * x.shape[0]
-        avg_loss = total_loss / len(self.train_loader.dataset)
-        self.train_losses.append(avg_loss)
-        return avg_loss
+        avg = total_loss / len(self.train_loader.dataset)
+        self.train_losses.append(avg)
+        return avg
 
     @torch.no_grad()
-    def validate(self):
-        """在本地测试集上执行验证。
-
-        返回:
-            平均验证损失。
-        """
+    def validate(self, loader=None):
+        """在指定数据加载器上评估损失。"""
+        if loader is None:
+            loader = self.val_loader
         self.model.eval()
         total_loss = 0.0
-        for x, y in self.test_loader:
-            x = x.to(DEVICE).float()
-            y = y.to(DEVICE).float().squeeze()
-            pred, _ = unpack_model_output(self.model(x))
+        for x, y in loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
             total_loss += self.criterion(pred.squeeze(), y).item() * x.shape[0]
-        avg_loss = total_loss / len(self.test_loader.dataset)
-        self.val_losses.append(avg_loss)
-        self.scheduler.step()
-        return avg_loss
+        avg = total_loss / len(loader.dataset)
+        return avg
 
-    def train_local(
-        self,
-        epochs: int = 5,
-        global_model=None,
-        verbose: bool = False,
-        prefix: str = "Local",
-    ):
-        """执行客户端本地训练。
-
-        参数:
-            epochs: 本地训练 epoch 数。
-            global_model: 若不为空，训练前先同步全局模型权重。
-            verbose: 是否打印每个 epoch 的详细日志。
-            prefix: 日志前缀，用于区分联邦训练与独立训练。
-
-        返回:
-            `(最终训练损失, 本地模型权重副本)`。
-        """
+    def train_local(self, epochs: int = 3, global_model=None, verbose: bool = False,
+                    prefix: str = "Local"):
         if global_model is not None:
             self.model.load_state_dict(global_model.state_dict())
         for epoch in range(epochs):
             train_loss = self.train_epoch()
             val_loss = self.validate()
+            self.val_losses.append(val_loss)
             if verbose:
-                print(
-                    f"  {prefix} epoch {epoch + 1}/{epochs}, "
-                    f"Train loss: {train_loss:.6f}, Val loss: {val_loss:.6f}"
-                )
+                print(f"  {prefix} Client{self.client_id} epoch {epoch+1}/{epochs} "
+                      f"train={train_loss:.6f} val={val_loss:.6f}")
         return float(self.train_losses[-1]), copy.deepcopy(self.model.state_dict())
 
     @torch.no_grad()
-    def test_predictions(self):
-        """获取测试集预测结果与注意力统计。
-
-        返回:
-            包含 `mse`、`mae`、`preds`、`truths`、`att_weights` 的字典。
-        """
-        self.model.eval()
-        preds, truths, att_weights = [], [], []
-        for x, y in self.test_loader:
-            x = x.to(DEVICE).float()
-            y = y.to(DEVICE).float().squeeze()
-            pred, weights = unpack_model_output(self.model(x))
-            preds.extend(np.atleast_1d(pred.squeeze().cpu().numpy()).tolist())
-            truths.extend(np.atleast_1d(y.cpu().numpy()).tolist())
-            if weights is not None:
-                att_weights.append(weights.cpu().numpy())
-
-        preds = np.array(preds)
-        truths = np.array(truths)
-        mse = float(np.mean((preds - truths) ** 2))
-        mae = float(np.mean(np.abs(preds - truths)))
-
-        att_mean = None
-        if att_weights:
-            att_weights = np.concatenate(att_weights, axis=0)
-            # 这里输出所有样本上的平均注意力矩阵，用于辅助解释分支融合关系。
-            att_mean = np.mean(att_weights, axis=0)
-        return {
-            "mse": mse,
-            "mae": mae,
-            "preds": preds,
-            "truths": truths,
-            "att_weights": att_mean,
-        }
-
-    @torch.no_grad()
     def test_metrics(self):
-        """计算测试集上的 MSE、RMSE 与 MAE。"""
+        """计算测试集 MSE、RMSE、MAE。"""
         self.model.eval()
         preds, truths = [], []
         for x, y in self.test_loader:
-            x = x.to(DEVICE).float()
-            y = y.to(DEVICE).float().squeeze()
-            pred, _ = unpack_model_output(self.model(x))
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
             preds.append(pred.squeeze())
             truths.append(y)
         preds = torch.cat(preds, dim=0)
         truths = torch.cat(truths, dim=0)
         diff = preds - truths
         mse = float((diff ** 2).mean().item())
+        rmse = float(torch.sqrt((diff ** 2).mean()).item())
         mae = float(diff.abs().mean().item())
-        rmse = float(np.sqrt(mse))
         return {"mse": mse, "rmse": rmse, "mae": mae}
 
 
 class IndependentClient(FederatedClient):
-    """独立训练客户端。
+    """独立训练客户端（不参与联邦聚合）。"""
 
-    该类复用联邦客户端大部分逻辑，但不进行全局模型同步，
-    主要用于构建非联邦基线。
-    """
+    def __init__(self, client_id, model, train_loader, val_loader, test_loader, criterion):
+        super().__init__(client_id, model, train_loader, val_loader, test_loader,
+                         criterion, lr=0.01)
 
-    def __init__(self, client_id, model, train_loader, test_loader, criterion):
-        """初始化独立训练客户端。"""
-        # 独立训练基线使用更大学习率，以在较少 epoch 下快速收敛。
-        super().__init__(
-            client_id,
-            model,
-            train_loader,
-            test_loader,
-            criterion,
-            lr=0.02,
-        )
-
-    def train_local(self, epochs: int = 2, verbose: bool = False):
-        """执行独立训练，不接收全局模型。"""
-        return super().train_local(
-            epochs=epochs,
-            global_model=None,
-            verbose=verbose,
-            prefix="Independent",
-        )
+    def train_local(self, epochs: int = 10, verbose: bool = False):
+        return super().train_local(epochs=epochs, global_model=None,
+                                   verbose=verbose, prefix="Independent")
 
 
 class FedAvgServer:
-    """标准样本量加权 FedAvg 服务端。
-
-    聚合公式：
-        global_model = sum(n_i / total_n * local_model_i)
-    其中 n_i 为客户端 i 的训练样本量，total_n 为所有客户端训练样本量总和。
-    """
+    """FedAvg 服务端：样本量加权聚合。"""
 
     def __init__(self, model, num_clients: int):
         self.global_model = model.to(DEVICE).float()
         self.num_clients = num_clients
         self.round_losses = []
+        self.round_val_losses = []
         self.client_data_sizes = None
 
     def set_client_data_sizes(self, sizes):
@@ -983,737 +438,434 @@ class FedAvgServer:
 
     def aggregate(self, client_weights, client_losses):
         total_n = float(sum(self.client_data_sizes))
-        weights = np.array(self.client_data_sizes) / total_n
-
+        weights_arr = np.array(self.client_data_sizes) / total_n
         global_dict = self.global_model.state_dict()
-        new_dict = {
-            key: torch.zeros_like(value, dtype=torch.float32)
-            for key, value in global_dict.items()
-        }
-
-        for key in new_dict.keys():
+        new_dict = {k: torch.zeros_like(v, dtype=torch.float32)
+                    for k, v in global_dict.items()}
+        for key in new_dict:
             for idx in range(self.num_clients):
-                client_weight = client_weights[idx][key].to(
-                    DEVICE,
-                    dtype=torch.float32,
-                )
-                new_dict[key] += client_weight * torch.tensor(
-                    float(weights[idx]),
-                    device=DEVICE,
-                    dtype=torch.float32,
-                )
-
+                cw = client_weights[idx][key].to(DEVICE, dtype=torch.float32)
+                new_dict[key] += cw * torch.tensor(float(weights_arr[idx]),
+                                                    device=DEVICE, dtype=torch.float32)
         self.global_model.load_state_dict(new_dict)
         self.round_losses.append(float(np.mean(client_losses)))
         return self.global_model.state_dict()
 
-def plot_overview_figure(
-    fed_metrics,
-    weak_metrics,
-    server,
-    fed_clients,
-    output_dir: Path,
-    file_name: str,
-) -> pd.DataFrame:
-    """绘制总览实验图。
 
-    参数:
-        fed_metrics: 联邦模型在各客户端上的测试结果。
-        weak_metrics: 独立训练基线在各客户端上的测试结果。
-        server: 联邦服务端对象，用于读取全局轮次损失。
-        fed_clients: 联邦客户端列表，用于读取各自验证损失。
-        output_dir: 图像输出目录。
-        file_name: 输出文件名。
+# ══════════════════════════════════════════════════════════
+# Workflow: data_viz — 基础数据集可视化
+# ══════════════════════════════════════════════════════════
 
-    返回:
-        总览图对应的指标表。
-    """
-    client_labels = [f"Client {i}" for i in range(len(fed_metrics))]
-    fed_mse = [m["mse"] for m in fed_metrics]
-    fed_rmse = [np.sqrt(m["mse"]) for m in fed_metrics]
-    fed_mae = [m["mae"] for m in fed_metrics]
+def run_data_visualization_base(output_dir: Path) -> None:
+    """基于基础实验数据生成逻辑，生成并保存 5 张图 + 1 份 CSV。"""
+    print("\n" + "=" * 60)
+    print("[data_viz] Generating base dataset visualizations...")
+    print("=" * 60)
 
-    weak_mse = [m["mse"] for m in weak_metrics]
-    weak_rmse = [np.sqrt(m["mse"]) for m in weak_metrics]
-    weak_mae = [m["mae"] for m in weak_metrics]
+    set_global_seed(BASE_SEED)
+    all_X, all_Y, meta = generate_base_traffic_data()
 
-    df_metrics = pd.DataFrame(
-        {
-            "Client": client_labels * 2,
-            "Method": ["CCN-FedAvg"] * len(client_labels)
-            + ["Independent"] * len(client_labels),
-            "MSE": fed_mse + weak_mse,
-            "RMSE": fed_rmse + weak_rmse,
-            "MAE": fed_mae + weak_mae,
-        }
-    )
-    df_long = df_metrics.melt(
-        id_vars=["Client", "Method"],
-        value_vars=["MSE", "RMSE", "MAE"],
-        var_name="Metric",
-        value_name="Value",
-    )
+    ensure_output_dir(output_dir)
 
-    # 记录全局损失曲线，用于观察联邦训练整体收敛趋势。
-    round_axis = np.arange(1, len(server.round_losses) + 1)
-    df_global = pd.DataFrame(
-        {"Round": round_axis, "AvgTrainLoss": server.round_losses}
-    )
+    # ── 1. 每个 client 的平均交通流时间序列 ──
+    fig, ax = plt.subplots(figsize=(14, 6))
+    for cid in range(meta["num_clients"]):
+        # 对该 client 所有样本、所有节点取平均
+        ts_mean = all_X[cid].mean(axis=(0, 1))  # shape [seq_len,]
+        ax.plot(ts_mean, label=f"Client {cid}", linewidth=1.5)
+    ax.set_xlabel("Time Step")
+    ax.set_ylabel("Avg Traffic Flow")
+    ax.set_title("Base Dataset: Per-Client Average Traffic Flow Time Series")
+    ax.legend(loc="upper right", frameon=True, fontsize=8)
+    ax.set_xlim(0, min(200, meta["seq_len"]))
+    save_figure(fig, output_dir, "base_dataset_client_timeseries.png")
 
-    # 记录客户端验证损失，用于观察异构客户端上的收敛差异。
-    df_client_val = pd.concat(
-        [
-            pd.DataFrame(
-                {
-                    "Round": np.arange(1, len(client.val_losses) + 1),
-                    "Client": f"Client {client.client_id}",
-                    "ValLoss": client.val_losses,
-                }
-            )
-            for client in fed_clients
-        ],
-        ignore_index=True,
-    )
+    # ── 2. 代表性 client 的节点-时间热力图 ──
+    rep_cid = 0
+    X_rep = all_X[rep_cid]  # [samples, nodes, seq_len]
+    node_time_matrix = X_rep.mean(axis=0)  # [nodes, seq_len]
 
-    fed_mse_std, fed_mse_gap, fed_mse_cv = stability_stats(fed_mse)
-    weak_mse_std, weak_mse_gap, weak_mse_cv = stability_stats(weak_mse)
-    fed_mae_std, fed_mae_gap, fed_mae_cv = stability_stats(fed_mae)
-    weak_mae_std, weak_mae_gap, weak_mae_cv = stability_stats(weak_mae)
+    fig, ax = plt.subplots(figsize=(14, 6))
+    im = ax.imshow(node_time_matrix, aspect="auto", cmap="YlOrRd", origin="lower")
+    ax.set_xlabel("Time Step")
+    ax.set_ylabel("Node ID")
+    ax.set_title(f"Base Dataset: Node-Time Heatmap (Client {rep_cid})")
+    plt.colorbar(im, ax=ax, label="Traffic Flow")
+    save_figure(fig, output_dir, "base_dataset_node_heatmap.png")
 
-    # 稳定性统计用于刻画不同客户端之间误差离散程度。
-    df_stability = pd.DataFrame(
-        {
-            "Statistic": [
-                "MSE-STD",
-                "MSE-GAP",
-                "MSE-CV",
-                "MAE-STD",
-                "MAE-GAP",
-                "MAE-CV",
-            ]
-            * 2,
-            "Value": [
-                fed_mse_std,
-                fed_mse_gap,
-                fed_mse_cv,
-                fed_mae_std,
-                fed_mae_gap,
-                fed_mae_cv,
-                weak_mse_std,
-                weak_mse_gap,
-                weak_mse_cv,
-                weak_mae_std,
-                weak_mae_gap,
-                weak_mae_cv,
-            ],
-            "Method": ["CCN-FedAvg"] * 6 + ["Independent"] * 6,
-        }
-    )
+    # ── 3. 不同 client 的流量分布箱线图 ──
+    fig, ax = plt.subplots(figsize=(12, 6))
+    box_data = []
+    for cid in range(meta["num_clients"]):
+        # 所有样本、所有节点、所有时间步展平
+        box_data.append(all_X[cid].ravel())
+    bp = ax.boxplot(box_data, tick_labels=[f"Client {i}" for i in range(meta["num_clients"])],
+                    patch_artist=True, showfliers=False)
+    for patch, color in zip(bp["boxes"], plt.cm.Set2(np.linspace(0, 1, meta["num_clients"]))):
+        patch.set_facecolor(color)
+    ax.set_xlabel("Client")
+    ax.set_ylabel("Traffic Flow Value")
+    ax.set_title("Base Dataset: Per-Client Traffic Flow Distribution")
+    save_figure(fig, output_dir, "base_dataset_client_boxplot.png")
 
-    fig, axes = plt.subplots(2, 3, figsize=(20, 11))
-    sns.barplot(
-        data=df_long[df_long["Metric"] == "MSE"],
-        x="Client",
-        y="Value",
-        hue="Method",
-        ax=axes[0, 0],
-    )
-    axes[0, 0].set_title("(a) MSE Comparison")
-    axes[0, 0].set_xlabel("")
-    axes[0, 0].set_ylabel("MSE")
-    axes[0, 0].legend(title="Method", loc="lower right", frameon=True)
+    # ── 4. train / val / test 划分概览 ──
+    fig, ax = plt.subplots(figsize=(10, 4))
+    total_samples = sum(meta["samples_per_client"])
+    train_n = int(total_samples * BASE_TRAIN_RATIO)
+    val_n = int(total_samples * BASE_VAL_RATIO)
+    test_n = total_samples - train_n - val_n
+    colors = ["#2ecc71", "#f39c12", "#e74c3c"]
+    labels = [f"Train ({BASE_TRAIN_RATIO*100:.0f}%)",
+              f"Val ({BASE_VAL_RATIO*100:.0f}%)",
+              f"Test ({BASE_TEST_RATIO*100:.0f}%)"]
+    sizes = [train_n, val_n, test_n]
+    ax.barh(["Dataset Split"], [sizes[0]], color=colors[0], label=labels[0])
+    ax.barh(["Dataset Split"], [sizes[1]], left=[sizes[0]], color=colors[1], label=labels[1])
+    ax.barh(["Dataset Split"], [sizes[2]], left=[sizes[0] + sizes[1]], color=colors[2], label=labels[2])
+    ax.set_xlabel("Number of Samples")
+    ax.set_title("Base Dataset: Train / Validation / Test Split")
+    ax.legend(loc="upper right")
+    ax.set_xlim(0, total_samples + 50)
+    save_figure(fig, output_dir, "base_dataset_split_overview.png")
 
-    sns.barplot(
-        data=df_long[df_long["Metric"] == "RMSE"],
-        x="Client",
-        y="Value",
-        hue="Method",
-        ax=axes[0, 1],
-    )
-    axes[0, 1].set_title("(b) RMSE Comparison")
-    axes[0, 1].set_xlabel("")
-    axes[0, 1].set_ylabel("RMSE")
-    axes[0, 1].legend(title="Method", loc="lower right", frameon=True)
+    # ── 5. 每个 client 的样本量 ──
+    fig, ax = plt.subplots(figsize=(10, 5))
+    client_ids = [f"Client {i}" for i in range(meta["num_clients"])]
+    ax.bar(client_ids, meta["samples_per_client"], color=plt.cm.Set2(np.linspace(0, 1, meta["num_clients"])))
+    ax.set_xlabel("Client")
+    ax.set_ylabel("Number of Samples")
+    ax.set_title("Base Dataset: Samples per Client")
+    for i, v in enumerate(meta["samples_per_client"]):
+        ax.text(i, v + 2, str(v), ha="center", fontsize=10)
+    save_figure(fig, output_dir, "base_dataset_client_sample_size.png")
 
-    sns.barplot(
-        data=df_long[df_long["Metric"] == "MAE"],
-        x="Client",
-        y="Value",
-        hue="Method",
-        ax=axes[0, 2],
-    )
-    axes[0, 2].set_title("(c) MAE Comparison")
-    axes[0, 2].set_xlabel("")
-    axes[0, 2].set_ylabel("MAE")
-    axes[0, 2].legend(title="Method", loc="lower right", frameon=True)
+    # ── 6. 数据集汇总 CSV ──
+    summary_rows = []
+    for cid in range(meta["num_clients"]):
+        X_c = all_X[cid]
+        Y_c = all_Y[cid]
+        X_train, Y_train, X_val, Y_val, X_test, Y_test = split_train_val_test(X_c, Y_c)
+        all_vals = X_c.ravel()
+        summary_rows.append({
+            "client_id": cid,
+            "num_samples": len(X_c),
+            "num_nodes": meta["num_nodes"],
+            "seq_len": meta["seq_len"],
+            "pred_len": meta["pred_len"],
+            "train_size": len(X_train),
+            "val_size": len(X_val),
+            "test_size": len(X_test),
+            "mean_flow": float(np.mean(all_vals)),
+            "std_flow": float(np.std(all_vals)),
+            "min_flow": float(np.min(all_vals)),
+            "max_flow": float(np.max(all_vals)),
+        })
 
-    sns.lineplot(
-        data=df_global,
-        x="Round",
-        y="AvgTrainLoss",
-        marker="o",
-        ax=axes[1, 0],
-    )
-    axes[1, 0].set_title("(d) FedAvg Convergence (Global)")
-    axes[1, 0].set_xlabel("Communication Round")
-    axes[1, 0].set_ylabel("Avg Train Loss")
-
-    sns.lineplot(
-        data=df_client_val,
-        x="Round",
-        y="ValLoss",
-        hue="Client",
-        marker="o",
-        ax=axes[1, 1],
-    )
-    axes[1, 1].set_title("(e) Client Validation Convergence (FedAvg)")
-    axes[1, 1].set_xlabel("Communication Round")
-    axes[1, 1].set_ylabel("Validation Loss")
-    axes[1, 1].legend(title="Client")
-
-    sns.barplot(
-        data=df_stability,
-        x="Statistic",
-        y="Value",
-        hue="Method",
-        ax=axes[1, 2],
-    )
-    axes[1, 2].set_title("(f) Cross-Client Error Stability (Dispersion)")
-    axes[1, 2].set_xlabel("")
-    axes[1, 2].set_ylabel("Value")
-    axes[1, 2].tick_params(axis="x", rotation=30)
-    axes[1, 2].legend(title="Method")
-
-    plt.tight_layout()
-    save_figure(fig, output_dir, file_name)
-    return df_metrics
+    df_summary = pd.DataFrame(summary_rows)
+    save_dataframe(df_summary, output_dir, "base_dataset_summary.csv")
+    print("[data_viz] Dataset summary:\n", df_summary.to_string(index=False))
+    print("[data_viz] Done.\n")
 
 
-def plot_ablation_figure(
-    df_conv: pd.DataFrame,
-    df_stab: pd.DataFrame,
-    df_delta: pd.DataFrame,
-    client_labels,
-    rounds: int,
-    output_dir: Path,
-    file_name: str,
-):
-    """绘制消融实验图。
+# ══════════════════════════════════════════════════════════
+# Workflow: main — Independent / FedAvg 主结果对比
+# ══════════════════════════════════════════════════════════
 
-    图中包含：
-    1. 测试集 RMSE 收敛曲线；
-    2. 客户端级稳定性分布；
-    3. 相对完整模型的性能变化；
-    4. 客户端与模型二维热力图。
-    """
-    heat = df_stab.pivot_table(
-        index="Client",
-        columns="Model",
-        values="rmse",
-        aggfunc="mean",
-    )
-    heat = heat.reindex(index=client_labels)
+def run_main_experiment(output_dir: Path) -> None:
+    """运行基础实验主结果：Independent vs FedAvg。"""
+    print("\n" + "=" * 60)
+    print("[main] Running CNN FedAvg base experiment...")
+    print("=" * 60)
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    (ax1, ax2), (ax3, ax4) = axes
+    set_global_seed(BASE_SEED)
+    all_X, all_Y, _ = generate_base_traffic_data()
+    ensure_output_dir(output_dir)
 
-    for name in df_conv["Model"].unique():
-        sub = df_conv[df_conv["Model"] == name].sort_values("Round")
-        x = sub["Round"].to_numpy(dtype=int)
-        y = sub["TestRMSE_mean"].to_numpy(dtype=float)
-        s = sub["TestRMSE_std"].to_numpy(dtype=float)
-        ax1.plot(x, y, marker="o", linewidth=2, label=name)
-        # 使用均值 ± 标准差阴影展示不同客户端的离散程度。
-        ax1.fill_between(x, y - s, y + s, alpha=0.15)
-
-    ax1.set_xlabel("Communication Round")
-    ax1.set_ylabel("Test RMSE")
-    ax1.set_title("(a) Convergence of Test RMSE (mean ± std)")
-    ax1.set_xticks(np.arange(1, rounds + 1, dtype=int))
-    ax1.legend(frameon=True)
-
-    sns.violinplot(data=df_stab, x="Model", y="rmse", inner=None, cut=0, ax=ax2)
-    sns.stripplot(
-        data=df_stab,
-        x="Model",
-        y="rmse",
-        color="k",
-        size=4,
-        alpha=0.6,
-        ax=ax2,
-    )
-    ax2.set_xlabel("Model Variant")
-    ax2.set_ylabel("Final Test RMSE")
-    ax2.set_title("(b) Client-level Stability (Final RMSE)")
-    ax2.tick_params(axis="x", rotation=15)
-
-    if len(df_delta) > 0:
-        df_delta_melt = df_delta.melt(
-            id_vars=["Model"],
-            var_name="Metric",
-            value_name="DeltaPercent",
-        )
-        sns.barplot(
-            data=df_delta_melt,
-            x="Model",
-            y="DeltaPercent",
-            hue="Metric",
-            ax=ax3,
-        )
-        ax3.axhline(0, linewidth=1)
-        ax3.set_xlabel("Ablation Variant")
-        ax3.set_ylabel("Relative Change (%)")
-        ax3.set_title("(c) Relative Change Compared with Full Model")
-        ax3.tick_params(axis="x", rotation=15)
-        ax3.legend(title="Metric", frameon=True)
-    else:
-        ax3.axis("off")
-
-    sns.heatmap(
-        heat,
-        annot=True,
-        fmt=".3f",
-        linewidths=0.5,
-        cbar_kws={"label": "Final Test RMSE"},
-        ax=ax4,
-    )
-    ax4.set_xlabel("Model Variant")
-    ax4.set_ylabel("Client")
-    ax4.set_title("(d) Client × Model Heatmap (Final RMSE)")
-    ax4.tick_params(axis="x", rotation=15)
-
-    plt.tight_layout()
-    save_figure(fig, output_dir, file_name)
-
-
-def run_fedavg_ablation(
-    *,
-    workflow_name: str,
-    seed: int,
-    num_clients: int,
-    k: int,
-    t: int,
-    samples_per_client,
-    num_rounds: int,
-    local_epochs: int,
-    full_name: str,
-    variants: "OrderedDict[str, Callable[[], nn.Module]]",
-    output_dir: Path,
-    figure_name: str,
-    metrics_file_name: str,
-) -> Dict[str, Dict[str, float]]:
-    """执行样本量加权 FedAvg 消融实验。
-
-    参数:
-        workflow_name: 当前实验名称。
-        seed: 随机种子。
-        num_clients: 客户端数量。
-        k: 输入特征数。
-        t: 时间窗口长度。
-        samples_per_client: 各客户端样本数列表。
-        num_rounds: 联邦轮次。
-        local_epochs: 每轮联邦中的本地训练 epoch 数。
-        full_name: 完整模型名称，用于计算相对性能变化。
-        variants: 模型变体构造器字典。
-        output_dir: 输出目录。
-        figure_name: 图像文件名。
-        metrics_file_name: 指标文件名。
-
-    返回:
-        各模型变体的汇总指标字典。
-    """
-    set_global_seed(seed)
     criterion = nn.MSELoss()
-    split_gen = torch.Generator().manual_seed(seed)
+    num_clients = BASE_NUM_CLIENTS
+    k = BASE_NUM_NODES
+    t = BASE_SEQ_LEN
 
-    def build_loaders():
-        """为每个客户端构建训练集与测试集加载器。"""
-        train_loaders, test_loaders = [], []
-        for cid in range(num_clients):
-            dataset = AblationHeterogeneousDataset(
-                client_id=cid,
-                num_samples=samples_per_client[cid],
-                k=k,
-                t=t,
-            )
-            train_size = int(0.8 * len(dataset))
-            train_data, test_data = random_split(
-                dataset,
-                [train_size, len(dataset) - train_size],
-                generator=split_gen,
-            )
-            loader_gen = torch.Generator().manual_seed(seed + cid)
-            train_loader = DataLoader(
-                train_data,
-                batch_size=8,
-                shuffle=True,
-                generator=loader_gen,
-            )
-            test_loader = DataLoader(test_data, batch_size=8, shuffle=False)
-            train_loaders.append(train_loader)
-            test_loaders.append(test_loader)
-        return train_loaders, test_loaders
-
-    def eval_global_on_clients(global_model, clients):
-        """将同一全局模型下发至所有客户端并统一评估。"""
-        per_client = []
-        for client in clients:
-            client.model.load_state_dict(global_model.state_dict())
-            per_client.append(client.test_metrics())
-        return per_client
-
-    results_client = {}
-    results_summary = {}
-    histories = {}
-
-    print(f"\n===== {workflow_name} =====")
-    for name, ctor in variants.items():
-        # 为保证模型间对比公平，每个变体都重新生成相同规则的数据划分。
-        train_loaders, test_loaders = build_loaders()
-        clients = [
-            FederatedClient(
-                cid,
-                ctor(),
-                train_loaders[cid],
-                test_loaders[cid],
-                criterion,
-                lr=1e-3,
-            )
-            for cid in range(num_clients)
-        ]
-        server = FedAvgServer(ctor(), num_clients)
-        server.set_client_data_sizes(samples_per_client)
-
-        hist_train_client, hist_train_mean, hist_train_std = [], [], []
-        hist_test_client, hist_test_mean, hist_test_std = [], [], []
-
-        print(f"\nStart FedAvg Training: {name}")
-        for rnd in range(num_rounds):
-            print(f"  Round {rnd + 1}/{num_rounds}")
-            client_weights, client_losses = [], []
-            for client in clients:
-                loss, weights = client.train_local(
-                    epochs=local_epochs,
-                    global_model=server.global_model,
-                    verbose=False,
-                )
-                client_weights.append(weights)
-                client_losses.append(float(loss))
-                print(f"    Client {client.client_id} | Local avg MSE: {loss:.6f}")
-
-            server.aggregate(client_weights, client_losses)
-            hist_train_client.append(client_losses)
-            hist_train_mean.append(float(np.mean(client_losses)))
-            hist_train_std.append(float(np.std(client_losses, ddof=0)))
-
-            per_client_metrics = eval_global_on_clients(server.global_model, clients)
-            per_client_rmse = np.array(
-                [m["rmse"] for m in per_client_metrics],
-                dtype=float,
-            )
-            hist_test_client.append(per_client_rmse.tolist())
-            hist_test_mean.append(float(per_client_rmse.mean()))
-            hist_test_std.append(float(per_client_rmse.std(ddof=0)))
-            print(
-                f"    Global Test RMSE mean: {hist_test_mean[-1]:.6f} "
-                f"(std {hist_test_std[-1]:.6f})"
-            )
-
-        final_list = eval_global_on_clients(server.global_model, clients)
-        df_final = pd.DataFrame(final_list)
-        df_final["cid"] = list(range(num_clients))
-        df_final = df_final.sort_values("cid").reset_index(drop=True)
-
-        results_client[name] = df_final
-        results_summary[name] = {
-            "mse_mean": float(df_final["mse"].mean()),
-            "mse_std": float(df_final["mse"].std(ddof=0)),
-            "rmse_mean": float(df_final["rmse"].mean()),
-            "rmse_std": float(df_final["rmse"].std(ddof=0)),
-            "mae_mean": float(df_final["mae"].mean()),
-            "mae_std": float(df_final["mae"].std(ddof=0)),
-        }
-        histories[name] = {
-            "train_mean": hist_train_mean,
-            "train_std": hist_train_std,
-            "train_client": hist_train_client,
-            "test_mean": hist_test_mean,
-            "test_std": hist_test_std,
-            "test_client": hist_test_client,
-        }
-
-    conv_rows = []
-    for name, hist in histories.items():
-        for rnd in range(num_rounds):
-            conv_rows.append(
-                {
-                    "Model": name,
-                    "Round": rnd + 1,
-                    "TestRMSE_mean": hist["test_mean"][rnd],
-                    "TestRMSE_std": hist["test_std"][rnd],
-                }
-            )
-    df_conv = pd.DataFrame(conv_rows)
-
-    stab_rows = []
-    client_labels = [f"Client {idx}" for idx in range(num_clients)]
-    for name, df_pc in results_client.items():
-        for _, row in df_pc.iterrows():
-            stab_rows.append(
-                {
-                    "Model": name,
-                    "Client": f"Client {int(row['cid'])}",
-                    "rmse": float(row["rmse"]),
-                    "mae": float(row["mae"]),
-                    "mse": float(row["mse"]),
-                }
-            )
-    df_stab = pd.DataFrame(stab_rows)
-
-    full = results_summary[full_name]
-    delta_rows = []
-    for name, summary in results_summary.items():
-        if name == full_name:
-            continue
-        delta_rows.append(
-            {
-                "Model": name,
-                "Delta_RMSE_%": (
-                    (summary["rmse_mean"] - full["rmse_mean"])
-                    / (full["rmse_mean"] + 1e-12)
-                    * 100.0
-                ),
-                "Delta_MAE_%": (
-                    (summary["mae_mean"] - full["mae_mean"])
-                    / (full["mae_mean"] + 1e-12)
-                    * 100.0
-                ),
-            }
+    # 构建数据加载器
+    train_loaders, val_loaders, test_loaders = [], [], []
+    train_sizes = []
+    for cid in range(num_clients):
+        X_train, Y_train, X_val, Y_val, X_test, Y_test = split_train_val_test(
+            all_X[cid], all_Y[cid]
         )
-    df_delta = pd.DataFrame(delta_rows)
+        train_sizes.append(len(X_train))
+        train_loaders.append(DataLoader(TrafficDataset(X_train, Y_train),
+                                        batch_size=FED_BATCH_SIZE, shuffle=True))
+        val_loaders.append(DataLoader(TrafficDataset(X_val, Y_val),
+                                       batch_size=FED_BATCH_SIZE, shuffle=False))
+        test_loaders.append(DataLoader(TrafficDataset(X_test, Y_test),
+                                        batch_size=FED_BATCH_SIZE, shuffle=False))
 
-    plot_ablation_figure(
-        df_conv,
-        df_stab,
-        df_delta,
-        client_labels,
-        num_rounds,
-        output_dir,
-        figure_name,
-    )
-    summary_df = print_summary_table(results_summary)
-    save_dataframe(summary_df, output_dir, metrics_file_name)
-    return results_summary
+    # ── FedAvg 训练 ──
+    fed_clients = [
+        FederatedClient(cid, CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM),
+                        train_loaders[cid], val_loaders[cid], test_loaders[cid],
+                        criterion, lr=1e-3)
+        for cid in range(num_clients)
+    ]
+    server = FedAvgServer(CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM), num_clients)
+    server.set_client_data_sizes(train_sizes)
 
-
-def run_overview_experiment(output_dir: Path) -> None:
-    """运行 CCN 总览实验。"""
-    # 固定实验超参数，确保与既有结果口径一致。
-    seed = 42
-    num_rounds = 6
-    local_epochs = 5
-    num_clients = 3
-    k, t = 5, 24
-    samples_per_client = [50, 80, 120]
-    criterion = nn.MSELoss()
-
-    set_global_seed(seed)
-
-    split_gen = torch.Generator()
-    split_gen.manual_seed(seed)
-
-    fed_clients = []
-    weak_clients = []
-    for client_id in range(num_clients):
-        dataset = OverviewHeterogeneousDataset(
-            client_id=client_id,
-            num_samples=samples_per_client[client_id],
-            k=k,
-            t=t,
-        )
-        train_size = int(0.8 * len(dataset))
-        train_data, test_data = random_split(
-            dataset,
-            [train_size, len(dataset) - train_size],
-            generator=split_gen,
-        )
-
-        loader_gen = torch.Generator()
-        loader_gen.manual_seed(seed + client_id)
-        train_loader = DataLoader(
-            train_data,
-            batch_size=8,
-            shuffle=True,
-            generator=loader_gen,
-        )
-        test_loader = DataLoader(test_data, batch_size=8, shuffle=False)
-
-        fed_clients.append(
-            FederatedClient(
-                client_id,
-                CCNOverviewModel(k=k, t=t),
-                train_loader,
-                test_loader,
-                criterion,
-                lr=1e-3,
-            )
-        )
-        weak_clients.append(
-            IndependentClient(
-                client_id,
-                WeakModel(k=k, t=t),
-                train_loader,
-                test_loader,
-                criterion,
-            )
-        )
-
-    server = FedAvgServer(CCNOverviewModel(k=k, t=t), num_clients)
-    server.set_client_data_sizes(samples_per_client)
-
-    print("\n===== CCN Overview =====")
-    for rnd in range(num_rounds):
-        print(f"[overview] round {rnd + 1}/{num_rounds}")
+    print("\n[FedAvg Training]")
+    for rnd in range(FED_ROUNDS):
         client_weights, client_losses = [], []
         for client in fed_clients:
-            loss, weights = client.train_local(
-                epochs=local_epochs,
-                global_model=server.global_model,
-                verbose=False,
-            )
+            loss, weights = client.train_local(epochs=FED_LOCAL_EPOCHS,
+                                               global_model=server.global_model)
             client_weights.append(weights)
             client_losses.append(loss)
-            print(f"  Client {client.client_id} | Local avg MSE: {loss:.4f}")
         server.aggregate(client_weights, client_losses)
-        print(f"  Round average federated loss: {server.round_losses[-1]:.4f}")
 
-    print("[overview] independent baselines")
-    for client in weak_clients:
-        loss, _ = client.train_local(epochs=2, verbose=False)
-        print(f"  Client {client.client_id} | Independent avg MSE: {loss:.4f}")
+        # 聚合后在每个客户端的验证集上评估
+        val_losses = []
+        for client in fed_clients:
+            client.model.load_state_dict(server.global_model.state_dict())
+            val_losses.append(client.validate(client.val_loader))
+        server.round_val_losses.append(float(np.mean(val_losses)))
+        print(f"  Round {rnd+1}/{FED_ROUNDS} | Avg Train Loss: {server.round_losses[-1]:.6f} "
+              f"| Avg Val Loss: {server.round_val_losses[-1]:.6f}")
 
-    fed_metrics = [client.test_predictions() for client in fed_clients]
-    weak_metrics = [client.test_predictions() for client in weak_clients]
+    # 记录 FedAvg 最终测试指标
+    fed_metrics = []
+    for client in fed_clients:
+        client.model.load_state_dict(server.global_model.state_dict())
+        fed_metrics.append(client.test_metrics())
 
-    print("\n===== Performance Comparison =====")
-    for idx in range(num_clients):
-        print(f"Client {idx}:")
-        print(
-            f"  CCN-FedAvg   - MSE: {fed_metrics[idx]['mse']:.4f}, "
-            f"MAE: {fed_metrics[idx]['mae']:.4f}"
+    # ── Independent 训练 ──
+    ind_clients = [
+        IndependentClient(cid, IndependentBaseModel(k=k, t=t),
+                          train_loaders[cid], val_loaders[cid], test_loaders[cid],
+                          criterion)
+        for cid in range(num_clients)
+    ]
+
+    print("\n[Independent Training]")
+    for client in ind_clients:
+        loss, _ = client.train_local(epochs=15, verbose=False)
+        print(f"  Client {client.client_id} | Final Train Loss: {loss:.6f}")
+
+    ind_metrics = []
+    for client in ind_clients:
+        ind_metrics.append(client.test_metrics())
+
+    # ── 输出结果 ──
+    print("\n===== Results: FedAvg vs Independent =====")
+    for cid in range(num_clients):
+        fm = fed_metrics[cid]
+        im = ind_metrics[cid]
+        print(f"Client {cid}:")
+        print(f"  FedAvg       - MSE={fm['mse']:.6f} RMSE={fm['rmse']:.6f} MAE={fm['mae']:.6f}")
+        print(f"  Independent  - MSE={im['mse']:.6f} RMSE={im['rmse']:.6f} MAE={im['mae']:.6f}")
+
+    # 保存详细指标
+    rows = []
+    for cid in range(num_clients):
+        fm = fed_metrics[cid]
+        im = ind_metrics[cid]
+        rows.append({"method": "FedAvg", "client_id": cid,
+                     "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"]})
+        rows.append({"method": "Independent", "client_id": cid,
+                     "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"]})
+    df_metrics = pd.DataFrame(rows)
+    save_dataframe(df_metrics, output_dir, "cnn_base_metrics.csv")
+
+    # 汇总表
+    summary_rows = []
+    for method in ["FedAvg", "Independent"]:
+        sub = df_metrics[df_metrics["method"] == method]
+        summary_rows.append({
+            "method": method,
+            "mse_mean": float(sub["mse"].mean()),
+            "mse_std": float(sub["mse"].std(ddof=0)),
+            "rmse_mean": float(sub["rmse"].mean()),
+            "rmse_std": float(sub["rmse"].std(ddof=0)),
+            "mae_mean": float(sub["mae"].mean()),
+            "mae_std": float(sub["mae"].std(ddof=0)),
+        })
+    df_summary = pd.DataFrame(summary_rows)
+    save_dataframe(df_summary, output_dir, "cnn_base_metrics_summary.csv")
+    print("\n[main] Summary:\n", df_summary.to_string(index=False))
+
+    # ── 绘制对比柱状图 ──
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    client_labels = [f"Client {i}" for i in range(num_clients)]
+    x = np.arange(num_clients)
+    width = 0.35
+
+    for idx, metric in enumerate(["mse", "rmse", "mae"]):
+        ax = axes[idx]
+        fed_vals = [fed_metrics[c][metric] for c in range(num_clients)]
+        ind_vals = [ind_metrics[c][metric] for c in range(num_clients)]
+        ax.bar(x - width/2, fed_vals, width, label="FedAvg", color="#3498db")
+        ax.bar(x + width/2, ind_vals, width, label="Independent", color="#e74c3c")
+        ax.set_xticks(x)
+        ax.set_xticklabels(client_labels, rotation=30, ha="right")
+        ax.set_title(metric.upper())
+        ax.set_ylabel(metric.upper())
+        ax.legend(fontsize=8)
+    fig.suptitle("CNN Base Experiment: FedAvg vs Independent", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_base_main_comparison.png")
+    print("[main] Done.\n")
+
+
+# ══════════════════════════════════════════════════════════
+# Workflow: convergence — 联邦训练收敛曲线
+# ══════════════════════════════════════════════════════════
+
+def run_convergence_experiment(output_dir: Path) -> None:
+    """输出基础训练收敛曲线。"""
+    print("\n" + "=" * 60)
+    print("[convergence] Running CNN convergence analysis...")
+    print("=" * 60)
+
+    set_global_seed(BASE_SEED)
+    all_X, all_Y, _ = generate_base_traffic_data()
+    ensure_output_dir(output_dir)
+
+    criterion = nn.MSELoss()
+    num_clients = BASE_NUM_CLIENTS
+    k = BASE_NUM_NODES
+    t = BASE_SEQ_LEN
+    convergence_rounds = 15  # 更多轮次观察收敛
+
+    train_loaders, val_loaders, test_loaders = [], [], []
+    train_sizes = []
+    for cid in range(num_clients):
+        X_train, Y_train, X_val, Y_val, X_test, Y_test = split_train_val_test(
+            all_X[cid], all_Y[cid]
         )
-        print(
-            f"  Independent - MSE: {weak_metrics[idx]['mse']:.4f}, "
-            f"MAE: {weak_metrics[idx]['mae']:.4f}"
-        )
-        if fed_metrics[idx]["att_weights"] is not None:
-            print(
-                "  Mean attention weight: "
-                f"{np.round(fed_metrics[idx]['att_weights'].mean(), 4)}"
-            )
+        train_sizes.append(len(X_train))
+        train_loaders.append(DataLoader(TrafficDataset(X_train, Y_train),
+                                        batch_size=FED_BATCH_SIZE, shuffle=True))
+        val_loaders.append(DataLoader(TrafficDataset(X_val, Y_val),
+                                       batch_size=FED_BATCH_SIZE, shuffle=False))
+        test_loaders.append(DataLoader(TrafficDataset(X_test, Y_test),
+                                        batch_size=FED_BATCH_SIZE, shuffle=False))
 
-    overview_df = plot_overview_figure(
-        fed_metrics,
-        weak_metrics,
-        server,
-        fed_clients,
-        output_dir,
-        build_output_file_name("overview", "figure", "png"),
-    )
-    save_dataframe(
-        overview_df,
-        output_dir,
-        build_output_file_name("overview", "metrics", "csv"),
-    )
+    fed_clients = [
+        FederatedClient(cid, CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM),
+                        train_loaders[cid], val_loaders[cid], test_loaders[cid],
+                        criterion, lr=1e-3)
+        for cid in range(num_clients)
+    ]
+    server = FedAvgServer(CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM), num_clients)
+    server.set_client_data_sizes(train_sizes)
+
+    # 记录每轮数据
+    round_data = {
+        "round": [], "avg_train_loss": [], "avg_val_rmse": [],
+    }
+    for cid in range(num_clients):
+        round_data[f"client_{cid}_train_loss"] = []
+        round_data[f"client_{cid}_val_rmse"] = []
+
+    print("\n[FedAvg Convergence Training]")
+    for rnd in range(convergence_rounds):
+        client_weights, client_losses = [], []
+        for client in fed_clients:
+            loss, weights = client.train_local(epochs=FED_LOCAL_EPOCHS,
+                                               global_model=server.global_model)
+            client_weights.append(weights)
+            client_losses.append(loss)
+        server.aggregate(client_weights, client_losses)
+
+        # 全局模型在每个客户端验证集上的评估
+        val_rmses = []
+        for client in fed_clients:
+            client.model.load_state_dict(server.global_model.state_dict())
+            val_loss = client.validate(client.val_loader)
+            val_rmses.append(float(np.sqrt(val_loss)))
+
+        server.round_val_losses.append(float(np.mean(val_rmses)))
+
+        round_data["round"].append(rnd + 1)
+        round_data["avg_train_loss"].append(server.round_losses[-1])
+        round_data["avg_val_rmse"].append(server.round_val_losses[-1])
+        for cid in range(num_clients):
+            round_data[f"client_{cid}_train_loss"].append(client_losses[cid])
+            round_data[f"client_{cid}_val_rmse"].append(val_rmses[cid])
+
+        print(f"  Round {rnd+1}/{convergence_rounds} | "
+              f"Train Loss: {server.round_losses[-1]:.6f} | "
+              f"Val RMSE: {server.round_val_losses[-1]:.6f}")
+
+    # 保存收敛 CSV
+    df_conv = pd.DataFrame(round_data)
+    save_dataframe(df_conv, output_dir, "cnn_base_convergence.csv")
+
+    # 绘制收敛曲线
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+    # 左图：全局平均 train loss 和 validation RMSE
+    ax = axes[0]
+    ax.plot(round_data["round"], round_data["avg_train_loss"],
+            "o-", label="Avg Train Loss (MSE)", color="#3498db", linewidth=2)
+    ax.set_xlabel("Communication Round")
+    ax.set_ylabel("Train Loss (MSE)", color="#3498db")
+    ax.tick_params(axis="y", labelcolor="#3498db")
+
+    ax2 = ax.twinx()
+    ax2.plot(round_data["round"], round_data["avg_val_rmse"],
+             "s-", label="Avg Val RMSE", color="#e74c3c", linewidth=2)
+    ax2.set_ylabel("Validation RMSE", color="#e74c3c")
+    ax2.tick_params(axis="y", labelcolor="#e74c3c")
+
+    lines1, labels1 = ax.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
+    ax.set_title("Global Convergence: Train Loss & Val RMSE")
+
+    # 右图：每个 client 的 local training loss
+    ax = axes[1]
+    for cid in range(num_clients):
+        ax.plot(round_data["round"], round_data[f"client_{cid}_train_loss"],
+                "o-", label=f"Client {cid}", linewidth=1.5, markersize=3)
+    ax.set_xlabel("Communication Round")
+    ax.set_ylabel("Local Train Loss (MSE)")
+    ax.set_title("Per-Client Local Training Loss")
+    ax.legend(fontsize=8)
+
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_base_convergence.png")
+    print("[convergence] Done.\n")
 
 
-def run_ablation_experiment(output_dir: Path) -> Dict[str, Dict[str, float]]:
-    """运行 CCN 消融实验。"""
-    return run_fedavg_ablation(
-        workflow_name="CCN FedAvg Ablation",
-        seed=42,
-        num_clients=3,
-        k=5,
-        t=24,
-        samples_per_client=[50, 80, 120],
-        num_rounds=5,
-        local_epochs=5,
-        full_name="CCN-LSTM-Attention",
-        variants=OrderedDict(
-            [
-                (
-                    "CCN-LSTM-Attention",
-                    lambda: CCNAblationFull(k=5, t=24, hidden_dim=128, num_heads=4),
-                ),
-                (
-                    "CCN-LSTM",
-                    lambda: CCNAblationCNNLSTM(k=5, t=24, hidden_dim=128),
-                ),
-                (
-                    "LSTM-Attention",
-                    lambda: LSTMAttentionHetero(
-                        k=5,
-                        t=24,
-                        hidden_dim=128,
-                        num_heads=4,
-                    ),
-                ),
-                (
-                    "CCN-Attention",
-                    lambda: CCNAblationCNNAttention(
-                        k=5,
-                        t=24,
-                        hidden_dim=128,
-                        num_heads=4,
-                    ),
-                ),
-            ]
-        ),
-        output_dir=output_dir,
-        figure_name=build_output_file_name("ablation", "figure", "png"),
-        metrics_file_name=build_output_file_name("ablation", "metrics", "csv"),
-    )
-
+# ══════════════════════════════════════════════════════════
+# 工作流调度
+# ══════════════════════════════════════════════════════════
 
 def run_project(workflow: str, output_dir: Path) -> None:
-    """按工作流执行整个 CCN 工程。
-
-    参数:
-        workflow: 可选 `all`、`overview`、`ablation`。
-        output_dir: 结果输出目录。
-    """
+    """按工作流执行 CNN 基础实验。"""
     ensure_output_dir(output_dir)
-    log_path = output_dir / build_output_file_name("run", "log", "txt")
-    with log_path.open("w", encoding="utf-8") as log_handle, redirect_stdout(
-        TeeStream(sys.stdout, log_handle)
-    ):
-        configure_plot_style()
-        print(f"[setup] Using device: {DEVICE}")
-        print(f"[setup] Writing experiment log: {log_path}")
+    print(f"[cnn_fed_base] workflow={workflow}, output={output_dir}")
+    print(f"[cnn_fed_base] device={DEVICE}")
 
-        if workflow in ("all", "overview"):
-            run_overview_experiment(output_dir)
+    if workflow in ("all", "data_viz"):
+        run_data_visualization_base(output_dir)
 
-        if workflow in ("all", "ablation"):
-            run_ablation_experiment(output_dir)
+    if workflow in ("all", "main"):
+        run_main_experiment(output_dir)
+
+    if workflow in ("all", "convergence"):
+        run_convergence_experiment(output_dir)
+
+    print(f"\n[cnn_fed_base] All done. Results in: {output_dir}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
     """解析命令行参数。"""
-    parser = argparse.ArgumentParser(description="Standalone CCN simulation project.")
+    parser = argparse.ArgumentParser(description="CNN/CCN Base Federated Simulation")
     parser.add_argument(
         "--workflow",
-        choices=["all", "overview", "ablation"],
+        choices=["all", "data_viz", "main", "convergence"],
         default="all",
-        help="Workflow to execute.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=PROJECT_NAME,
-        help=(
-            "Relative subdirectory under results/simulation_experiments used "
-            "to save generated outputs."
-        ),
+        help="Workflow to execute (default: all).",
     )
     return parser.parse_args(argv)
 
@@ -1721,7 +873,8 @@ def parse_args(argv: Optional[Sequence[str]] = None):
 def main(argv: Optional[Sequence[str]] = None):
     """程序主入口。"""
     args = parse_args(argv)
-    run_project(args.workflow, resolve_output_dir(args.output_dir))
+    output_dir = SIMULATION_RESULTS_ROOT / "cnn_fed_base"
+    run_project(args.workflow, output_dir)
 
 
 if __name__ == "__main__":
