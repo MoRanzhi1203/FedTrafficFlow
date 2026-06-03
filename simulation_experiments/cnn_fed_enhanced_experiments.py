@@ -136,6 +136,75 @@ CLIENT_CONFIGS_BASE = [
 ]
 
 
+def build_noniid_client_configs(num_clients, noniid_level="medium"):
+    """根据 Non-IID 强度构建客户端配置列表。
+
+    low:    客户端差异较小，所有客户端使用 normal 分布，仅噪声和高峰参数略有差异。
+    medium: 标准增强配置，5 种不同分布/模式/样本量/噪声。
+    high:   更强异质性，更大噪声、更不平衡样本量、更高 incident 概率、更多重尾分布。
+    """
+    if noniid_level == "low":
+        templates = [
+            {"dist": "normal", "pattern": "平稳通勤型", "n_samples": 600, "noise": 2.0,
+             "base": 100.0, "morning_mu": 8.0, "evening_mu": 18.0,
+             "morning_amp": 30.0, "evening_amp": 25.0, "peak_sigma": 0.9,
+             "trend": 0.0, "incident_prob": 0.0},
+            {"dist": "normal", "pattern": "平稳通勤型", "n_samples": 580, "noise": 2.5,
+             "base": 95.0, "morning_mu": 7.8, "evening_mu": 17.8,
+             "morning_amp": 32.0, "evening_amp": 27.0, "peak_sigma": 0.85,
+             "trend": 0.001, "incident_prob": 0.0},
+            {"dist": "normal", "pattern": "平稳通勤型", "n_samples": 620, "noise": 3.0,
+             "base": 105.0, "morning_mu": 8.2, "evening_mu": 18.2,
+             "morning_amp": 28.0, "evening_amp": 23.0, "peak_sigma": 0.75,
+             "trend": -0.001, "incident_prob": 0.0},
+            {"dist": "normal", "pattern": "平稳通勤型", "n_samples": 590, "noise": 2.8,
+             "base": 98.0, "morning_mu": 7.9, "evening_mu": 17.9,
+             "morning_amp": 31.0, "evening_amp": 26.0, "peak_sigma": 0.88,
+             "trend": 0.0005, "incident_prob": 0.0},
+            {"dist": "normal", "pattern": "平稳通勤型", "n_samples": 610, "noise": 2.2,
+             "base": 102.0, "morning_mu": 8.1, "evening_mu": 18.1,
+             "morning_amp": 29.0, "evening_amp": 24.0, "peak_sigma": 0.82,
+             "trend": -0.0005, "incident_prob": 0.0},
+        ]
+    elif noniid_level == "high":
+        templates = [
+            {"dist": "student-t",      "pattern": "波动型",     "n_samples": 400, "noise": 8.0,
+             "base": 75.0, "morning_mu": 6.5, "evening_mu": 16.0,
+             "morning_amp": 42.0, "evening_amp": 38.0, "peak_sigma": 1.3,
+             "trend": 0.008, "incident_prob": 0.04},
+            {"dist": "chi-square",     "pattern": "偏态高流量型", "n_samples": 750, "noise": 12.0,
+             "base": 135.0, "morning_mu": 9.5, "evening_mu": 19.5,
+             "morning_amp": 20.0, "evening_amp": 16.0, "peak_sigma": 1.5,
+             "trend": -0.006, "incident_prob": 0.1},
+            {"dist": "gaussian_mixture", "pattern": "双峰型",    "n_samples": 380, "noise": 6.0,
+             "base": 85.0, "morning_mu": 6.0, "evening_mu": 20.0,
+             "morning_amp": 48.0, "evening_amp": 42.0, "peak_sigma": 0.6,
+             "trend": 0.004, "incident_prob": 0.03},
+            {"dist": "log_normal",     "pattern": "突发拥堵型",  "n_samples": 300, "noise": 9.0,
+             "base": 65.0, "morning_mu": 8.8, "evening_mu": 18.8,
+             "morning_amp": 25.0, "evening_amp": 20.0, "peak_sigma": 1.1,
+             "trend": 0.002, "incident_prob": 0.12},
+            {"dist": "chi-square",     "pattern": "偏态高流量型", "n_samples": 500, "noise": 10.0,
+             "base": 110.0, "morning_mu": 8.0, "evening_mu": 17.0,
+             "morning_amp": 35.0, "evening_amp": 30.0, "peak_sigma": 1.4,
+             "trend": -0.004, "incident_prob": 0.06},
+        ]
+    else:  # medium
+        templates = list(CLIENT_CONFIGS_BASE)
+
+    configs = []
+    for cid in range(num_clients):
+        tpl = templates[cid % len(templates)].copy()
+        # 对重复使用的模板做微小扰动以增加多样性
+        if cid >= len(templates):
+            jitter = 1.0 + 0.02 * (cid - len(templates)) * ((-1) ** cid)
+            tpl["noise"] = tpl["noise"] * jitter
+            tpl["n_samples"] = int(tpl["n_samples"] * jitter)
+            tpl["base"] = tpl["base"] * jitter
+        configs.append(tpl)
+    return configs
+
+
 def sample_distribution_noise(n_timesteps, n_nodes, dist_type, noise_level, seed):
     """按指定分布类型生成噪声。"""
     rng = np.random.RandomState(seed)
@@ -1024,13 +1093,165 @@ def run_convergence_experiment(output_dir: Path) -> None:
 
 
 def run_client_scale_experiment(output_dir: Path) -> None:
-    print("[client_scale] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[client_scale] Client Count Sensitivity Experiment")
+    print("=" * 60)
+
+    client_nums = [3, 5, 8, 10]
     ensure_output_dir(output_dir)
+
+    all_rows = []
+    for nc in client_nums:
+        print(f"\n--- Num Clients = {nc} ---")
+        cfgs = build_noniid_client_configs(nc, "medium")
+        for seed in SEEDS:
+            print(f"  Seed = {seed}")
+            client_data = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+
+            # Independent
+            ind_results = run_independent_training(client_data, total_epochs=10,
+                                                    lr=0.01, seed=seed)
+            for r in ind_results:
+                all_rows.append({"seed": seed, "num_clients": nc, "method": "Independent",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+            # FedAvg
+            fed_results, _ = run_federated_training(client_data, agg_method="fedavg",
+                                                     seed=seed, verbose=False)
+            for r in fed_results:
+                all_rows.append({"seed": seed, "num_clients": nc, "method": "FedAvg",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+            # Proposed
+            prop_results, _ = run_federated_training(client_data, agg_method="proposed",
+                                                      seed=seed, verbose=False)
+            for r in prop_results:
+                all_rows.append({"seed": seed, "num_clients": nc, "method": "Proposed",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "cnn_enhanced_client_scale_metrics.csv")
+
+    agg = df.groupby(["num_clients", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+    ).reset_index()
+    save_dataframe(agg, output_dir, "cnn_enhanced_client_scale_summary.csv")
+    print("\n[client_scale] Summary:\n", agg.to_string(index=False))
+
+    # 绘制对比图
+    methods = ["Independent", "FedAvg", "Proposed"]
+    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    for m_idx, method in enumerate(methods):
+        sub = agg[agg["method"] == method].sort_values("num_clients")
+        xs = sub["num_clients"].astype(str)
+        axes[0].errorbar(range(len(xs)), sub["rmse_mean"], yerr=sub["rmse_std"],
+                         fmt="o-", capsize=5, label=method, linewidth=2,
+                         color=bar_colors[method])
+        axes[1].errorbar(range(len(xs)), sub["mae_mean"], yerr=sub["mae_std"],
+                         fmt="s--", capsize=5, label=method, linewidth=2,
+                         color=bar_colors[method])
+    for ax in axes:
+        ax.set_xticks(range(len(client_nums)))
+        ax.set_xticklabels([str(n) for n in client_nums])
+        ax.set_xlabel("Number of Clients")
+        ax.legend(fontsize=9)
+    axes[0].set_title("RMSE vs Client Count")
+    axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE vs Client Count")
+    axes[1].set_ylabel("MAE")
+    fig.suptitle("CNN Enhanced: Client Scale Sensitivity", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_client_scale.png")
+    print("[client_scale] Done.\n")
 
 
 def run_noniid_experiment(output_dir: Path) -> None:
-    print("[noniid] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[noniid] Non-IID Strength Experiment")
+    print("=" * 60)
+
+    levels = ["low", "medium", "high"]
+    num_clients = 5
     ensure_output_dir(output_dir)
+
+    all_rows = []
+    for level in levels:
+        print(f"\n--- Non-IID Level = {level} ---")
+        cfgs = build_noniid_client_configs(num_clients, level)
+        for seed in SEEDS:
+            print(f"  Seed = {seed}")
+            client_data = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+
+            # Independent
+            ind_results = run_independent_training(client_data, total_epochs=10,
+                                                    lr=0.01, seed=seed)
+            for r in ind_results:
+                all_rows.append({"seed": seed, "noniid_level": level, "method": "Independent",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+            # FedAvg
+            fed_results, _ = run_federated_training(client_data, agg_method="fedavg",
+                                                     seed=seed, verbose=False)
+            for r in fed_results:
+                all_rows.append({"seed": seed, "noniid_level": level, "method": "FedAvg",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+            # Proposed
+            prop_results, _ = run_federated_training(client_data, agg_method="proposed",
+                                                      seed=seed, verbose=False)
+            for r in prop_results:
+                all_rows.append({"seed": seed, "noniid_level": level, "method": "Proposed",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "cnn_enhanced_noniid_strength_metrics.csv")
+
+    agg = df.groupby(["noniid_level", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+    ).reset_index()
+    save_dataframe(agg, output_dir, "cnn_enhanced_noniid_strength_summary.csv")
+    print("\n[noniid] Summary:\n", agg.to_string(index=False))
+
+    # 绘制对比图 — 横轴固定顺序 low -> medium -> high
+    methods = ["Independent", "FedAvg", "Proposed"]
+    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
+    level_order = ["low", "medium", "high"]
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    x = np.arange(len(methods))
+    width = 0.25
+    for l_idx, level in enumerate(level_order):
+        sub = agg[agg["noniid_level"] == level]
+        offset = (l_idx - 1) * width
+        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] for m in methods]
+        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] for m in methods]
+        axes[0].bar(x + offset, rmse_vals, width, label=level, alpha=0.85)
+        axes[1].bar(x + offset, mae_vals, width, label=level, alpha=0.85)
+    for ax in axes:
+        ax.set_xticks(x)
+        ax.set_xticklabels(methods)
+        ax.set_xlabel("Method")
+        ax.legend(title="Non-IID Level", fontsize=8)
+    axes[0].set_title("RMSE by Non-IID Strength")
+    axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE by Non-IID Strength")
+    axes[1].set_ylabel("MAE")
+    fig.suptitle("CNN Enhanced: Non-IID Strength Sensitivity", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_noniid_strength.png")
+    print("[noniid] Done.\n")
 
 
 def run_client_metrics_experiment(output_dir: Path) -> None:
