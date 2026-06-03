@@ -269,18 +269,59 @@ def generate_traffic_flow(cfg, n_timesteps, n_nodes, seed):
     return data.astype(np.float32), incident_mask
 
 
-def build_sequences(data, seq_len, pred_len):
-    """滑动窗口构建监督学习样本。"""
+def build_sequences(data, seq_len, pred_len, incident_mask=None):
+    """滑动窗口构建监督学习样本，同时返回 target_meta。
+
+    返回:
+        X: (N, seq_len, n_nodes)
+        y: (N,)
+        target_meta: dict with 'target_time_index', 'target_hour', 'target_incident_flag'
+    """
     X, y = [], []
+    target_time_index = []
     for i in range(len(data) - seq_len - pred_len + 1):
-        X.append(data[i:i + seq_len])       # (seq_len, n_nodes)
-        y.append(data[i + seq_len + pred_len - 1, 0])  # 预测第一个节点的值
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+        X.append(data[i:i + seq_len])
+        target_idx = i + seq_len + pred_len - 1
+        y.append(data[target_idx, 0])
+        target_time_index.append(target_idx)
+
+    X = np.array(X, dtype=np.float32)
+    y = np.array(y, dtype=np.float32)
+    t_idx = np.array(target_time_index, dtype=int)
+
+    # hour of day
+    n_ts = len(data)
+    hours = (t_idx * 24.0 / n_ts) % 24
+    target_hour = hours.astype(np.float32)
+
+    # incident flag
+    if incident_mask is not None:
+        target_incident_flag = incident_mask[t_idx].astype(bool)
+    else:
+        target_incident_flag = np.zeros(len(y), dtype=bool)
+
+    meta = {
+        "target_time_index": t_idx,
+        "target_hour": target_hour,
+        "target_incident_flag": target_incident_flag,
+    }
+    return X, y, meta
+
+
+def classify_period(hour, incident_flag):
+    """根据真实 hour 和 incident flag 对样本分类。"""
+    if incident_flag:
+        return "incident_period"
+    if 7 <= hour < 9:
+        return "morning_peak"
+    if 17 <= hour < 19:
+        return "evening_peak"
+    return "off_peak"
 
 
 class EnhancedTimeSeriesDataset(Dataset):
     def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)  # (N, nodes, seq_len)
+        self.X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
         self.y = torch.tensor(y, dtype=torch.float32)
 
     def __len__(self):
@@ -299,17 +340,52 @@ def split_train_val_test(X, y, train_r=0.70, val_r=0.10):
             X[n_train + n_val:], y[n_train + n_val:])
 
 
-def build_client_data(client_configs, num_nodes, seq_len, pred_len, seed):
-    """为所有 client 构建训练/验证/测试数据及标准化参数。"""
+def split_with_meta(X, y, meta, train_r=0.70, val_r=0.10):
+    """三路划分 X, y, meta 字典（每个 value 是等长数组）。"""
+    n = len(X)
+    n_train = int(n * train_r)
+    n_val = int(n * val_r)
+    train_idx = slice(0, n_train)
+    val_idx = slice(n_train, n_train + n_val)
+    test_idx = slice(n_train + n_val, n)
+
+    def _slice(d):
+        return {k: v[train_idx] for k, v in d.items()}, \
+               {k: v[val_idx] for k, v in d.items()}, \
+               {k: v[test_idx] for k, v in d.items()}
+
+    meta_train, meta_val, meta_test = _slice(meta)
+    return (X[train_idx], y[train_idx], meta_train,
+            X[val_idx], y[val_idx], meta_val,
+            X[test_idx], y[test_idx], meta_test)
+
+
+def build_client_data_shuffled(client_configs, num_nodes, seq_len, pred_len, seed):
+    """同 build_client_data 但使用随机打乱划分以保证各 period 均匀分布。"""
     buffer = seq_len + pred_len + 10
     all_data = []
     for cid, cfg in enumerate(client_configs):
         n_timesteps = cfg["n_samples"] + buffer
         data, incident_mask = generate_traffic_flow(cfg, n_timesteps, num_nodes, seed + cid * 100)
-        X, y = build_sequences(data, seq_len, pred_len)
-        X_train, y_train, X_val, y_val, X_test, y_test = split_train_val_test(X, y)
+        X, y, meta = build_sequences(data, seq_len, pred_len, incident_mask)
 
-        # 每个 client 独立标准化（用 train 的统计量）
+        # 随机打乱索引
+        rng = np.random.RandomState(seed + cid)
+        n = len(X)
+        idx = rng.permutation(n)
+        n_train = int(n * 0.70)
+        n_val = int(n * 0.10)
+        train_idx = idx[:n_train]
+        val_idx = idx[n_train:n_train + n_val]
+        test_idx = idx[n_train + n_val:]
+
+        def _idx_slice(d, indices):
+            return {k: v[indices] for k, v in d.items()}
+
+        X_train, y_train, meta_train = X[train_idx], y[train_idx], _idx_slice(meta, train_idx)
+        X_val, y_val, meta_val = X[val_idx], y[val_idx], _idx_slice(meta, val_idx)
+        X_test, y_test, meta_test = X[test_idx], y[test_idx], _idx_slice(meta, test_idx)
+
         x_mean = X_train.mean(axis=(0, 1), keepdims=True)
         x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
         y_mean = y_train.mean()
@@ -331,6 +407,134 @@ def build_client_data(client_configs, num_nodes, seq_len, pred_len, seed):
 
         all_data.append({
             "cid": cid,
+            "train_loader": train_loader, "val_loader": val_loader, "test_loader": test_loader,
+            "train_size": len(train_ds), "val_size": len(val_ds), "test_size": len(test_ds),
+            "y_mean": y_mean, "y_std": y_std,
+            "X_test": X_test, "y_test": y_test, "meta_test": meta_test,
+        })
+    return all_data
+
+
+def build_client_data(client_configs, num_nodes, seq_len, pred_len, seed):
+    """为所有 client 构建训练/验证/测试数据（顺序划分）及标准化参数。"""
+    buffer = seq_len + pred_len + 10
+    all_data = []
+    for cid, cfg in enumerate(client_configs):
+        n_timesteps = cfg["n_samples"] + buffer
+        data, incident_mask = generate_traffic_flow(cfg, n_timesteps, num_nodes, seed + cid * 100)
+        X, y, meta = build_sequences(data, seq_len, pred_len, incident_mask)
+        X_train, y_train, meta_train, X_val, y_val, meta_val, X_test, y_test, meta_test = \
+            split_with_meta(X, y, meta)
+
+        x_mean = X_train.mean(axis=(0, 1), keepdims=True)
+        x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
+        y_mean = y_train.mean()
+        y_std = y_train.std() + 1e-8
+
+        X_train_n = (X_train - x_mean) / x_std
+        X_val_n = (X_val - x_mean) / x_std
+        X_test_n = (X_test - x_mean) / x_std
+        y_train_n = (y_train - y_mean) / y_std
+        y_val_n = (y_val - y_mean) / y_std
+        y_test_n = (y_test - y_mean) / y_std
+
+        train_ds = EnhancedTimeSeriesDataset(X_train_n, y_train_n)
+        val_ds = EnhancedTimeSeriesDataset(X_val_n, y_val_n)
+        test_ds = EnhancedTimeSeriesDataset(X_test_n, y_test_n)
+        train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
+        test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+
+        all_data.append({
+            "cid": cid,
+            "train_loader": train_loader, "val_loader": val_loader, "test_loader": test_loader,
+            "train_size": len(train_ds), "val_size": len(val_ds), "test_size": len(test_ds),
+            "y_mean": y_mean, "y_std": y_std,
+            "X_test": X_test, "y_test": y_test, "meta_test": meta_test,
+        })
+    return all_data
+
+
+# ══════════════════════════════════════════════════════════════
+# 特征工程：为 feature_ablation 构造不同输入组合
+# ══════════════════════════════════════════════════════════════
+
+def build_feature_augmented_data(client_configs, feature_set, num_nodes, seq_len, pred_len, seed):
+    """构建指定特征集的 client 数据。
+
+    feature_set 选项:
+        flow_only:  K=num_nodes
+        flow_time:  K=num_nodes + 2 (sin_hour, cos_hour)
+        flow_event: K=num_nodes + 1 (incident_flag)
+        flow_region:K=num_nodes + 1 (region_id)
+        full:       K=num_nodes + 2 + 1 + 1 = num_nodes + 4
+    """
+    buffer = seq_len + pred_len + 10
+    all_data = []
+    for cid, cfg in enumerate(client_configs):
+        n_timesteps = cfg["n_samples"] + buffer
+        data, incident_mask = generate_traffic_flow(cfg, n_timesteps, num_nodes, seed + cid * 100)
+        X_flow, y, meta = build_sequences(data, seq_len, pred_len, incident_mask)
+
+        # 构造额外特征通道（每个通道 shape: (N, seq_len)）
+        t_idx_arr = meta["target_time_index"]  # target indices
+        seq_t_idx = np.array([np.arange(i, i + seq_len) for i in range(len(X_flow))])  # (N, seq_len)
+        n_samples = len(X_flow)
+
+        # 建增强特征 (N, extra_channels, seq_len)
+        extra_feats = []
+        if feature_set in ("flow_time", "full"):
+            hours = (seq_t_idx * 24.0 / n_timesteps) % 24
+            sin_h = np.sin(2 * np.pi * hours / 24).astype(np.float32)  # (N, seq_len)
+            cos_h = np.cos(2 * np.pi * hours / 24).astype(np.float32)
+            extra_feats.append(sin_h)
+            extra_feats.append(cos_h)
+
+        if feature_set in ("flow_event", "full"):
+            inc_seq = np.zeros((n_samples, seq_len), dtype=np.float32)
+            for s in range(n_samples):
+                window_slice = slice(s, s + seq_len)
+                inc_seq[s] = incident_mask[window_slice].astype(np.float32)
+            extra_feats.append(inc_seq)
+
+        if feature_set in ("flow_region", "full"):
+            region_id = np.full((n_samples, seq_len), float(cid) / max(len(client_configs) - 1, 1),
+                                dtype=np.float32)
+            extra_feats.append(region_id)
+
+        if extra_feats:
+            extra = np.stack(extra_feats, axis=1)  # (N, C_extra, seq_len)
+            extra = extra.transpose(0, 2, 1)        # (N, seq_len, C_extra)
+            X_full = np.concatenate([X_flow, extra], axis=2)  # (N, seq_len, K + C_extra)
+        else:
+            X_full = X_flow
+
+        X_train, y_train, meta_train, X_val, y_val, meta_val, X_test, y_test, meta_test = \
+            split_with_meta(X_full, y, meta)
+
+        x_mean = X_train.mean(axis=(0, 1), keepdims=True)
+        x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
+        y_mean = y_train.mean()
+        y_std = y_train.std() + 1e-8
+
+        X_train_n = (X_train - x_mean) / x_std
+        X_val_n = (X_val - x_mean) / x_std
+        X_test_n = (X_test - x_mean) / x_std
+        y_train_n = (y_train - y_mean) / y_std
+        y_val_n = (y_val - y_mean) / y_std
+        y_test_n = (y_test - y_mean) / y_std
+
+        train_ds = EnhancedTimeSeriesDataset(X_train_n, y_train_n)
+        val_ds = EnhancedTimeSeriesDataset(X_val_n, y_val_n)
+        test_ds = EnhancedTimeSeriesDataset(X_test_n, y_test_n)
+
+        train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False)
+        test_loader = DataLoader(test_ds, batch_size=BATCH_SIZE, shuffle=False)
+
+        # 记录用于 infer 的原始 test 数据和标准化参数
+        all_data.append({
+            "cid": cid,
             "train_loader": train_loader,
             "val_loader": val_loader,
             "test_loader": test_loader,
@@ -339,6 +543,10 @@ def build_client_data(client_configs, num_nodes, seq_len, pred_len, seed):
             "test_size": len(test_ds),
             "y_mean": y_mean,
             "y_std": y_std,
+            "X_test": X_test,
+            "y_test": y_test,
+            "meta_test": meta_test,
+            "k_dim": X_full.shape[2],  # 经过 permute(0,2,1) 后成为 channel 维
         })
     return all_data
 
@@ -624,11 +832,12 @@ def run_federated_training(client_data, agg_method="fedavg", lam=0.5,
 
     fed_clients = [
         FederatedClient(
-            d["cid"], _make_model(), d["train_loader"],
+            d["cid"], _make_model(k=d.get("k_dim", NUM_NODES)), d["train_loader"],
             d["val_loader"], d["test_loader"], criterion, lr=lr)
         for d in client_data
     ]
-    server = AggregationServer(_make_model(), num_clients, agg_method=agg_method, lam=lam)
+    server = AggregationServer(_make_model(k=client_data[0].get("k_dim", NUM_NODES)),
+                                num_clients, agg_method=agg_method, lam=lam)
     server.set_client_data_sizes(train_sizes)
 
     convergence = {"round": [], "avg_train_loss": [], "avg_val_rmse": [], "avg_val_rmse_std": [],
@@ -1501,13 +1710,186 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
 
 
 def run_peak_experiment(output_dir: Path) -> None:
-    print("[peak] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[peak] Peak / Off-peak / Incident Period Analysis")
+    print("=" * 60)
+
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    num_clients = len(cfgs)
     ensure_output_dir(output_dir)
+    seed = 42
+
+    set_global_seed(seed)
+    client_data = build_client_data_shuffled(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+    all_rows = []
+
+    # ---- Independent ----
+    print("\n[Independent]")
+    ind_results = run_independent_training(client_data, total_epochs=10, lr=0.01, seed=seed)
+
+    # ---- FedAvg ----
+    print("[FedAvg]")
+    fed_results, _ = run_federated_training(client_data, agg_method="fedavg", seed=seed, verbose=False)
+
+    # ---- Proposed ----
+    print("[Proposed]")
+    prop_results, _ = run_federated_training(client_data, agg_method="proposed", seed=seed, verbose=False)
+
+    # 评估：用 per-sample 真实尺度预测分类到 period
+    for method, agg_results in [("Independent", ind_results),
+                                  ("FedAvg", fed_results),
+                                  ("Proposed", prop_results)]:
+        for cid in range(num_clients):
+            cd = client_data[cid]
+            meta = cd["meta_test"]
+            hours = meta["target_hour"]
+            inc_flags = meta["target_incident_flag"]
+            sample_periods = [classify_period(h, f) for h, f in zip(hours, inc_flags)]
+
+            y_std = cd["y_std"]
+            y_mean = cd["y_mean"]
+            preds_raw = agg_results[cid]["preds"]
+            truths_raw = agg_results[cid]["truths"]
+            errors = (preds_raw - truths_raw)
+
+            # 确保长度匹配（preds 可能被截断到 200）
+            n_use = min(len(errors), len(sample_periods))
+            for i in range(n_use):
+                period = sample_periods[i]
+                all_rows.append({
+                    "method": method, "client_id": cid, "period": period,
+                    "mse": float(errors[i] ** 2),
+                    "rmse": float(abs(errors[i])),
+                    "mae": float(abs(errors[i])),
+                    "num_samples": 1,
+                })
+
+    df = pd.DataFrame(all_rows)
+
+    # 聚合 metrics
+    metrics_rows = []
+    for (method, cid, period), grp in df.groupby(["method", "client_id", "period"]):
+        mse_val = float(np.mean([r for r in grp["mse"]]))
+        rmse_val = float(np.sqrt(mse_val))
+        mae_val = float(np.mean([r for r in grp["mae"]]))
+        metrics_rows.append({
+            "method": method, "client_id": cid, "period": period,
+            "mse": mse_val, "rmse": rmse_val, "mae": mae_val,
+            "num_samples": len(grp),
+        })
+
+    df_metrics = pd.DataFrame(metrics_rows)
+    save_dataframe(df_metrics, output_dir, "cnn_enhanced_peak_offpeak_metrics.csv")
+
+    # 汇总
+    agg_sum = df_metrics.groupby(["method", "period"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        total_samples=("num_samples", "sum"),
+    ).reset_index()
+    save_dataframe(agg_sum, output_dir, "cnn_enhanced_peak_offpeak_summary.csv")
+    print("\n[peak] Summary:\n", agg_sum.to_string(index=False))
+
+    # 绘图
+    fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+    methods = ["Independent", "FedAvg", "Proposed"]
+    bar_colors = {"Independent": "#e74c3c", "FedAvg": "#3498db", "Proposed": "#2ecc71"}
+    x = np.arange(len(methods))
+    width = 0.2
+    period_order = ["morning_peak", "evening_peak", "off_peak", "incident_period"]
+    for p_idx, period in enumerate(period_order):
+        sub = agg_sum[agg_sum["period"] == period]
+        offset = (p_idx - 1.5) * width
+        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] if m in sub["method"].values else np.nan for m in methods]
+        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] if m in sub["method"].values else np.nan for m in methods]
+        axes[0].bar(x + offset, rmse_vals, width, label=period, alpha=0.85)
+        axes[1].bar(x + offset, mae_vals, width, label=period, alpha=0.85)
+    for ax in axes:
+        ax.set_xticks(x)
+        ax.set_xticklabels(methods)
+        ax.set_xlabel("Method")
+        ax.legend(fontsize=7, title="Period")
+    axes[0].set_title("RMSE by Traffic Period")
+    axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE by Traffic Period")
+    axes[1].set_ylabel("MAE")
+    fig.suptitle("CNN Enhanced: Peak / Off-peak / Incident Analysis", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_peak_offpeak_comparison.png")
+    print("[peak] Done.\n")
 
 
 def run_feature_ablation_experiment(output_dir: Path) -> None:
-    print("[feature_ablation] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[feature_ablation] Input Feature Ablation")
+    print("=" * 60)
+
+    cfgs = list(CLIENT_CONFIGS_BASE)
     ensure_output_dir(output_dir)
+    feature_sets = ["flow_only", "flow_time", "flow_event", "flow_region", "full"]
+
+    all_rows = []
+    for fs in feature_sets:
+        print(f"\n--- Feature Set: {fs} ---")
+        for seed in SEEDS:
+            print(f"  Seed = {seed}")
+            set_global_seed(seed)
+            client_data = build_feature_augmented_data(cfgs, fs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
+
+            # FedAvg
+            fed_results, _ = run_federated_training(client_data, agg_method="fedavg",
+                                                     seed=seed, verbose=False)
+            for r in fed_results:
+                all_rows.append({"seed": seed, "feature_set": fs, "method": "FedAvg",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+            # Proposed
+            prop_results, _ = run_federated_training(client_data, agg_method="proposed",
+                                                      seed=seed, verbose=False)
+            for r in prop_results:
+                all_rows.append({"seed": seed, "feature_set": fs, "method": "Proposed",
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "cnn_enhanced_feature_ablation.csv")
+
+    agg = df.groupby(["feature_set", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+    ).reset_index()
+    save_dataframe(agg, output_dir, "cnn_enhanced_feature_ablation_summary.csv")
+    print("\n[feature_ablation] Summary:\n", agg.to_string(index=False))
+
+    # 绘图
+    fs_labels = {"flow_only": "Flow Only", "flow_time": "+ Time",
+                 "flow_event": "+ Event", "flow_region": "+ Region", "full": "Full"}
+    fs_order = list(feature_sets)
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    for m_idx, method in enumerate(["FedAvg", "Proposed"]):
+        sub = agg[agg["method"] == method]
+        x = np.arange(len(fs_order))
+        rmse_vals = [sub[sub["feature_set"] == fs]["rmse_mean"].values[0] for fs in fs_order]
+        mae_vals = [sub[sub["feature_set"] == fs]["mae_mean"].values[0] for fs in fs_order]
+        axes[0].plot(x, rmse_vals, "o-", label=method, linewidth=2)
+        axes[1].plot(x, mae_vals, "s--", label=method, linewidth=2)
+    for ax in axes:
+        ax.set_xticks(range(len(fs_order)))
+        ax.set_xticklabels([fs_labels[fs] for fs in fs_order], rotation=20, ha="right")
+        ax.set_xlabel("Feature Set")
+        ax.legend()
+    axes[0].set_title("RMSE by Feature Set")
+    axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE by Feature Set")
+    axes[1].set_ylabel("MAE")
+    fig.suptitle("CNN Enhanced: Feature Ablation", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "cnn_enhanced_feature_ablation.png")
+    print("[feature_ablation] Done.\n")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1516,7 +1898,7 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
 
 WORKFLOW_MAP = {
     "all": ["data_viz", "main", "aggregation", "lambda",
-            "convergence", "client_scale", "noniid",
+            "client_scale", "noniid", "convergence",
             "client_metrics", "peak", "feature_ablation"],
     "data_viz":        ["data_viz"],
     "main":            ["main"],
