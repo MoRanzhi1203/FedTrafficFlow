@@ -2024,7 +2024,28 @@ def main(argv: Optional[Sequence[str]] = None):
     RESULTS_ROOT = PROJECT_ROOT / "results"
     SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
     output_dir = SIMULATION_RESULTS_ROOT / "gcn_fed_enhanced"
+    _export_communication_cost(output_dir)
     run_project(args.workflow, output_dir)
+
+
+def _export_communication_cost(output_dir: Path) -> None:
+    """自动输出 GCN 模型通信开销估计表。"""
+    _, adj, _ = build_fixed_adjacency(NUM_NODES)
+    m = GCNEnhancedModel(k=NUM_NODES, t=SEQ_LEN, hidden_dim=64, fixed_adj=adj)
+    n_params = sum(p.numel() for p in m.parameters() if p.requires_grad)
+    size_mb = n_params * 4 / (1024 ** 2)
+    rows = []
+    for nc in [3, 5, 8, 10]:
+        for cr in [5, 10, 15]:
+            rows.append({"model_type": "GCN", "num_clients": nc,
+                         "communication_rounds": cr,
+                         "num_parameters": n_params,
+                         "parameter_size_mb": round(size_mb, 4),
+                         "total_communication_mb": round(2 * nc * size_mb * cr, 2)})
+    df = pd.DataFrame(rows)
+    path = ensure_output_dir(output_dir) / "gcn_enhanced_communication_cost.csv"
+    df.to_csv(path, index=False, encoding="utf-8")
+    print(f"[gcn_fed_enhanced] Communication cost saved: {path}")
 
 
 if __name__ == "__main__":

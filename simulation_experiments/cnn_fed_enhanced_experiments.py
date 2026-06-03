@@ -1950,7 +1950,28 @@ def parse_args(argv: Optional[Sequence[str]] = None):
 def main(argv: Optional[Sequence[str]] = None):
     args = parse_args(argv)
     output_dir = SIMULATION_RESULTS_ROOT / "cnn_fed_enhanced"
+    # 通信开销估计（每次运行时自动输出）
+    _export_communication_cost(output_dir)
     run_project(args.workflow, output_dir)
+
+
+def _export_communication_cost(output_dir: Path) -> None:
+    """自动输出 CNN 模型通信开销估计表。"""
+    m = CNNEnhancedModel(k=NUM_NODES, t=SEQ_LEN, hidden_dim=HIDDEN_DIM)
+    n_params = sum(p.numel() for p in m.parameters() if p.requires_grad)
+    size_mb = n_params * 4 / (1024 ** 2)
+    rows = []
+    for nc in [3, 5, 8, 10]:
+        for cr in [5, 10, 15]:
+            rows.append({"model_type": "CNN/CCN", "num_clients": nc,
+                         "communication_rounds": cr,
+                         "num_parameters": n_params,
+                         "parameter_size_mb": round(size_mb, 4),
+                         "total_communication_mb": round(2 * nc * size_mb * cr, 2)})
+    df = pd.DataFrame(rows)
+    path = ensure_output_dir(output_dir) / "cnn_enhanced_communication_cost.csv"
+    df.to_csv(path, index=False, encoding="utf-8")
+    print(f"[cnn_fed_enhanced] Communication cost saved: {path}")
 
 
 if __name__ == "__main__":
