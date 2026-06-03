@@ -1309,13 +1309,145 @@ def run_lambda_experiment(output_dir: Path) -> None:
 
 
 def run_client_scale_experiment(output_dir: Path) -> None:
-    print("[client_scale] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[client_scale] GCN Client Count Sensitivity Experiment")
+    print("=" * 60)
+
+    client_nums = [3, 5, 8, 10]
+    graph_type = "fixed_adjacency"
+    seeds = [42, 2024, 2025]
     ensure_output_dir(output_dir)
+
+    all_rows = []
+    for nc in client_nums:
+        print(f"\n--- Num Clients = {nc} ---")
+        cfgs = build_noniid_client_configs(nc, "medium")
+        for seed in seeds:
+            print(f"  Seed = {seed}")
+            # Independent
+            ind = run_independent_training(cfgs, graph_type, seed=seed, total_epochs=10, lr=0.01)
+            for r in ind:
+                all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
+                                 "method": "Independent", "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+            # GCN-FedAvg
+            fed = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
+                                          comm_rounds=5, local_epochs=2)
+            for r in fed:
+                all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
+                                 "method": "GCN-FedAvg", "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+            # GCN-Proposed
+            prop = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
+                                           comm_rounds=5, local_epochs=2)
+            for r in prop:
+                all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
+                                 "method": "GCN-Proposed", "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "gcn_enhanced_client_scale_metrics.csv")
+    agg = df.groupby(["num_clients", "graph_type", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg, output_dir, "gcn_enhanced_client_scale_summary.csv")
+    print("\n[client_scale] Summary:\n", agg.to_string(index=False))
+
+    methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
+    bar_colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    for method in methods:
+        sub = agg[agg["method"] == method].sort_values("num_clients")
+        xs = sub["num_clients"].astype(str)
+        axes[0].errorbar(range(len(xs)), sub["rmse_mean"], yerr=sub["rmse_std"],
+                         fmt="o-", capsize=5, label=method, linewidth=2, color=bar_colors[method])
+        axes[1].errorbar(range(len(xs)), sub["mae_mean"], yerr=sub["mae_std"],
+                         fmt="s--", capsize=5, label=method, linewidth=2, color=bar_colors[method])
+    for ax in axes:
+        ax.set_xticks(range(len(client_nums)))
+        ax.set_xticklabels([str(n) for n in client_nums])
+        ax.set_xlabel("Number of Clients"); ax.legend(fontsize=9)
+    axes[0].set_title("GCN RMSE vs Client Count"); axes[0].set_ylabel("RMSE")
+    axes[1].set_title("GCN MAE vs Client Count"); axes[1].set_ylabel("MAE")
+    fig.suptitle("GCN Enhanced: Client Scale Sensitivity", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_client_scale.png")
+    print("[client_scale] Done.\n")
 
 
 def run_noniid_experiment(output_dir: Path) -> None:
-    print("[noniid] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[noniid] GCN Non-IID Strength Experiment")
+    print("=" * 60)
+
+    levels = ["low", "medium", "high"]
+    num_clients = 5
+    graph_type = "fixed_adjacency"
+    seeds = [42, 2024, 2025]
     ensure_output_dir(output_dir)
+
+    all_rows = []
+    for level in levels:
+        print(f"\n--- Non-IID Level = {level} ---")
+        cfgs = build_noniid_client_configs(num_clients, level)
+        for seed in seeds:
+            print(f"  Seed = {seed}")
+            # Independent
+            ind = run_independent_training(cfgs, graph_type, seed=seed, total_epochs=10, lr=0.01)
+            for r in ind:
+                all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
+                                 "method": "Independent", "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+            # GCN-FedAvg
+            fed = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
+                                          comm_rounds=5, local_epochs=2)
+            for r in fed:
+                all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
+                                 "method": "GCN-FedAvg", "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+            # GCN-Proposed
+            prop = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
+                                           comm_rounds=5, local_epochs=2)
+            for r in prop:
+                all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
+                                 "method": "GCN-Proposed", "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "gcn_enhanced_noniid_strength_metrics.csv")
+    agg = df.groupby(["noniid_level", "graph_type", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg, output_dir, "gcn_enhanced_noniid_strength_summary.csv")
+    print("\n[noniid] Summary:\n", agg.to_string(index=False))
+
+    methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
+    bar_colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
+    level_order = ["low", "medium", "high"]
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    x = np.arange(len(methods))
+    width = 0.25
+    for l_idx, level in enumerate(level_order):
+        sub = agg[agg["noniid_level"] == level]
+        offset = (l_idx - 1) * width
+        rmse_vals = [sub[sub["method"] == m]["rmse_mean"].values[0] for m in methods]
+        mae_vals = [sub[sub["method"] == m]["mae_mean"].values[0] for m in methods]
+        axes[0].bar(x + offset, rmse_vals, width, label=level, alpha=0.85)
+        axes[1].bar(x + offset, mae_vals, width, label=level, alpha=0.85)
+    for ax in axes:
+        ax.set_xticks(x)
+        ax.set_xticklabels(methods)
+        ax.set_xlabel("Method")
+        ax.legend(title="Non-IID Level", fontsize=8)
+    axes[0].set_title("GCN RMSE by Non-IID Strength"); axes[0].set_ylabel("RMSE")
+    axes[1].set_title("GCN MAE by Non-IID Strength"); axes[1].set_ylabel("MAE")
+    fig.suptitle("GCN Enhanced: Non-IID Strength Sensitivity", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_noniid_strength.png")
+    print("[noniid] Done.\n")
 
 
 def run_convergence_experiment(output_dir: Path) -> None:
