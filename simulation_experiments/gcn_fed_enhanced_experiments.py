@@ -360,6 +360,390 @@ def get_enhanced_raw_data():
 
 
 # ══════════════════════════════════════════════════════════════
+# GCN 模型定义
+# ══════════════════════════════════════════════════════════════
+
+class AdaptiveSwish(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.beta = nn.Parameter(torch.ones(1, dtype=torch.float32))
+
+    def forward(self, x):
+        return x * torch.sigmoid(self.beta * x)
+
+
+class SimpleGCNLayer(nn.Module):
+    """基础图卷积层 A_norm @ X @ W。"""
+    def __init__(self, in_dim: int, out_dim: int):
+        super().__init__()
+        self.lin = nn.Linear(in_dim, out_dim)
+
+    def forward(self, x, a_norm):
+        ax = torch.einsum("ij,bjf->bif", a_norm, x)
+        return self.lin(ax)
+
+
+class GCNEncoder(nn.Module):
+    """GCN 编码器（固定邻接 + 两层图卷积）。"""
+    def __init__(self, k: int, t: int, hidden_dim: int = 64, fixed_adj: np.ndarray = None):
+        super().__init__()
+        self.k = k
+        self.node_proj = nn.Sequential(
+            nn.Linear(t, hidden_dim), nn.LayerNorm(hidden_dim), AdaptiveSwish())
+        self.gcn1 = SimpleGCNLayer(hidden_dim, hidden_dim)
+        self.gcn2 = SimpleGCNLayer(hidden_dim, hidden_dim)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.norm2 = nn.LayerNorm(hidden_dim)
+        self.act = AdaptiveSwish()
+        self.a_param = nn.Parameter(torch.randn(k, k) * 0.01)
+        if fixed_adj is not None:
+            self.register_buffer("fixed_adj",
+                                  torch.tensor(fixed_adj.astype(np.float32), dtype=torch.float32))
+        else:
+            self.fixed_adj = None
+
+    def _normalize_adj(self, a):
+        a = torch.relu(a)
+        a = a + torch.eye(self.k, device=a.device, dtype=a.dtype)
+        deg = a.sum(dim=1)
+        deg_inv_sqrt = torch.pow(deg + 1e-12, -0.5)
+        return torch.diag(deg_inv_sqrt) @ a @ torch.diag(deg_inv_sqrt)
+
+    def forward(self, x):
+        x = self.node_proj(x)
+        a_norm = self.fixed_adj if self.fixed_adj is not None else self._normalize_adj(self.a_param)
+        h = self.gcn1(x, a_norm); h = self.norm1(h); h = self.act(h)
+        h = self.gcn2(h, a_norm); h = self.norm2(h); h = self.act(h)
+        return h.mean(dim=1)
+
+
+class GCNEnhancedModel(nn.Module):
+    """GCN-BiLSTM-Attention 增强模型。"""
+    def __init__(self, k: int, t: int, hidden_dim: int = 64, num_heads: int = 4,
+                 fixed_adj: np.ndarray = None):
+        super().__init__()
+        self.gcn_encoder = GCNEncoder(k=k, t=t, hidden_dim=hidden_dim, fixed_adj=fixed_adj)
+        self.lstm = nn.LSTM(input_size=k, hidden_size=hidden_dim // 2,
+                            num_layers=1, batch_first=True, bidirectional=True)
+        self.lstm_proj = nn.Linear(hidden_dim, hidden_dim)
+        self.multihead_attn = nn.MultiheadAttention(
+            embed_dim=hidden_dim, num_heads=num_heads, batch_first=True)
+        self.attn_norm = nn.LayerNorm(hidden_dim)
+        self.regression_head = nn.Sequential(
+            nn.Linear(hidden_dim, 32), nn.LayerNorm(32), AdaptiveSwish(), nn.Linear(32, 1))
+
+    def forward(self, x):
+        x = x.to(dtype=torch.float32)
+        x_gcn = self.gcn_encoder(x)
+        x_lstm = x.permute(0, 2, 1)
+        x_lstm, _ = self.lstm(x_lstm)
+        x_lstm = self.lstm_proj(x_lstm.mean(dim=1))
+        feat_seq = torch.stack([x_gcn, x_lstm], dim=1)
+        attn_out, attn_w = self.multihead_attn(feat_seq, feat_seq, feat_seq)
+        attn_out = self.attn_norm(attn_out + feat_seq)
+        return self.regression_head(attn_out.mean(dim=1)), attn_w
+
+
+# ══════════════════════════════════════════════════════════════
+# 数据处理（复用 CNN 增强框架）
+# ══════════════════════════════════════════════════════════════
+
+def build_sequences(data, seq_len, pred_len):
+    X, y = [], []
+    for i in range(len(data) - seq_len - pred_len + 1):
+        X.append(data[i:i + seq_len])
+        y.append(data[i + seq_len + pred_len - 1, 0])
+    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
+
+
+class TimeSeriesDataset(torch.utils.data.Dataset):
+    def __init__(self, X, y):
+        self.X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
+        self.y = torch.tensor(y, dtype=torch.float32)
+
+    def __len__(self):
+        return len(self.X)
+
+    def __getitem__(self, idx):
+        return self.X[idx], self.y[idx]
+
+
+def build_client_data(cfgs, num_nodes, seq_len, pred_len, seed):
+    """为所有 client 构建 train/val/test DataLoader 及标准化参数。"""
+    buffer = seq_len + pred_len + 10
+    B = 32
+    all_data = []
+    for cid, cfg in enumerate(cfgs):
+        n_ts = cfg["n_samples"] + buffer
+        data, _ = generate_traffic_flow(cfg, n_ts, num_nodes, seed + cid * 100)
+        X, y = build_sequences(data, seq_len, pred_len)
+        n = len(X); n_train = int(n * 0.70); n_val = int(n * 0.10)
+        X_train, y_train = X[:n_train], y[:n_train]
+        X_val, y_val = X[n_train:n_train + n_val], y[n_train:n_train + n_val]
+        X_test, y_test = X[n_train + n_val:], y[n_train + n_val:]
+        x_mean = X_train.mean(axis=(0, 1), keepdims=True)
+        x_std = X_train.std(axis=(0, 1), keepdims=True) + 1e-8
+        y_mean = y_train.mean(); y_std = y_train.std() + 1e-8
+        X_train_n = (X_train - x_mean) / x_std; X_val_n = (X_val - x_mean) / x_std
+        X_test_n = (X_test - x_mean) / x_std
+        y_train_n = (y_train - y_mean) / y_std; y_val_n = (y_val - y_mean) / y_std
+        y_test_n = (y_test - y_mean) / y_std
+        train_loader = torch.utils.data.DataLoader(
+            TimeSeriesDataset(X_train_n, y_train_n), batch_size=B, shuffle=True)
+        val_loader = torch.utils.data.DataLoader(
+            TimeSeriesDataset(X_val_n, y_val_n), batch_size=B, shuffle=False)
+        test_loader = torch.utils.data.DataLoader(
+            TimeSeriesDataset(X_test_n, y_test_n), batch_size=B, shuffle=False)
+        all_data.append({"cid": cid, "train_loader": train_loader,
+                          "val_loader": val_loader, "test_loader": test_loader,
+                          "train_size": len(X_train), "y_mean": y_mean, "y_std": y_std})
+    return all_data
+
+
+def compute_metrics(preds, truths):
+    mse = float(np.mean((preds - truths) ** 2))
+    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths)))
+
+
+def cos_sim(a: torch.Tensor, b: torch.Tensor) -> float:
+    a_f = a.view(-1).float(); b_f = b.view(-1).float()
+    dot = float(torch.dot(a_f, b_f))
+    na = float(torch.norm(a_f)); nb = float(torch.norm(b_f))
+    return max(0.0, dot / (na * nb + 1e-12))
+
+
+# ══════════════════════════════════════════════════════════════
+# 联邦客户端与服务端
+# ══════════════════════════════════════════════════════════════
+
+class FederatedClient:
+    def __init__(self, client_id, model, train_loader, val_loader, test_loader,
+                 criterion, lr=1e-3):
+        self.client_id = client_id
+        self.model = model.to(DEVICE).float()
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+        self.test_loader = test_loader
+        self.criterion = criterion
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
+
+    def train_epoch(self):
+        self.model.train()
+        total = 0.0
+        for x, y in self.train_loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            self.optimizer.zero_grad()
+            pred, _ = self.model(x)
+            loss = self.criterion(pred.view(-1), y)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+            self.optimizer.step()
+            total += loss.item() * x.shape[0]
+        return total / len(self.train_loader.dataset)
+
+    @torch.no_grad()
+    def validate_loss(self, loader=None):
+        if loader is None: loader = self.val_loader
+        self.model.eval()
+        total = 0.0
+        for x, y in loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
+            total += self.criterion(pred.view(-1), y).item() * x.shape[0]
+        return total / len(loader.dataset)
+
+    def train_local(self, epochs=2, global_model=None):
+        if global_model is not None:
+            self.model.load_state_dict(global_model.state_dict())
+        for _ in range(epochs):
+            self.train_epoch()
+        val_loss = self.validate_loss()
+        return val_loss, copy.deepcopy(self.model.state_dict())
+
+    @torch.no_grad()
+    def test_metrics(self, y_mean, y_std):
+        self.model.eval()
+        preds, truths = [], []
+        for x, y in self.test_loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
+            preds.append(pred.view(-1).cpu().numpy())
+            truths.append(y.cpu().numpy())
+        preds = np.concatenate(preds); truths = np.concatenate(truths)
+        preds_raw = preds * y_std + y_mean; truths_raw = truths * y_std + y_mean
+        return compute_metrics(preds_raw, truths_raw)
+
+
+class FedAvgServer:
+    def __init__(self, model, num_clients):
+        self.global_model = model.to(DEVICE).float()
+        self.num_clients = num_clients
+        self.client_data_sizes = None
+
+    def set_client_data_sizes(self, sizes):
+        self.client_data_sizes = sizes
+
+    def aggregate(self, client_weights, client_losses=None):
+        w = np.array(self.client_data_sizes, dtype=float) / float(sum(self.client_data_sizes))
+        gd = self.global_model.state_dict()
+        nd = {k: torch.zeros_like(v, dtype=torch.float32) for k, v in gd.items()}
+        for key in nd:
+            for idx in range(self.num_clients):
+                cw = client_weights[idx][key].to(DEVICE, dtype=torch.float32)
+                nd[key] += cw * torch.tensor(float(w[idx]), device=DEVICE, dtype=torch.float32)
+        self.global_model.load_state_dict(nd)
+        return self.global_model.state_dict()
+
+
+class AggregationServer(FedAvgServer):
+    def __init__(self, model, num_clients, agg_method="fedavg", lam=0.5, client_data_sizes=None):
+        super().__init__(model, num_clients)
+        self.agg_method = agg_method
+        self.lam = lam
+
+    def aggregate(self, client_weights, client_losses):
+        if self.agg_method == "fedavg" or client_losses is None:
+            return super().aggregate(client_weights)
+        n = np.array(self.client_data_sizes, dtype=float)
+        data_w = n / n.sum()
+        loss_arr = np.array(client_losses, dtype=float)
+        q = 1.0 / (loss_arr + 1e-8); quality_w = q / q.sum()
+        if self.agg_method == "loss_weighted":
+            w = quality_w
+        elif self.agg_method == "data_loss_weighted":
+            w = self.lam * data_w + (1.0 - self.lam) * quality_w
+        elif self.agg_method == "similarity_aware":
+            sim_w = np.ones(self.num_clients) / self.num_clients
+            if len(client_weights) > 1:
+                flat = []
+                for cw in client_weights:
+                    flat.append(torch.cat([v.view(-1) for v in cw.values()]))
+                sim = np.ones((self.num_clients, self.num_clients))
+                for i in range(self.num_clients):
+                    for j in range(i + 1, self.num_clients):
+                        s = cos_sim(flat[i], flat[j]); sim[i, j] = s; sim[j, i] = s
+                sim_scores = sim.mean(axis=1)
+                sim_w = sim_scores / (sim_scores.sum() + 1e-8)
+            w = 0.3 * data_w + 0.3 * quality_w + 0.4 * sim_w
+        elif self.agg_method == "proposed":
+            loss_cv = float(np.std(loss_arr)) / (float(np.mean(loss_arr)) + 1e-8)
+            dynamic_lam = 1.0 / (1.0 + loss_cv)
+            mixed_w = dynamic_lam * data_w + (1.0 - dynamic_lam) * quality_w
+            reg_w = np.ones(self.num_clients) / self.num_clients
+            w = 0.8 * mixed_w + 0.2 * reg_w
+        else:
+            w = data_w
+        gd = self.global_model.state_dict()
+        nd = {k: torch.zeros_like(v, dtype=torch.float32) for k, v in gd.items()}
+        for key in nd:
+            for idx in range(self.num_clients):
+                cw = client_weights[idx][key].to(DEVICE, dtype=torch.float32)
+                nd[key] += cw * torch.tensor(float(w[idx]), device=DEVICE, dtype=torch.float32)
+        self.global_model.load_state_dict(nd)
+        return self.global_model.state_dict()
+
+
+# ══════════════════════════════════════════════════════════════
+# 统一训练/评估函数
+# ══════════════════════════════════════════════════════════════
+
+def run_federated_training(cfgs, graph_type, agg_method, lam=0.5, seed=42,
+                           num_nodes=NUM_NODES, seq_len=SEQ_LEN, pred_len=PRED_LEN,
+                           comm_rounds=5, local_epochs=2, lr=0.001):
+    """运行一轮 GCN 联邦训练。"""
+    set_global_seed(seed)
+    client_data = build_client_data(cfgs, num_nodes, seq_len, pred_len, seed)
+    nc = len(client_data)
+    criterion = nn.MSELoss()
+    sizes = [d["train_size"] for d in client_data]
+
+    # 构造邻接矩阵
+    raw_signals, _, _ = get_enhanced_raw_data()
+    adj = _get_adj_matrix(raw_signals[0], graph_type, num_nodes)
+
+    model_func = lambda: GCNEnhancedModel(k=num_nodes, t=seq_len,
+                                           hidden_dim=64, num_heads=4, fixed_adj=adj)
+
+    clients = [
+        FederatedClient(d["cid"], model_func(), d["train_loader"],
+                        d["val_loader"], d["test_loader"], criterion, lr=lr)
+        for d in client_data
+    ]
+    server = AggregationServer(model_func(), nc, agg_method=agg_method, lam=lam)
+    server.set_client_data_sizes(sizes)
+
+    for rnd in range(comm_rounds):
+        cw_list, cl_list = [], []
+        for client in clients:
+            cl, cw = client.train_local(epochs=local_epochs,
+                                         global_model=server.global_model)
+            cw_list.append(cw); cl_list.append(float(cl))
+        server.aggregate(cw_list, cl_list)
+
+    results = []
+    for cid in range(nc):
+        clients[cid].model.load_state_dict(server.global_model.state_dict())
+        mse, rmse, mae = clients[cid].test_metrics(
+            client_data[cid]["y_mean"], client_data[cid]["y_std"])
+        results.append({"client_id": cid, "mse": mse, "rmse": rmse, "mae": mae})
+    return results
+
+
+def run_independent_training(cfgs, graph_type, seed=42, num_nodes=NUM_NODES,
+                             seq_len=SEQ_LEN, pred_len=PRED_LEN,
+                             total_epochs=10, lr=0.01):
+    """Independent 训练（同一 batch 数据）。"""
+    set_global_seed(seed)
+    client_data = build_client_data(cfgs, num_nodes, seq_len, pred_len, seed)
+    criterion = nn.MSELoss()
+    raw_signals, _, _ = get_enhanced_raw_data()
+    adj = _get_adj_matrix(raw_signals[0], graph_type, num_nodes)
+    results = []
+    for d in client_data:
+        model = GCNEnhancedModel(k=num_nodes, t=seq_len, hidden_dim=64,
+                                  num_heads=4, fixed_adj=adj).to(DEVICE)
+        opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=1e-4)
+        for _ in range(total_epochs):
+            model.train()
+            for x, y in d["train_loader"]:
+                x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+                opt.zero_grad()
+                pred, _ = model(x)
+                loss = criterion(pred.view(-1), y)
+                loss.backward()
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                opt.step()
+        model.eval()
+        preds, truths = [], []
+        with torch.no_grad():
+            for x, y in d["test_loader"]:
+                x = x.to(DEVICE).float()
+                pred, _ = model(x)
+                preds.append(pred.view(-1).cpu().numpy())
+                truths.append(y.cpu().numpy())
+        preds = np.concatenate(preds); truths = np.concatenate(truths)
+        preds_raw = preds * d["y_std"] + d["y_mean"]
+        truths_raw = truths * d["y_std"] + d["y_mean"]
+        mse, rmse, mae = compute_metrics(preds_raw, truths_raw)
+        results.append({"client_id": d["cid"], "mse": mse, "rmse": rmse, "mae": mae})
+    return results
+
+
+def _get_adj_matrix(data, graph_type, num_nodes):
+    """根据 graph_type 获取或构造邻接矩阵。"""
+    _, A_fixed_norm, _ = build_fixed_adjacency(num_nodes)
+    if graph_type == "dynamic_peak_adjacency":
+        adj, _, _ = build_dynamic_adjacency(data, "peak")
+    elif graph_type == "dynamic_offpeak_adjacency":
+        adj, _, _ = build_dynamic_adjacency(data, "off_peak")
+    elif graph_type == "functional_similarity_adjacency":
+        adj, _, _ = build_functional_similarity_matrix(data)
+    else:
+        adj = A_fixed_norm
+    return adj
+
+
+# ══════════════════════════════════════════════════════════════
 # Workflow: data_viz — 增强数据集可视化（与 CNN 一致）
 # ══════════════════════════════════════════════════════════════
 
@@ -622,6 +1006,59 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
     df_meta = pd.DataFrame(all_meta)
     save_dataframe(df_meta, output_dir, "enhanced_gcn_graph_summary.csv")
     print("[fixed_vs_dynamic] Graph summary:\n", df_meta.to_string(index=False))
+
+    # ── 训练对比实验 ──
+    print("\n[fixed_vs_dynamic] Running training comparison...")
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    graph_types = ["fixed_adjacency", "dynamic_peak_adjacency", "dynamic_offpeak_adjacency",
+                   "functional_similarity_adjacency"]
+    all_train_rows = []
+    for gt in graph_types:
+        print(f"  Graph: {gt}")
+        seed = 42
+        fed = run_federated_training(cfgs, gt, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
+        prop = run_federated_training(cfgs, gt, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
+        for r in fed:
+            all_train_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-FedAvg",
+                                   "client_id": r["client_id"],
+                                   "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+        for r in prop:
+            all_train_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-Proposed",
+                                   "client_id": r["client_id"],
+                                   "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df_train = pd.DataFrame(all_train_rows)
+    save_dataframe(df_train, output_dir, "gcn_enhanced_fixed_vs_dynamic_metrics.csv")
+    agg_train = df_train.groupby(["graph_type", "method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg_train, output_dir, "gcn_enhanced_fixed_vs_dynamic_summary.csv")
+    print("\n[fixed_vs_dynamic] Training results:\n", agg_train.to_string(index=False))
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    gts_short = {"fixed_adjacency": "Fixed", "dynamic_peak_adjacency": "Dyn-Peak",
+                 "dynamic_offpeak_adjacency": "Dyn-Off", "functional_similarity_adjacency": "Func"}
+    for gt in graph_types:
+        sub = agg_train[agg_train["graph_type"] == gt]
+        for method in ["GCN-FedAvg", "GCN-Proposed"]:
+            row = sub[sub["method"] == method]
+            if len(row) > 0:
+                gt_label = gts_short.get(gt, gt)
+                # Simple grouped bar
+                x_idx = graph_types.index(gt) * 2 + (0 if method == "GCN-FedAvg" else 1)
+                color = "#3498db" if method == "GCN-FedAvg" else "#2ecc71"
+                axes[0].bar(x_idx, row["rmse_mean"].values[0], color=color, alpha=0.85)
+                axes[1].bar(x_idx, row["mae_mean"].values[0], color=color, alpha=0.85)
+    for ax in axes:
+        ax.set_xticks([i * 2 + 0.5 for i in range(len(graph_types))])
+        ax.set_xticklabels([gts_short[gt] for gt in graph_types], fontsize=9)
+        ax.set_xlabel("Graph Type")
+    axes[0].set_title("RMSE by Graph Type"); axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE by Graph Type"); axes[1].set_ylabel("MAE")
+    axes[0].legend(["GCN-FedAvg", "GCN-Proposed"], fontsize=8)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_fixed_vs_dynamic_comparison.png")
     print("[fixed_vs_dynamic] Done.\n")
 
 
@@ -721,18 +1158,154 @@ def run_congestion_delay_experiment(output_dir: Path) -> None:
 # ══════════════════════════════════════════════════════════════
 
 def run_main_experiment(output_dir: Path) -> None:
-    print("[main] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[main] GCN Enhanced Main Experiment")
+    print("=" * 60)
+    cfgs = list(CLIENT_CONFIGS_BASE)
     ensure_output_dir(output_dir)
+    seeds = [42, 2024, 2025]
+    graph_type = "fixed_adjacency"
+
+    all_rows = []
+    for seed in seeds:
+        print(f"\n--- Seed = {seed} ---")
+        # Independent
+        ind = run_independent_training(cfgs, graph_type, seed=seed, total_epochs=10, lr=0.01)
+        for r in ind:
+            all_rows.append({"seed": seed, "method": "Independent", "graph_type": graph_type,
+                             "aggregation_method": "none", "client_id": r["client_id"],
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+        # GCN-FedAvg
+        fed = run_federated_training(cfgs, graph_type, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
+        for r in fed:
+            all_rows.append({"seed": seed, "method": "GCN-FedAvg", "graph_type": graph_type,
+                             "aggregation_method": "fedavg", "client_id": r["client_id"],
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+        # GCN-Proposed
+        prop = run_federated_training(cfgs, graph_type, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
+        for r in prop:
+            all_rows.append({"seed": seed, "method": "GCN-Proposed", "graph_type": graph_type,
+                             "aggregation_method": "proposed", "client_id": r["client_id"],
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "gcn_enhanced_main_metrics.csv")
+    agg = df.groupby(["method", "graph_type", "aggregation_method"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg, output_dir, "gcn_enhanced_main_metrics_summary.csv")
+    print("\n[main] Summary:\n", agg.to_string(index=False))
+
+    methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
+    colors = {"Independent": "#e74c3c", "GCN-FedAvg": "#3498db", "GCN-Proposed": "#2ecc71"}
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    for m_idx, method in enumerate(methods):
+        sub = agg[agg["method"] == method]
+        if len(sub) > 0:
+            x = [m_idx]
+            axes[0].bar(x, sub["rmse_mean"], yerr=sub["rmse_std"], capsize=5, color=colors[method], label=method)
+            axes[1].bar(x, sub["mae_mean"], yerr=sub["mae_std"], capsize=5, color=colors[method], label=method)
+    axes[0].set_xticks(range(len(methods))); axes[0].set_xticklabels(methods, rotation=15, ha="right", fontsize=9)
+    axes[1].set_xticks(range(len(methods))); axes[1].set_xticklabels(methods, rotation=15, ha="right", fontsize=9)
+    axes[0].set_title("RMSE"); axes[0].set_ylabel("RMSE")
+    axes[1].set_title("MAE"); axes[1].set_ylabel("MAE")
+    axes[0].legend(fontsize=7); axes[1].legend(fontsize=7)
+    fig.suptitle("GCN Enhanced: Main Experiment (fixed_adjacency)", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_main_rmse_comparison.png")
+    print("[main] Done.\n")
 
 
 def run_aggregation_experiment(output_dir: Path) -> None:
-    print("[aggregation] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[aggregation] GCN Aggregation Strategy Ablation")
+    print("=" * 60)
+    cfgs = list(CLIENT_CONFIGS_BASE)
     ensure_output_dir(output_dir)
+    graph_type = "fixed_adjacency"
+    agg_methods = ["fedavg", "loss_weighted", "data_loss_weighted", "similarity_aware", "proposed"]
+    agg_labels = ["FedAvg", "Loss-weighted", "Data-loss", "Similarity", "Proposed"]
+
+    all_rows = []
+    for seed in [42]:
+        print(f"\n--- Seed = {seed} ---")
+        for method, label in zip(agg_methods, agg_labels):
+            print(f"  [{label}]")
+            results = run_federated_training(cfgs, graph_type, method, seed=seed,
+                                              comm_rounds=5, local_epochs=2)
+            for r in results:
+                all_rows.append({"seed": seed, "aggregation_method": label, "graph_type": graph_type,
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "gcn_enhanced_aggregation_ablation.csv")
+    agg = df.groupby(["aggregation_method", "graph_type"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg, output_dir, "gcn_enhanced_aggregation_ablation_summary.csv")
+    print("\n[aggregation] Summary:\n", agg.to_string(index=False))
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    x = np.arange(len(agg_labels))
+    rmse_vals = [agg[agg["aggregation_method"] == l]["rmse_mean"].values[0] for l in agg_labels]
+    mae_vals = [agg[agg["aggregation_method"] == l]["mae_mean"].values[0] for l in agg_labels]
+    rmse_err = [agg[agg["aggregation_method"] == l]["rmse_std"].values[0] for l in agg_labels]
+    mae_err = [agg[agg["aggregation_method"] == l]["mae_std"].values[0] for l in agg_labels]
+    axes[0].bar(x, rmse_vals, yerr=rmse_err, capsize=5, color=plt.cm.viridis(np.linspace(0.1, 0.9, len(agg_labels))))
+    axes[1].bar(x, mae_vals, yerr=mae_err, capsize=5, color=plt.cm.viridis(np.linspace(0.1, 0.9, len(agg_labels))))
+    axes[0].set_xticks(x); axes[0].set_xticklabels(agg_labels, rotation=20, ha="right", fontsize=8)
+    axes[1].set_xticks(x); axes[1].set_xticklabels(agg_labels, rotation=20, ha="right", fontsize=8)
+    axes[0].set_title("RMSE by Aggregation"); axes[1].set_title("MAE by Aggregation")
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_aggregation_ablation.png")
+    print("[aggregation] Done.\n")
 
 
 def run_lambda_experiment(output_dir: Path) -> None:
-    print("[lambda] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[lambda] Lambda Sensitivity Analysis (GCN)")
+    print("=" * 60)
+    cfgs = list(CLIENT_CONFIGS_BASE)
     ensure_output_dir(output_dir)
+    graph_type = "fixed_adjacency"
+    lam_vals = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+    all_rows = []
+    for seed in [42]:
+        print(f"\n--- Seed = {seed} ---")
+        for lam in lam_vals:
+            print(f"  [lambda={lam:.2f}]")
+            results = run_federated_training(cfgs, graph_type, "data_loss_weighted",
+                                              lam=lam, seed=seed, comm_rounds=5, local_epochs=2)
+            for r in results:
+                all_rows.append({"seed": seed, "lambda": lam, "graph_type": graph_type,
+                                 "client_id": r["client_id"],
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+
+    df = pd.DataFrame(all_rows)
+    save_dataframe(df, output_dir, "gcn_enhanced_lambda_sensitivity.csv")
+    agg = df.groupby(["lambda", "graph_type"]).agg(
+        mse_mean=("mse", "mean"), mse_std=("mse", "std"),
+        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+    save_dataframe(agg, output_dir, "gcn_enhanced_lambda_sensitivity_summary.csv")
+    print("\n[lambda] Summary:\n", agg.to_string(index=False))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.errorbar(lam_vals, agg["rmse_mean"], yerr=agg["rmse_std"], fmt="o-", capsize=5, label="RMSE", linewidth=2, color="#3498db")
+    ax2 = ax.twinx()
+    ax2.errorbar(lam_vals, agg["mae_mean"], yerr=agg["mae_std"], fmt="s-", capsize=5, label="MAE", linewidth=2, color="#e74c3c")
+    ax.set_xlabel("Lambda (data_weight fraction)"); ax.set_ylabel("RMSE", color="#3498db")
+    ax2.set_ylabel("MAE", color="#e74c3c")
+    ax.set_title("GCN Data-Loss Weighted: Lambda Sensitivity")
+    l1, lb1 = ax.get_legend_handles_labels(); l2, lb2 = ax2.get_legend_handles_labels()
+    ax.legend(l1 + l2, lb1 + lb2, loc="center right")
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_lambda_sensitivity.png")
+    print("[lambda] Done.\n")
 
 
 def run_client_scale_experiment(output_dir: Path) -> None:
