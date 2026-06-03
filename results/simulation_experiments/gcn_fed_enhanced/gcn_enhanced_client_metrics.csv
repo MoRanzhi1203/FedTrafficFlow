@@ -1,0 +1,16 @@
+method,graph_type,client_id,distribution_type,traffic_pattern,sample_size,noise_level,incident_prob,mse,rmse,mae,improvement_over_fedavg_rmse,improvement_over_independent_rmse
+Independent,fixed_adjacency,0,normal,平稳通勤型,600,2.0,0.0,6.453258514404297,2.5403264582341176,2.061394453048706,,
+GCN-FedAvg,fixed_adjacency,0,normal,平稳通勤型,600,2.0,0.0,6.978175640106201,2.641623674959437,2.0916407108306885,,
+GCN-Proposed,fixed_adjacency,0,normal,平稳通勤型,600,2.0,0.0,7.032612323760986,2.6519072992397352,2.1002907752990723,-0.39,-4.39
+Independent,fixed_adjacency,1,student-t,波动型,500,5.0,0.0,33.91217803955078,5.823416354645337,4.686214923858643,,
+GCN-FedAvg,fixed_adjacency,1,student-t,波动型,500,5.0,0.0,20.35816764831543,4.512002620601569,3.7019975185394287,,
+GCN-Proposed,fixed_adjacency,1,student-t,波动型,500,5.0,0.0,20.59169578552246,4.537807376423382,3.731076717376709,-0.57,22.08
+Independent,fixed_adjacency,2,chi-square,偏态高流量型,700,8.0,0.0,137.21038818359375,11.713683800734668,10.200761795043945,,
+GCN-FedAvg,fixed_adjacency,2,chi-square,偏态高流量型,700,8.0,0.0,89.67769622802734,9.469830844742019,7.752511501312256,,
+GCN-Proposed,fixed_adjacency,2,chi-square,偏态高流量型,700,8.0,0.0,90.31755065917969,9.503554632829744,7.79978609085083,-0.36,18.87
+Independent,fixed_adjacency,3,gaussian_mixture,双峰型,550,4.0,0.0,20.24811363220215,4.499790398696605,3.4818930625915527,,
+GCN-FedAvg,fixed_adjacency,3,gaussian_mixture,双峰型,550,4.0,0.0,14.823307991027832,3.8501049324697414,2.956608295440674,,
+GCN-Proposed,fixed_adjacency,3,gaussian_mixture,双峰型,550,4.0,0.0,14.790809631347656,3.845882165556773,2.9677653312683105,0.11,14.53
+Independent,fixed_adjacency,4,log_normal,突发拥堵型,450,6.0,0.05,107.44078826904297,10.365364840131917,7.235861301422119,,
+GCN-FedAvg,fixed_adjacency,4,log_normal,突发拥堵型,450,6.0,0.05,127.90528106689453,11.309521699298097,8.265005111694336,,
+GCN-Proposed,fixed_adjacency,4,log_normal,突发拥堵型,450,6.0,0.05,126.09288024902344,11.229108613288208,8.228487968444824,0.71,-8.33

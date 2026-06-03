@@ -573,6 +573,20 @@ class FederatedClient:
         preds_raw = preds * y_std + y_mean; truths_raw = truths * y_std + y_mean
         return compute_metrics(preds_raw, truths_raw)
 
+    @torch.no_grad()
+    def val_metrics(self, y_mean, y_std):
+        """在 val_loader 上计算真实尺度 MSE/RMSE/MAE。"""
+        self.model.eval()
+        preds, truths = [], []
+        for x, y in self.val_loader:
+            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
+            pred, _ = self.model(x)
+            preds.append(pred.view(-1).cpu().numpy())
+            truths.append(y.cpu().numpy())
+        preds = np.concatenate(preds); truths = np.concatenate(truths)
+        preds_raw = preds * y_std + y_mean; truths_raw = truths * y_std + y_mean
+        return compute_metrics(preds_raw, truths_raw)
+
 
 class FedAvgServer:
     def __init__(self, model, num_clients):
@@ -649,8 +663,14 @@ class AggregationServer(FedAvgServer):
 
 def run_federated_training(cfgs, graph_type, agg_method, lam=0.5, seed=42,
                            num_nodes=NUM_NODES, seq_len=SEQ_LEN, pred_len=PRED_LEN,
-                           comm_rounds=5, local_epochs=2, lr=0.001):
-    """运行一轮 GCN 联邦训练。"""
+                           comm_rounds=5, local_epochs=2, lr=0.001,
+                           record_convergence=False):
+    """运行一轮 GCN 联邦训练。
+
+    返回:
+        results: list of dict (per-client test metrics)
+        convergence: dict (round-level validation data) or None
+    """
     set_global_seed(seed)
     client_data = build_client_data(cfgs, num_nodes, seq_len, pred_len, seed)
     nc = len(client_data)
@@ -672,6 +692,14 @@ def run_federated_training(cfgs, graph_type, agg_method, lam=0.5, seed=42,
     server = AggregationServer(model_func(), nc, agg_method=agg_method, lam=lam)
     server.set_client_data_sizes(sizes)
 
+    convergence = {"round": [], "avg_train_loss": [], "avg_val_rmse": [], "avg_val_rmse_std": [],
+                    "avg_val_mae": [], "avg_val_mae_std": []}
+    for cid in range(nc):
+        convergence[f"c{cid}_train"] = []
+        convergence[f"c{cid}_val_mse"] = []
+        convergence[f"c{cid}_val_rmse"] = []
+        convergence[f"c{cid}_val_mae"] = []
+
     for rnd in range(comm_rounds):
         cw_list, cl_list = [], []
         for client in clients:
@@ -680,13 +708,34 @@ def run_federated_training(cfgs, graph_type, agg_method, lam=0.5, seed=42,
             cw_list.append(cw); cl_list.append(float(cl))
         server.aggregate(cw_list, cl_list)
 
+        if record_convergence:
+            val_mses, val_rmses, val_maes = [], [], []
+            for cid, client in enumerate(clients):
+                client.model.load_state_dict(server.global_model.state_dict())
+                cd = client_data[cid]
+                mse, rmse, mae = client.val_metrics(cd["y_mean"], cd["y_std"])
+                val_mses.append(mse); val_rmses.append(rmse); val_maes.append(mae)
+            convergence["round"].append(rnd + 1)
+            convergence["avg_train_loss"].append(float(np.mean(cl_list)))
+            convergence["avg_val_rmse"].append(float(np.mean(val_rmses)))
+            convergence["avg_val_rmse_std"].append(float(np.std(val_rmses, ddof=0)))
+            convergence["avg_val_mae"].append(float(np.mean(val_maes)))
+            convergence["avg_val_mae_std"].append(float(np.std(val_maes, ddof=0)))
+            for cid in range(nc):
+                convergence[f"c{cid}_train"].append(cl_list[cid])
+                convergence[f"c{cid}_val_mse"].append(val_mses[cid])
+                convergence[f"c{cid}_val_rmse"].append(val_rmses[cid])
+                convergence[f"c{cid}_val_mae"].append(val_maes[cid])
+
     results = []
     for cid in range(nc):
         clients[cid].model.load_state_dict(server.global_model.state_dict())
         mse, rmse, mae = clients[cid].test_metrics(
             client_data[cid]["y_mean"], client_data[cid]["y_std"])
         results.append({"client_id": cid, "mse": mse, "rmse": rmse, "mae": mae})
-    return results
+
+    conv = convergence if record_convergence else None
+    return results, conv
 
 
 def run_independent_training(cfgs, graph_type, seed=42, num_nodes=NUM_NODES,
@@ -1016,8 +1065,8 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
     for gt in graph_types:
         print(f"  Graph: {gt}")
         seed = 42
-        fed = run_federated_training(cfgs, gt, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
-        prop = run_federated_training(cfgs, gt, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
+        fed, _ = run_federated_training(cfgs, gt, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
+        prop, _ = run_federated_training(cfgs, gt, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
         for r in fed:
             all_train_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-FedAvg",
                                    "client_id": r["client_id"],
@@ -1176,13 +1225,13 @@ def run_main_experiment(output_dir: Path) -> None:
                              "aggregation_method": "none", "client_id": r["client_id"],
                              "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
         # GCN-FedAvg
-        fed = run_federated_training(cfgs, graph_type, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
+        fed, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
         for r in fed:
             all_rows.append({"seed": seed, "method": "GCN-FedAvg", "graph_type": graph_type,
                              "aggregation_method": "fedavg", "client_id": r["client_id"],
                              "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
         # GCN-Proposed
-        prop = run_federated_training(cfgs, graph_type, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
+        prop, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
         for r in prop:
             all_rows.append({"seed": seed, "method": "GCN-Proposed", "graph_type": graph_type,
                              "aggregation_method": "proposed", "client_id": r["client_id"],
@@ -1232,8 +1281,8 @@ def run_aggregation_experiment(output_dir: Path) -> None:
         print(f"\n--- Seed = {seed} ---")
         for method, label in zip(agg_methods, agg_labels):
             print(f"  [{label}]")
-            results = run_federated_training(cfgs, graph_type, method, seed=seed,
-                                              comm_rounds=5, local_epochs=2)
+            results, _ = run_federated_training(cfgs, graph_type, method, seed=seed,
+                                               comm_rounds=5, local_epochs=2)
             for r in results:
                 all_rows.append({"seed": seed, "aggregation_method": label, "graph_type": graph_type,
                                  "client_id": r["client_id"],
@@ -1278,7 +1327,7 @@ def run_lambda_experiment(output_dir: Path) -> None:
         print(f"\n--- Seed = {seed} ---")
         for lam in lam_vals:
             print(f"  [lambda={lam:.2f}]")
-            results = run_federated_training(cfgs, graph_type, "data_loss_weighted",
+            results, _ = run_federated_training(cfgs, graph_type, "data_loss_weighted",
                                               lam=lam, seed=seed, comm_rounds=5, local_epochs=2)
             for r in results:
                 all_rows.append({"seed": seed, "lambda": lam, "graph_type": graph_type,
@@ -1331,14 +1380,14 @@ def run_client_scale_experiment(output_dir: Path) -> None:
                                  "method": "Independent", "client_id": r["client_id"],
                                  "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
             # GCN-FedAvg
-            fed = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
+            fed, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
                                           comm_rounds=5, local_epochs=2)
             for r in fed:
                 all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
                                  "method": "GCN-FedAvg", "client_id": r["client_id"],
                                  "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
             # GCN-Proposed
-            prop = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
+            prop, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
                                            comm_rounds=5, local_epochs=2)
             for r in prop:
                 all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
@@ -1400,14 +1449,14 @@ def run_noniid_experiment(output_dir: Path) -> None:
                                  "method": "Independent", "client_id": r["client_id"],
                                  "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
             # GCN-FedAvg
-            fed = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
+            fed, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
                                           comm_rounds=5, local_epochs=2)
             for r in fed:
                 all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
                                  "method": "GCN-FedAvg", "client_id": r["client_id"],
                                  "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
             # GCN-Proposed
-            prop = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
+            prop, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
                                            comm_rounds=5, local_epochs=2)
             for r in prop:
                 all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
@@ -1451,13 +1500,207 @@ def run_noniid_experiment(output_dir: Path) -> None:
 
 
 def run_convergence_experiment(output_dir: Path) -> None:
-    print("[convergence] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[convergence] GCN FedAvg vs Proposed Convergence Analysis")
+    print("=" * 60)
+
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    num_clients = len(cfgs)
+    graph_type = "fixed_adjacency"
     ensure_output_dir(output_dir)
+    conv_rounds = 10
+    all_round_rows = []
+
+    for method, agg_method in [("GCN-FedAvg", "fedavg"), ("GCN-Proposed", "proposed")]:
+        print(f"\n--- {method} Convergence (seed=42) ---")
+        set_global_seed(42)
+        _, conv = run_federated_training(
+            cfgs, graph_type, agg_method, seed=42,
+            comm_rounds=conv_rounds, record_convergence=True)
+
+        for r_idx in range(len(conv["round"])):
+            rnd = conv["round"][r_idx]
+            for cid in range(num_clients):
+                all_round_rows.append({
+                    "round": rnd, "method": method, "graph_type": graph_type,
+                    "client_id": cid,
+                    "train_loss": conv[f"c{cid}_train"][r_idx],
+                    "val_mse": conv[f"c{cid}_val_mse"][r_idx],
+                    "val_rmse": conv[f"c{cid}_val_rmse"][r_idx],
+                    "val_mae": conv[f"c{cid}_val_mae"][r_idx],
+                })
+
+    df_round = pd.DataFrame(all_round_rows)
+    save_dataframe(df_round, output_dir, "gcn_enhanced_convergence_round_metrics.csv")
+
+    agg = df_round.groupby(["round", "method", "graph_type"]).agg(
+        val_rmse_mean=("val_rmse", "mean"), val_rmse_std=("val_rmse", "std"),
+        val_mae_mean=("val_mae", "mean"), val_mae_std=("val_mae", "std"),
+    ).reset_index()
+    save_dataframe(agg, output_dir, "gcn_enhanced_convergence_summary.csv")
+    print("\n[convergence] Summary (last round):")
+    last = agg[agg["round"] == agg["round"].max()]
+    print(last.to_string(index=False))
+
+    # ── 图 1: Global Validation RMSE ──
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for method, color in [("GCN-FedAvg", "#3498db"), ("GCN-Proposed", "#2ecc71")]:
+        sub = agg[agg["method"] == method]
+        ax.plot(sub["round"], sub["val_rmse_mean"], "o-", color=color, linewidth=2, label=method)
+        ax.fill_between(sub["round"],
+                         sub["val_rmse_mean"] - sub["val_rmse_std"],
+                         sub["val_rmse_mean"] + sub["val_rmse_std"],
+                         alpha=0.15, color=color)
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Validation RMSE (real scale)")
+    ax.set_title("GCN Enhanced: Global Validation RMSE Convergence")
+    ax.legend()
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_global_validation_rmse.png")
+
+    # ── 图 2: Client Training Loss ──
+    fedavg_sub = df_round[df_round["method"] == "GCN-FedAvg"]
+    prop_sub = df_round[df_round["method"] == "GCN-Proposed"]
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    for cid in range(num_clients):
+        cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
+        axes[0].plot(cdata["round"], cdata["train_loss"], "o-", label=f"C{cid}", markersize=3)
+    axes[0].set_xlabel("Comm Round"); axes[0].set_ylabel("Local Train Loss")
+    axes[0].set_title("GCN-FedAvg: Client Training Loss"); axes[0].legend(fontsize=7)
+    for cid in range(num_clients):
+        cdata = prop_sub[prop_sub["client_id"] == cid]
+        axes[1].plot(cdata["round"], cdata["train_loss"], "s--", label=f"C{cid}", markersize=3)
+    axes[1].set_xlabel("Comm Round"); axes[1].set_ylabel("Local Train Loss")
+    axes[1].set_title("GCN-Proposed: Client Training Loss"); axes[1].legend(fontsize=7)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_client_training_loss.png")
+
+    # ── 图 3: Convergence Overview ──
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    ax = axes[0, 0]
+    for method, color in [("GCN-FedAvg", "#3498db"), ("GCN-Proposed", "#2ecc71")]:
+        sub = agg[agg["method"] == method]
+        ax.plot(sub["round"], sub["val_rmse_mean"], "o-", color=color, linewidth=2, label=method)
+        ax.fill_between(sub["round"], sub["val_rmse_mean"] - sub["val_rmse_std"],
+                         sub["val_rmse_mean"] + sub["val_rmse_std"], alpha=0.12, color=color)
+    ax.set_xlabel("Comm Round"); ax.set_ylabel("Val RMSE")
+    ax.set_title("(a) Global Validation RMSE"); ax.legend()
+
+    ax = axes[0, 1]
+    for method, color in [("GCN-FedAvg", "#3498db"), ("GCN-Proposed", "#2ecc71")]:
+        sub = agg[agg["method"] == method]
+        ax.plot(sub["round"], sub["val_mae_mean"], "s--", color=color, linewidth=2, label=method)
+    ax.set_xlabel("Comm Round"); ax.set_ylabel("Val MAE")
+    ax.set_title("(b) Global Validation MAE"); ax.legend()
+
+    ax = axes[1, 0]
+    for cid in range(num_clients):
+        cdata = fedavg_sub[fedavg_sub["client_id"] == cid]
+        ax.plot(cdata["round"], cdata["train_loss"], "o-", label=f"C{cid}", markersize=3)
+    ax.set_xlabel("Comm Round"); ax.set_ylabel("Train Loss")
+    ax.set_title("(c) GCN-FedAvg: Client Training Loss"); ax.legend(fontsize=7)
+
+    ax = axes[1, 1]
+    for cid in range(num_clients):
+        cdata = prop_sub[prop_sub["client_id"] == cid]
+        ax.plot(cdata["round"], cdata["train_loss"], "s--", label=f"C{cid}", markersize=3)
+    ax.set_xlabel("Comm Round"); ax.set_ylabel("Train Loss")
+    ax.set_title("(d) GCN-Proposed: Client Training Loss"); ax.legend(fontsize=7)
+    fig.suptitle("GCN Enhanced: Convergence Overview", fontsize=14)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_convergence_overview.png")
+    print("[convergence] Done.\n")
 
 
 def run_client_metrics_experiment(output_dir: Path) -> None:
-    print("[client_metrics] Placeholder — to be implemented in next batch.")
+    print("\n" + "=" * 60)
+    print("[client_metrics] GCN Per-Client Error Analysis")
+    print("=" * 60)
+
+    cfgs = list(CLIENT_CONFIGS_BASE)
+    num_clients = len(cfgs)
+    graph_type = "fixed_adjacency"
     ensure_output_dir(output_dir)
+    seed = 42
+
+    set_global_seed(seed)
+    # Independent
+    print("[Independent]")
+    ind_results = run_independent_training(cfgs, graph_type, seed=seed, total_epochs=10, lr=0.01)
+    # GCN-FedAvg
+    print("[GCN-FedAvg]")
+    fed_results, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
+    # GCN-Proposed
+    print("[GCN-Proposed]")
+    prop_results, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
+
+    rows = []
+    for cid in range(num_clients):
+        cfg = cfgs[cid]
+        im = ind_results[cid]; fm = fed_results[cid]; pm = prop_results[cid]
+        imp_fedavg = (fm["rmse"] - pm["rmse"]) / (fm["rmse"] + 1e-12) * 100
+        imp_ind = (im["rmse"] - pm["rmse"]) / (im["rmse"] + 1e-12) * 100
+
+        rows.append({"method": "Independent", "graph_type": graph_type, "client_id": cid,
+                     "distribution_type": cfg["dist"], "traffic_pattern": cfg["pattern"],
+                     "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
+                     "incident_prob": cfg.get("incident_prob", 0),
+                     "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"],
+                     "improvement_over_fedavg_rmse": float("nan"),
+                     "improvement_over_independent_rmse": float("nan")})
+        rows.append({"method": "GCN-FedAvg", "graph_type": graph_type, "client_id": cid,
+                     "distribution_type": cfg["dist"], "traffic_pattern": cfg["pattern"],
+                     "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
+                     "incident_prob": cfg.get("incident_prob", 0),
+                     "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"],
+                     "improvement_over_fedavg_rmse": float("nan"),
+                     "improvement_over_independent_rmse": float("nan")})
+        rows.append({"method": "GCN-Proposed", "graph_type": graph_type, "client_id": cid,
+                     "distribution_type": cfg["dist"], "traffic_pattern": cfg["pattern"],
+                     "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
+                     "incident_prob": cfg.get("incident_prob", 0),
+                     "mse": pm["mse"], "rmse": pm["rmse"], "mae": pm["mae"],
+                     "improvement_over_fedavg_rmse": round(imp_fedavg, 2),
+                     "improvement_over_independent_rmse": round(imp_ind, 2)})
+
+    df = pd.DataFrame(rows)
+    save_dataframe(df, output_dir, "gcn_enhanced_client_metrics.csv")
+    print("\n[client_metrics] Per-client results:")
+    print(df.to_string(index=False))
+
+    # 图 1: 每个 client 的 RMSE 对比
+    methods_data = [("Independent", "#e74c3c", ind_results),
+                    ("GCN-FedAvg", "#3498db", fed_results),
+                    ("GCN-Proposed", "#2ecc71", prop_results)]
+    fig, ax = plt.subplots(figsize=(14, 6))
+    x = np.arange(num_clients); width = 0.25
+    for m_idx, (name, color, m_list) in enumerate(methods_data):
+        rmse_vals = [r["rmse"] for r in m_list]
+        ax.bar(x + (m_idx - 1) * width, rmse_vals, width, label=name, color=color, alpha=0.9)
+    ax.set_xticks(x)
+    labels = [f"C{cid}\n{cfgs[cid]['dist']}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)]
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_ylabel("RMSE"); ax.set_title("GCN Enhanced: Per-Client RMSE Comparison")
+    ax.legend(fontsize=9)
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_client_rmse_comparison.png")
+
+    # 图 2: Proposed 改善率
+    prop_df = df[df["method"] == "GCN-Proposed"]
+    fig, ax = plt.subplots(figsize=(12, 6))
+    x = np.arange(num_clients); width = 0.3
+    ax.bar(x - width / 2, prop_df["improvement_over_fedavg_rmse"], width,
+           label="vs GCN-FedAvg", color="#3498db")
+    ax.bar(x + width / 2, prop_df["improvement_over_independent_rmse"], width,
+           label="vs Independent", color="#2ecc71")
+    ax.axhline(0, color="black", linewidth=0.8)
+    ax.set_xticks(x)
+    ax.set_xticklabels([f"C{cid}\n{cfgs[cid]['pattern']}" for cid in range(num_clients)], fontsize=9)
+    ax.set_ylabel("RMSE Improvement (%)")
+    ax.set_title("GCN Enhanced: GCN-Proposed RMSE Improvement by Client")
+    ax.legend()
+    plt.tight_layout()
+    save_figure(fig, output_dir, "gcn_enhanced_client_improvement.png")
+    print("[client_metrics] Done.\n")
 
 
 def run_peak_experiment(output_dir: Path) -> None:
