@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-CCN 联邦仿真增强实验工程。
+CNN 联邦仿真增强实验工程。
 
 本文件从 cnn_fed_base.py 结构派生，在保留基础模型、FedAvgServer、
 FederatedClient 等核心组件的基础上，扩展以下增强实验：
@@ -341,13 +341,15 @@ class FederatedClient:
     def train_local(self, epochs=5, global_model=None, verbose=False, prefix="Local"):
         if global_model is not None:
             self.model.load_state_dict(global_model.state_dict())
+        epoch_losses = []
         for epoch in range(epochs):
             train_loss = self.train_epoch()
             val_loss = self.validate()
+            epoch_losses.append((train_loss, val_loss))
             if verbose:
                 print(f"  {prefix} epoch {epoch + 1}/{epochs}, "
                       f"Train loss: {train_loss:.6f}, Val loss: {val_loss:.6f}")
-        return float(self.train_losses[-1]), copy.deepcopy(self.model.state_dict())
+        return float(self.train_losses[-1]), copy.deepcopy(self.model.state_dict()), epoch_losses
 
     @torch.no_grad()
     def test_metrics(self):
@@ -383,8 +385,9 @@ class IndependentClient(FederatedClient):
         super().__init__(client_id, model, train_loader, test_loader, criterion, lr=0.02)
 
     def train_local(self, epochs=2, verbose=False):
-        return super().train_local(epochs=epochs, global_model=None, verbose=verbose,
-                                   prefix="Independent")
+        loss, state, eps = super().train_local(epochs=epochs, global_model=None,
+                                                verbose=verbose, prefix="Independent")
+        return loss, state
 
 
 class FedAvgServer:
@@ -627,14 +630,17 @@ def run_fedavg_enhanced(client_configs, num_nodes, seq_len, pred_len,
     server.set_client_data_sizes([d[3] for d in clients_data])
 
     client_train_hist = {cid: [] for cid in range(num_clients)}
+    client_epoch_hist = []  # list of (round, cid, local_epoch, train_loss, val_loss)
     for rnd in range(comm_rounds):
         round_states, round_losses = [], []
         for client in fed_clients:
-            loss, state = client.train_local(
+            loss, state, epoch_losses = client.train_local(
                 epochs=local_epochs, global_model=server.global_model, verbose=False)
             round_losses.append(loss)
             round_states.append(state)
             client_train_hist[client.client_id].append(loss)
+            for le, (tl, vl) in enumerate(epoch_losses):
+                client_epoch_hist.append((rnd, client.client_id, le, tl, vl))
         server.aggregate(round_states, round_losses)
         if verbose:
             print(f"    Round {rnd + 1}/{comm_rounds}, "
@@ -651,7 +657,7 @@ def run_fedavg_enhanced(client_configs, num_nodes, seq_len, pred_len,
         all_preds.append(preds)
         all_truths.append(truths)
 
-    return results, server.round_losses, client_train_hist, all_preds, all_truths
+    return results, server.round_losses, client_train_hist, client_epoch_hist, all_preds, all_truths
 
 
 def run_independent_enhanced(client_configs, num_nodes, seq_len, pred_len,
@@ -701,8 +707,14 @@ def run_independent_enhanced(client_configs, num_nodes, seq_len, pred_len,
             preds = np.concatenate(ap)
             truths = np.concatenate(at)
             mse, rmse, mae = compute_metrics(preds, truths)
-            results.append({"client": cid, "mse": mse, "rmse": rmse, "mae": mae})
-    return results
+            results.append({"client": cid, "mse": mse, "rmse": rmse, "mae": mae,
+                            "preds": preds, "truths": truths})
+    ind_preds = [r["preds"] for r in results]
+    ind_truths = [r["truths"] for r in results]
+    for r in results:
+        del r["preds"]
+        del r["truths"]
+    return results, ind_preds, ind_truths
 
 
 # ================================================================
@@ -730,15 +742,15 @@ def run_main_experiment(output_dir: Path):
     for seed in seeds:
         print(f"\n--- Seed = {seed} ---")
         cfgs = build_noniid_client_configs(num_clients, "medium")
-        fed_results, _, _, _, _ = run_fedavg_enhanced(
+        fed_results, _, _, _, _, _ = run_fedavg_enhanced(
             cfgs, num_nodes, seq_len, pred_len,
             comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
-        ind_results = run_independent_enhanced(
+        ind_results, _, _ = run_independent_enhanced(
             cfgs, num_nodes, seq_len, pred_len,
             comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
 
         for r in fed_results:
-            r["method"] = "CCN-FedAvg"; r["seed"] = seed
+            r["method"] = "CNN-FedAvg"; r["seed"] = seed
         for r in ind_results:
             r["method"] = "Independent"; r["seed"] = seed
         all_fedavg.extend(fed_results)
@@ -754,13 +766,16 @@ def run_main_experiment(output_dir: Path):
                 "RMSE_mean": g["rmse"].mean()[method], "RMSE_std": g["rmse"].std()[method],
                 "MAE_mean": g["mae"].mean()[method], "MAE_std": g["mae"].std()[method]}
 
-    df_summary = pd.DataFrame([agg(df_fed, "CCN-FedAvg"), agg(df_ind, "Independent")])
+    df_summary = pd.DataFrame([agg(df_fed, "CNN-FedAvg"), agg(df_ind, "Independent")])
     print("\n=== Main Experiment Results (mean ± std across clients & seeds) ===")
     print(df_summary.to_string(index=False))
     save_dataframe(df_summary, output_dir, "cnn_enhanced_main_metrics.csv")
 
     cfgs = build_noniid_client_configs(num_clients, "medium")
-    _, _, _, fed_preds, fed_truths = run_fedavg_enhanced(
+    _, _, _, _, fed_preds, fed_truths = run_fedavg_enhanced(
+        cfgs, num_nodes, seq_len, pred_len,
+        comm_rounds, local_epochs, batch_size, lr, hidden_dim, 42)
+    _, ind_preds, _ = run_independent_enhanced(
         cfgs, num_nodes, seq_len, pred_len,
         comm_rounds, local_epochs, batch_size, lr, hidden_dim, 42)
 
@@ -768,13 +783,14 @@ def run_main_experiment(output_dir: Path):
     fig, axes = plt.subplots(num_clients, 1, figsize=(14, 2.5 * num_clients))
     for cid in range(num_clients):
         n_show = min(100, len(fed_preds[cid]))
-        axes[cid].plot(fed_truths[cid][:n_show], "k-", alpha=0.6, label="True")
-        axes[cid].plot(fed_preds[cid][:n_show], "b--", alpha=0.7, label="CCN-FedAvg")
+        axes[cid].plot(fed_truths[cid][:n_show], "k-", alpha=0.6, linewidth=2, label="Ground Truth")
+        axes[cid].plot(fed_preds[cid][:n_show], "b--", alpha=0.7, label="CNN-FedAvg")
+        axes[cid].plot(ind_preds[cid][:n_show], "r:", alpha=0.7, label="Independent")
         axes[cid].set_ylabel(f"Client {cid}")
         if cid == 0:
             axes[cid].legend()
     axes[-1].set_xlabel("Sample Index")
-    fig.suptitle("CCN Enhanced: Prediction Curve (Main Experiment, Seed=42)")
+    fig.suptitle("CNN Enhanced: Prediction Curve (Main Experiment, Seed=42)")
     plt.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_prediction_curve.png")
     return df_summary
@@ -798,7 +814,7 @@ def run_client_scale_experiment(output_dir: Path):
     for nc in client_nums:
         print(f"\n--- Num Clients = {nc} ---")
         cfgs = build_noniid_client_configs(nc, "medium")
-        fed_results, round_losses, _, _, _ = run_fedavg_enhanced(
+        fed_results, round_losses, _, _, _, _ = run_fedavg_enhanced(
             cfgs, num_nodes, seq_len, pred_len,
             comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
         mse_vals = [r["mse"] for r in fed_results]
@@ -819,14 +835,14 @@ def run_client_scale_experiment(output_dir: Path):
     save_dataframe(df_scale, output_dir, "cnn_enhanced_client_scale_metrics.csv")
 
     configure_plot_style()
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     xs = df_scale["Client_Number"].astype(str)
-    axes[0].bar(xs, df_scale["MSE_mean"], color="steelblue")
-    axes[0].set_title("MSE vs Client Count")
-    axes[1].bar(xs, df_scale["RMSE_mean"], color="darkorange")
-    axes[1].set_title("RMSE vs Client Count")
-    axes[2].bar(xs, df_scale["Final_Global_Loss"], color="seagreen")
-    axes[2].set_title("Final Global Loss vs Client Count")
+    axes[0].bar(xs, df_scale["RMSE_mean"], color="darkorange")
+    axes[0].set_title("RMSE vs Client Count")
+    axes[0].set_ylabel("RMSE")
+    axes[1].bar(xs, df_scale["Final_Global_Loss"], color="seagreen")
+    axes[1].set_title("Final Global Loss vs Client Count")
+    axes[1].set_ylabel("Loss")
     plt.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_client_scale_figure.png")
     return df_scale
@@ -851,15 +867,15 @@ def run_noniid_strength_experiment(output_dir: Path):
     for level in levels:
         print(f"\n--- Non-IID Level = {level} ---")
         cfgs = build_noniid_client_configs(num_clients, level)
-        fed_results, _, _, _, _ = run_fedavg_enhanced(
+        fed_results, _, _, _, _, _ = run_fedavg_enhanced(
             cfgs, num_nodes, seq_len, pred_len,
             comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
-        ind_results = run_independent_enhanced(
+        ind_results, _, _ = run_independent_enhanced(
             cfgs, num_nodes, seq_len, pred_len,
             comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
 
         for r in fed_results:
-            results.append({"Level": level, "Method": "CCN-FedAvg",
+            results.append({"Level": level, "Method": "CNN-FedAvg",
                             "MSE": r["mse"], "RMSE": r["rmse"], "MAE": r["mae"]})
         for r in ind_results:
             results.append({"Level": level, "Method": "Independent",
@@ -878,7 +894,7 @@ def run_noniid_strength_experiment(output_dir: Path):
     configure_plot_style()
     fig, axes = plt.subplots(1, 3, figsize=(16, 5))
     for i, metric in enumerate(["RMSE_mean", "MAE_mean", "MSE_mean"]):
-        for method in ["CCN-FedAvg", "Independent"]:
+        for method in ["CNN-FedAvg", "Independent"]:
             sub = df_agg[df_agg["Method"] == method]
             axes[i].plot(sub["Level"], sub[metric], "o-", linewidth=2, label=method)
         axes[i].set_title(metric.replace("_mean", ""))
@@ -903,42 +919,66 @@ def run_convergence_experiment(output_dir: Path):
     seed = 42
 
     cfgs = build_noniid_client_configs(num_clients, "medium")
-    _, global_losses, client_train_hist, _, _ = run_fedavg_enhanced(
+    _, global_losses, client_train_hist, client_epoch_hist, _, _ = run_fedavg_enhanced(
         cfgs, num_nodes, seq_len, pred_len,
         comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
 
+    # CSV 1: global round loss
     df_global = pd.DataFrame({
         "Round": np.arange(1, len(global_losses) + 1),
         "Global_Loss": global_losses})
     df_global.to_csv(output_dir / "cnn_enhanced_global_loss.csv", index=False, encoding="utf-8")
 
-    df_client = pd.DataFrame(client_train_hist)
-    df_client.columns = [f"Client_{c}" for c in df_client.columns]
-    df_client.insert(0, "Round", np.arange(1, len(df_client) + 1))
-    df_client.to_csv(output_dir / "cnn_enhanced_client_loss.csv", index=False, encoding="utf-8")
+    # CSV 2: client round loss
+    df_cr = pd.DataFrame(client_train_hist)
+    df_cr.columns = [f"Client_{c}" for c in df_cr.columns]
+    df_cr.insert(0, "Round", np.arange(1, len(df_cr) + 1))
+    df_cr.to_csv(output_dir / "cnn_enhanced_client_round_loss.csv", index=False, encoding="utf-8")
+
+    # CSV 3: client epoch loss
+    df_ce = pd.DataFrame(client_epoch_hist,
+                         columns=["Round", "Client", "Local_Epoch", "Train_Loss", "Val_Loss"])
+    df_ce.to_csv(output_dir / "cnn_enhanced_client_epoch_loss.csv", index=False, encoding="utf-8")
 
     configure_plot_style()
+
+    # PNG 1: global loss only
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(np.arange(1, len(global_losses) + 1), global_losses, "b-o", linewidth=2)
+    ax.set_xlabel("Communication Round"); ax.set_ylabel("Average Training Loss")
+    ax.set_title("Global Model Convergence (CNN-FedAvg)")
+    plt.tight_layout()
+    fig.savefig(output_dir / "cnn_enhanced_global_loss.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+    # PNG 2: client epoch-level loss
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for cid in range(num_clients):
+        sub = df_ce[df_ce["Client"] == cid]
+        ax.plot(sub["Round"] + sub["Local_Epoch"] / local_epochs,
+                sub["Train_Loss"], "o-", markersize=2, alpha=0.7, label=f"Client {cid}")
+    ax.set_xlabel("Round (with epoch offset)")
+    ax.set_ylabel("Training Loss")
+    ax.set_title("Client-Level Local Epoch Loss (CNN-FedAvg)")
+    ax.legend(fontsize=8)
+    plt.tight_layout()
+    fig.savefig(output_dir / "cnn_enhanced_client_loss.png", dpi=300, bbox_inches="tight")
+    plt.close()
+
+    # PNG 3: convergence overview (global + client round on same figure)
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].plot(np.arange(1, len(global_losses) + 1), global_losses, "b-o", linewidth=2)
     axes[0].set_xlabel("Communication Round"); axes[0].set_ylabel("Average Training Loss")
-    axes[0].set_title("Global Model Convergence (CCN-FedAvg)")
-
+    axes[0].set_title("Global Convergence")
     for cid in range(num_clients):
         axes[1].plot(np.arange(1, comm_rounds + 1),
                      client_train_hist[cid], "o-", label=f"Client {cid}")
     axes[1].set_xlabel("Communication Round"); axes[1].set_ylabel("Local Training Loss")
-    axes[1].set_title("Client-Level Local Loss"); axes[1].legend(fontsize=8)
+    axes[1].set_title("Client Round-Level Loss"); axes[1].legend(fontsize=8)
     plt.tight_layout()
-    fig.savefig(output_dir / "cnn_enhanced_global_loss.png", dpi=300, bbox_inches="tight")
-    fig.savefig(output_dir / "cnn_enhanced_client_loss.png", dpi=300, bbox_inches="tight")
+    fig.savefig(output_dir / "cnn_enhanced_convergence_overview.png", dpi=300, bbox_inches="tight")
     plt.close()
     return df_global
-
-
-# ================================================================
-# workflow: client_metrics
-# ================================================================
-
 def run_client_metrics_experiment(output_dir: Path):
     print("\n" + "=" * 60)
     print("Workflow: client_metrics -- Per-Client Error Analysis")
@@ -950,16 +990,16 @@ def run_client_metrics_experiment(output_dir: Path):
     seed = 42
 
     cfgs = build_noniid_client_configs(num_clients, "medium")
-    fed_results, _, _, _, _ = run_fedavg_enhanced(
+    fed_results, _, _, _, _, _ = run_fedavg_enhanced(
         cfgs, num_nodes, seq_len, pred_len,
         comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
-    ind_results = run_independent_enhanced(
+    ind_results, _, _ = run_independent_enhanced(
         cfgs, num_nodes, seq_len, pred_len,
         comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
 
     rows = []
     for cid in range(num_clients):
-        rows.append({"Client": f"Client {cid}", "Method": "CCN-FedAvg",
+        rows.append({"Client": f"Client {cid}", "Method": "CNN-FedAvg",
                      "MSE": fed_results[cid]["mse"], "RMSE": fed_results[cid]["rmse"],
                      "MAE": fed_results[cid]["mae"],
                      "Distribution_Type": cfgs[cid]["dist"],
@@ -984,7 +1024,7 @@ def run_client_metrics_experiment(output_dir: Path):
     x = np.arange(num_clients); w = 0.35
     fed_rmse = [fed_results[c]["rmse"] for c in range(num_clients)]
     ind_rmse = [ind_results[c]["rmse"] for c in range(num_clients)]
-    ax.bar(x - w/2, fed_rmse, w, label="CCN-FedAvg", color="steelblue")
+    ax.bar(x - w/2, fed_rmse, w, label="CNN-FedAvg", color="steelblue")
     ax.bar(x + w/2, ind_rmse, w, label="Independent", color="darkorange")
     ax.set_xticks(x); ax.set_xticklabels([f"Client {i}" for i in range(num_clients)])
     ax.set_ylabel("RMSE"); ax.set_title("Per-Client RMSE Comparison"); ax.legend()
@@ -1009,7 +1049,10 @@ def run_peak_offpeak_experiment(output_dir: Path):
 
     cfgs = build_noniid_client_configs(num_clients, "medium")
     hpd = 24
-    _, _, _, fed_preds, fed_truths = run_fedavg_enhanced(
+    _, _, _, _, fed_preds, fed_truths = run_fedavg_enhanced(
+        cfgs, num_nodes, seq_len, pred_len,
+        comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
+    _, ind_preds, _ = run_independent_enhanced(
         cfgs, num_nodes, seq_len, pred_len,
         comm_rounds, local_epochs, batch_size, lr, hidden_dim, seed)
 
@@ -1024,40 +1067,41 @@ def run_peak_offpeak_experiment(output_dir: Path):
 
     rows = []
     for cid in range(num_clients):
-        preds = fed_preds[cid]; truths = fed_truths[cid]
-        for period_name in ["morning_peak", "evening_peak", "off_peak"]:
-            indices = [i for i in range(len(preds)) if classify_period(i) == period_name]
-            if len(indices) < 5: continue
-            p = preds[indices]; t = truths[indices]
-            mse, rmse, mae = compute_metrics(p, t)
-            rows.append({"Client": f"Client {cid}", "Period": period_name,
-                         "MSE": mse, "RMSE": rmse, "MAE": mae})
+        for method, preds in [("CNN-FedAvg", fed_preds), ("Independent", ind_preds)]:
+            truths = fed_truths[cid]
+            n = min(len(preds[cid]), len(truths))
+            for period_name in ["morning_peak", "evening_peak", "off_peak"]:
+                indices = [i for i in range(n) if classify_period(i) == period_name]
+                if len(indices) < 5: continue
+                p = preds[cid][indices]; t = truths[indices]
+                mse, rmse, mae = compute_metrics(p, t)
+                rows.append({"Client": f"Client {cid}", "Method": method,
+                             "Period": period_name,
+                             "MSE": mse, "RMSE": rmse, "MAE": mae})
 
     df_peak = pd.DataFrame(rows)
     save_dataframe(df_peak, output_dir, "cnn_enhanced_peak_offpeak_metrics.csv")
 
-    df_agg = df_peak.groupby("Period").agg(
-        MSE_mean=("MSE", "mean"), RMSE_mean=("RMSE", "mean"),
-        MAE_mean=("MAE", "mean")).reindex(["morning_peak", "evening_peak", "off_peak"]).reset_index()
+    df_agg = df_peak.groupby(["Period", "Method"]).agg(
+        RMSE_mean=("RMSE", "mean"), MAE_mean=("MAE", "mean")).reset_index()
 
     print("\n=== Peak / Off-Peak Analysis ===")
     print(df_agg.to_string(index=False))
 
     configure_plot_style()
-    fig, axes = plt.subplots(1, 3, figsize=(14, 5))
-    colors = ["#d62728", "#ff7f0e", "#2ca02c"]
-    for i, metric in enumerate(["MSE_mean", "RMSE_mean", "MAE_mean"]):
-        axes[i].bar(df_agg["Period"], df_agg[metric], color=colors)
-        axes[i].set_title(metric.replace("_mean", "")); axes[i].tick_params(axis="x", rotation=15)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    periods = ["morning_peak", "evening_peak", "off_peak"]
+    x = np.arange(len(periods)); w = 0.35
+    for i, (metric, ax) in enumerate(zip(["RMSE_mean", "MAE_mean"], axes)):
+        sub_fed = df_agg[df_agg["Method"] == "CNN-FedAvg"].set_index("Period").reindex(periods)
+        sub_ind = df_agg[df_agg["Method"] == "Independent"].set_index("Period").reindex(periods)
+        ax.bar(x - w/2, sub_fed[metric], w, label="CNN-FedAvg", color="steelblue")
+        ax.bar(x + w/2, sub_ind[metric], w, label="Independent", color="darkorange")
+        ax.set_xticks(x); ax.set_xticklabels(periods, rotation=15)
+        ax.set_title(metric.replace("_mean", "")); ax.legend()
     plt.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_peak_offpeak_figure.png")
     return df_agg
-
-
-# ================================================================
-# 主入口
-# ================================================================
-
 def run_project(workflow: str, output_dir: Path) -> None:
     ensure_output_dir(output_dir)
     log_path = output_dir / "cnn_enhanced_run_log.txt"
@@ -1085,7 +1129,7 @@ def run_project(workflow: str, output_dir: Path) -> None:
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
-    parser = argparse.ArgumentParser(description="CCN Enhanced Simulation.")
+    parser = argparse.ArgumentParser(description="CNN Enhanced Simulation.")
     parser.add_argument(
         "--workflow",
         choices=["all", "main", "client_scale", "noniid", "convergence",
