@@ -1298,7 +1298,7 @@ def run_main_experiment(output_dir: Path) -> None:
     print("\n[main] Summary:\n", agg.to_string(index=False))
 
     # 绘制对比图
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     methods = ["Independent", "FedAvg", "Proposed"]
     for idx, metric in enumerate(["mse", "rmse", "mae", "mape"]):
         ax = axes[idx]

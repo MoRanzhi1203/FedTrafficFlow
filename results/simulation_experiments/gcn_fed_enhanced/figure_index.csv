@@ -13,14 +13,14 @@ enhanced_gcn_fixed_dynamic_adjacency_comparison.png,fixed_vs_dynamic,heatmap,Com
 enhanced_gcn_functional_similarity_matrix.png,fixed_vs_dynamic,heatmap,Functional similarity matrix estimated from node traffic profiles.,enhanced_gcn_graph_summary.csv,recommended
 enhanced_gcn_congestion_delay_matrix.png,fixed_vs_dynamic,heatmap,Congestion propagation delay matrix for the enhanced GCN setting.,enhanced_gcn_graph_summary.csv,recommended
 enhanced_gcn_peak_graph_change.png,fixed_vs_dynamic,heatmap,Graph structure changes across off-peak and peak traffic periods.,enhanced_gcn_graph_summary.csv,yes
-gcn_enhanced_fixed_vs_dynamic_comparison.png,fixed_vs_dynamic,bar,"Performance comparison under fixed, dynamic, and functional graph definitions.",gcn_enhanced_fixed_vs_dynamic_summary.csv,recommended
-gcn_enhanced_congestion_delay_comparison.png,congestion_delay,bar,Performance comparison across congestion-delay-related graph definitions.,gcn_enhanced_congestion_delay_summary.csv,recommended
-gcn_enhanced_main_rmse_comparison.png,main,bar,"Main comparison of Independent, GCN-FedAvg, and GCN-Proposed.",gcn_enhanced_main_metrics_summary.csv,recommended
-gcn_enhanced_aggregation_ablation.png,aggregation,bar,Aggregation strategy ablation on RMSE and MAE.,gcn_enhanced_aggregation_ablation_summary.csv,recommended
+gcn_enhanced_fixed_vs_dynamic_comparison.png,fixed_vs_dynamic,bar,"Performance comparison under fixed, dynamic, and functional graph definitions measured by RMSE, MAE, and MAPE.",gcn_enhanced_fixed_vs_dynamic_summary.csv,recommended
+gcn_enhanced_congestion_delay_comparison.png,congestion_delay,bar,"Performance comparison across congestion-delay-related graph definitions measured by RMSE, MAE, and MAPE.",gcn_enhanced_congestion_delay_summary.csv,recommended
+gcn_enhanced_main_rmse_comparison.png,main,bar,"Main comparison of Independent, GCN-FedAvg, and GCN-Proposed using RMSE, MAE, and MAPE.",gcn_enhanced_main_metrics_summary.csv,recommended
+gcn_enhanced_aggregation_ablation.png,aggregation,bar,"Aggregation strategy ablation on RMSE, MAE, and MAPE.",gcn_enhanced_aggregation_ablation_summary.csv,recommended
 gcn_enhanced_lambda_sensitivity.png,lambda,line,Lambda sensitivity analysis for the data-loss weighted GCN aggregation strategy.,gcn_enhanced_lambda_sensitivity_summary.csv,recommended
-gcn_enhanced_client_scale.png,client_scale,line,Client-scale sensitivity analysis for the enhanced GCN setting.,gcn_enhanced_client_scale_summary.csv,recommended
-gcn_enhanced_noniid_strength.png,noniid,bar,Method comparison under different Non-IID strengths for enhanced GCN.,gcn_enhanced_noniid_strength_summary.csv,recommended
+gcn_enhanced_client_scale.png,client_scale,line,"Client-scale sensitivity analysis for the enhanced GCN setting measured by RMSE, MAE, and MAPE.",gcn_enhanced_client_scale_summary.csv,recommended
+gcn_enhanced_noniid_strength.png,noniid,bar,"Method comparison under different Non-IID strengths for enhanced GCN measured by RMSE, MAE, and MAPE.",gcn_enhanced_noniid_strength_summary.csv,recommended
 gcn_enhanced_global_validation_rmse.png,convergence,line,Global validation RMSE across communication rounds for enhanced GCN.,gcn_enhanced_convergence_summary.csv,recommended
 gcn_enhanced_client_training_loss.png,convergence,line,Per-client training loss across communication rounds for GCN-FedAvg and GCN-Proposed.,gcn_enhanced_convergence_round_metrics.csv,recommended
 gcn_enhanced_client_rmse_comparison.png,client_metrics,bar,"Per-client RMSE comparison across Independent, GCN-FedAvg, and GCN-Proposed.",gcn_enhanced_client_metrics.csv,recommended
-gcn_enhanced_peak_offpeak_comparison.png,peak,bar,"Performance comparison across peak, off-peak, and incident periods for enhanced GCN.",gcn_enhanced_peak_offpeak_summary.csv,recommended
+gcn_enhanced_peak_offpeak_comparison.png,peak,bar,"Performance comparison across peak, off-peak, and incident periods for enhanced GCN measured by RMSE, MAE, and MAPE.",gcn_enhanced_peak_offpeak_summary.csv,recommended
