@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 CNN/CCN 一审增强仿真实验组。
 
@@ -50,6 +50,8 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+TRAFFIC_MIN_VALUE = 0.0
+MAPE_EPS = 1.0
 
 METHOD_PALETTE = {
     "Independent": "#4C72B0",
@@ -73,18 +75,18 @@ FIGURE_INDEX_ENTRIES = [
     {"figure_file": "enhanced_dataset_incident_example.png", "workflow": "data_viz", "figure_type": "line", "description": "Incident example with shaded disruption periods for the incident-prone client.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "yes"},
     {"figure_file": "enhanced_dataset_client_correlation_matrix.png", "workflow": "data_viz", "figure_type": "heatmap", "description": "Inter-client traffic correlation matrix for the enhanced dataset.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "enhanced_dataset_node_correlation_matrix.png", "workflow": "data_viz", "figure_type": "heatmap", "description": "Node correlation matrix for a representative enhanced client.", "source_csv": "enhanced_dataset_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "cnn_enhanced_main_rmse_comparison.png", "workflow": "main", "figure_type": "bar", "description": "Main comparison of Independent, FedAvg, and Proposed using MSE, RMSE, and MAE.", "source_csv": "cnn_enhanced_main_metrics_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "cnn_enhanced_aggregation_ablation.png", "workflow": "aggregation", "figure_type": "bar", "description": "Aggregation strategy ablation on RMSE and MAE.", "source_csv": "cnn_enhanced_aggregation_ablation_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_main_rmse_comparison.png", "workflow": "main", "figure_type": "bar", "description": "Main comparison of Independent, FedAvg, and Proposed using MSE, RMSE, MAE, and MAPE.", "source_csv": "cnn_enhanced_main_metrics_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_aggregation_ablation.png", "workflow": "aggregation", "figure_type": "bar", "description": "Aggregation strategy ablation on RMSE, MAE, and MAPE.", "source_csv": "cnn_enhanced_aggregation_ablation_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "cnn_enhanced_lambda_sensitivity.png", "workflow": "lambda", "figure_type": "line", "description": "Lambda sensitivity analysis for the data-loss weighted aggregation strategy.", "source_csv": "cnn_enhanced_lambda_sensitivity_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "cnn_enhanced_global_validation_rmse.png", "workflow": "convergence", "figure_type": "line", "description": "Global validation RMSE across communication rounds.", "source_csv": "cnn_enhanced_convergence_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "cnn_enhanced_client_training_loss.png", "workflow": "convergence", "figure_type": "line", "description": "Per-client training loss across communication rounds for FedAvg and Proposed.", "source_csv": "cnn_enhanced_convergence_round_metrics.csv", "used_in_paper": "recommended"},
     {"figure_file": "cnn_enhanced_convergence_overview.png", "workflow": "convergence", "figure_type": "line", "description": "Combined convergence overview including validation metrics and per-client losses.", "source_csv": "cnn_enhanced_convergence_summary.csv", "used_in_paper": "yes"},
-    {"figure_file": "cnn_enhanced_client_scale.png", "workflow": "client_scale", "figure_type": "line", "description": "Client-scale sensitivity analysis for RMSE and MAE.", "source_csv": "cnn_enhanced_client_scale_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "cnn_enhanced_noniid_strength.png", "workflow": "noniid", "figure_type": "bar", "description": "Method comparison under different Non-IID strengths.", "source_csv": "cnn_enhanced_noniid_strength_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_client_scale.png", "workflow": "client_scale", "figure_type": "line", "description": "Client-scale sensitivity analysis for RMSE, MAE, and MAPE.", "source_csv": "cnn_enhanced_client_scale_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_noniid_strength.png", "workflow": "noniid", "figure_type": "bar", "description": "Method comparison under different Non-IID strengths measured by RMSE, MAE, and MAPE.", "source_csv": "cnn_enhanced_noniid_strength_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "cnn_enhanced_client_rmse_comparison.png", "workflow": "client_metrics", "figure_type": "bar", "description": "Per-client RMSE comparison across Independent, FedAvg, and Proposed.", "source_csv": "cnn_enhanced_client_metrics.csv", "used_in_paper": "recommended"},
     {"figure_file": "cnn_enhanced_client_improvement.png", "workflow": "client_metrics", "figure_type": "bar", "description": "RMSE improvement of Proposed over baselines for each client.", "source_csv": "cnn_enhanced_client_metrics.csv", "used_in_paper": "yes"},
-    {"figure_file": "cnn_enhanced_peak_offpeak_comparison.png", "workflow": "peak", "figure_type": "bar", "description": "Performance comparison across peak, off-peak, and incident periods.", "source_csv": "cnn_enhanced_peak_offpeak_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "cnn_enhanced_feature_ablation.png", "workflow": "feature_ablation", "figure_type": "bar", "description": "Feature ablation comparison for FedAvg and Proposed.", "source_csv": "cnn_enhanced_feature_ablation_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_peak_offpeak_comparison.png", "workflow": "peak", "figure_type": "bar", "description": "Performance comparison across peak, off-peak, and incident periods measured by RMSE, MAE, and MAPE.", "source_csv": "cnn_enhanced_peak_offpeak_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "cnn_enhanced_feature_ablation.png", "workflow": "feature_ablation", "figure_type": "bar", "description": "Feature ablation comparison for FedAvg and Proposed measured by RMSE, MAE, and MAPE.", "source_csv": "cnn_enhanced_feature_ablation_summary.csv", "used_in_paper": "recommended"},
 ]
 
 # 增强数据集超参数（与 gcn_fed_enhanced_experiments.py 共享）
@@ -164,7 +166,8 @@ def export_figure_index(output_dir: Path) -> Path:
 
 def compute_metrics(preds, truths):
     mse = float(np.mean((preds - truths) ** 2))
-    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths)))
+    mape = float(np.mean(np.abs(preds - truths) / np.maximum(np.abs(truths), MAPE_EPS))) * 100
+    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths))), mape
 
 
 def cos_sim(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -294,6 +297,8 @@ def sample_distribution_noise(n_timesteps, n_nodes, dist_type, noise_level, seed
 def generate_traffic_flow(cfg, n_timesteps, n_nodes, seed):
     """生成复杂交通流时间序列。
 
+    所有输出值通过 np.clip(data, TRAFFIC_MIN_VALUE, None) 保证非负。
+
     返回: data (n_timesteps, n_nodes), incident_mask (n_timesteps,) 或 None
     """
     rng = np.random.RandomState(seed)
@@ -333,6 +338,7 @@ def generate_traffic_flow(cfg, n_timesteps, n_nodes, seed):
                                        cfg["dist"], cfg["noise"], seed + 1000)
     data += noise
 
+    data = np.clip(data, TRAFFIC_MIN_VALUE, None)
     return data.astype(np.float32), incident_mask
 
 
@@ -762,8 +768,8 @@ class FederatedClient:
             truths.append(y)
         preds = torch.cat(preds, dim=0).cpu().numpy()
         truths = torch.cat(truths, dim=0).cpu().numpy()
-        mse, rmse, mae = compute_metrics(preds, truths)
-        return {"mse": mse, "rmse": rmse, "mae": mae, "preds": preds, "truths": truths}
+        mse, rmse, mae, mape = compute_metrics(preds, truths)
+        return {"mse": mse, "rmse": rmse, "mae": mae, "mape": mape, "preds": preds, "truths": truths}
 
     @torch.no_grad()
     def test_loss(self):
@@ -908,12 +914,13 @@ def run_federated_training(client_data, agg_method="fedavg", lam=0.5,
     server.set_client_data_sizes(train_sizes)
 
     convergence = {"round": [], "avg_train_loss": [], "avg_val_rmse": [], "avg_val_rmse_std": [],
-                    "avg_val_mae": [], "avg_val_mae_std": []}
+                    "avg_val_mae": [], "avg_val_mae_std": [], "avg_val_mape": [], "avg_val_mape_std": []}
     for cid in range(num_clients):
         convergence[f"c{cid}_train"] = []
         convergence[f"c{cid}_val_mse"] = []
         convergence[f"c{cid}_val_rmse"] = []
         convergence[f"c{cid}_val_mae"] = []
+        convergence[f"c{cid}_val_mape"] = []
 
     for rnd in range(comm_rounds):
         client_weights, client_losses = [], []
@@ -925,26 +932,30 @@ def run_federated_training(client_data, agg_method="fedavg", lam=0.5,
         server.aggregate(client_weights, client_losses)
 
         if record_convergence:
-            val_mses, val_rmses, val_maes = [], [], []
+            val_mses, val_rmses, val_maes, val_mapes = [], [], [], []
             for cid, client in enumerate(fed_clients):
                 client.model.load_state_dict(server.global_model.state_dict())
                 cd = client_data[cid]
-                mse, rmse, mae = client.validate_metrics(cd["y_mean"], cd["y_std"],
+                mse, rmse, mae, mape = client.validate_metrics(cd["y_mean"], cd["y_std"],
                                                          client.val_loader)
                 val_mses.append(mse)
                 val_rmses.append(rmse)
                 val_maes.append(mae)
+                val_mapes.append(mape)
             convergence["round"].append(rnd + 1)
             convergence["avg_train_loss"].append(server.round_losses[-1])
             convergence["avg_val_rmse"].append(float(np.mean(val_rmses)))
             convergence["avg_val_rmse_std"].append(float(np.std(val_rmses, ddof=0)))
             convergence["avg_val_mae"].append(float(np.mean(val_maes)))
             convergence["avg_val_mae_std"].append(float(np.std(val_maes, ddof=0)))
+            convergence["avg_val_mape"].append(float(np.mean(val_mapes)))
+            convergence["avg_val_mape_std"].append(float(np.std(val_mapes, ddof=0)))
             for cid in range(num_clients):
                 convergence[f"c{cid}_train"].append(client_losses[cid])
                 convergence[f"c{cid}_val_mse"].append(val_mses[cid])
                 convergence[f"c{cid}_val_rmse"].append(val_rmses[cid])
                 convergence[f"c{cid}_val_mae"].append(val_maes[cid])
+                convergence[f"c{cid}_val_mape"].append(val_mapes[cid])
 
         if verbose:
             print(f"  Round {rnd+1}/{comm_rounds} "
@@ -958,8 +969,8 @@ def run_federated_training(client_data, agg_method="fedavg", lam=0.5,
         # 逆标准化
         preds_raw = metrics["preds"] * client_data[cid]["y_std"] + client_data[cid]["y_mean"]
         truths_raw = metrics["truths"] * client_data[cid]["y_std"] + client_data[cid]["y_mean"]
-        mse, rmse, mae = compute_metrics(preds_raw, truths_raw)
-        results.append({"client_id": cid, "mse": mse, "rmse": rmse, "mae": mae,
+        mse, rmse, mae, mape = compute_metrics(preds_raw, truths_raw)
+        results.append({"client_id": cid, "mse": mse, "rmse": rmse, "mae": mae, "mape": mape,
                         "preds": preds_raw[:200], "truths": truths_raw[:200]})
 
     conv = convergence if record_convergence else None
@@ -998,8 +1009,8 @@ def run_independent_training(client_data, total_epochs=30, lr=0.01, seed=42):
         truths = np.concatenate(truths)
         preds_raw = preds * d["y_std"] + d["y_mean"]
         truths_raw = truths * d["y_std"] + d["y_mean"]
-        mse, rmse, mae = compute_metrics(preds_raw, truths_raw)
-        results.append({"client_id": d["cid"], "mse": mse, "rmse": rmse, "mae": mae,
+        mse, rmse, mae, mape = compute_metrics(preds_raw, truths_raw)
+        results.append({"client_id": d["cid"], "mse": mse, "rmse": rmse, "mae": mae, "mape": mape,
                         "preds": preds_raw[:200], "truths": truths_raw[:200]})
     return results
 
@@ -1225,6 +1236,8 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
             "std_flow": float(np.std(ts)),
             "min_flow": float(np.min(ts)),
             "max_flow": float(np.max(ts)),
+            "min_flow_after_clip": float(np.min(np.clip(ts, TRAFFIC_MIN_VALUE, None))),
+            "negative_count_after_clip": int(np.sum(np.clip(ts, TRAFFIC_MIN_VALUE, None) < 0)),
         })
     df_sum = pd.DataFrame(rows)
     save_dataframe(df_sum, output_dir, "enhanced_dataset_summary.csv")
@@ -1254,7 +1267,7 @@ def run_main_experiment(output_dir: Path) -> None:
         for r in fed_results:
             all_rows.append({"seed": seed, "method": "FedAvg",
                              "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
         # Proposed
         prop_results, _ = run_federated_training(client_data, agg_method="proposed",
@@ -1262,7 +1275,7 @@ def run_main_experiment(output_dir: Path) -> None:
         for r in prop_results:
             all_rows.append({"seed": seed, "method": "Proposed",
                              "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
         # Independent
         ind_results = run_independent_training(client_data, total_epochs=10,
@@ -1270,7 +1283,7 @@ def run_main_experiment(output_dir: Path) -> None:
         for r in ind_results:
             all_rows.append({"seed": seed, "method": "Independent",
                              "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "cnn_enhanced_main_metrics.csv")
@@ -1279,7 +1292,7 @@ def run_main_experiment(output_dir: Path) -> None:
     agg = df.groupby("method").agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
     ).reset_index()
     save_dataframe(agg, output_dir, "cnn_enhanced_main_metrics_summary.csv")
     print("\n[main] Summary:\n", agg.to_string(index=False))
@@ -1287,7 +1300,7 @@ def run_main_experiment(output_dir: Path) -> None:
     # 绘制对比图
     fig, axes = plt.subplots(1, 3, figsize=(12, 4))
     methods = ["Independent", "FedAvg", "Proposed"]
-    for idx, metric in enumerate(["mse", "rmse", "mae"]):
+    for idx, metric in enumerate(["mse", "rmse", "mae", "mape"]):
         ax = axes[idx]
         plot_df = pd.DataFrame(
             {
@@ -1349,20 +1362,20 @@ def run_aggregation_experiment(output_dir: Path) -> None:
             for r in results:
                 all_rows.append({"seed": seed, "aggregation_method": label,
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "cnn_enhanced_aggregation_ablation.csv")
     agg = df.groupby("aggregation_method").agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
     ).reset_index()
     save_dataframe(agg, output_dir, "cnn_enhanced_aggregation_ablation_summary.csv")
     print("\n[aggregation] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    for idx, metric in enumerate(["rmse", "mae"]):
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         ax = axes[idx]
         plot_df = pd.DataFrame(
             {
@@ -1408,14 +1421,14 @@ def run_lambda_experiment(output_dir: Path) -> None:
             for r in results:
                 all_rows.append({"seed": seed, "lambda": lam,
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "cnn_enhanced_lambda_sensitivity.csv")
     agg = df.groupby("lambda").agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
     ).reset_index()
     save_dataframe(agg, output_dir, "cnn_enhanced_lambda_sensitivity_summary.csv")
     print("\n[lambda] Summary:\n", agg.to_string(index=False))
@@ -1622,7 +1635,7 @@ def run_client_scale_experiment(output_dir: Path) -> None:
             for r in ind_results:
                 all_rows.append({"seed": seed, "num_clients": nc, "method": "Independent",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
             # FedAvg
             fed_results, _ = run_federated_training(client_data, agg_method="fedavg",
@@ -1630,7 +1643,7 @@ def run_client_scale_experiment(output_dir: Path) -> None:
             for r in fed_results:
                 all_rows.append({"seed": seed, "num_clients": nc, "method": "FedAvg",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
             # Proposed
             prop_results, _ = run_federated_training(client_data, agg_method="proposed",
@@ -1638,7 +1651,7 @@ def run_client_scale_experiment(output_dir: Path) -> None:
             for r in prop_results:
                 all_rows.append({"seed": seed, "num_clients": nc, "method": "Proposed",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "cnn_enhanced_client_scale_metrics.csv")
@@ -1646,14 +1659,14 @@ def run_client_scale_experiment(output_dir: Path) -> None:
     agg = df.groupby(["num_clients", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
     ).reset_index()
     save_dataframe(agg, output_dir, "cnn_enhanced_client_scale_summary.csv")
     print("\n[client_scale] Summary:\n", agg.to_string(index=False))
 
     # 绘制对比图
     methods = ["Independent", "FedAvg", "Proposed"]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
     for method in methods:
         sub = agg[agg["method"] == method].sort_values("num_clients")
         x_pos = np.arange(len(sub))
@@ -1662,6 +1675,9 @@ def run_client_scale_experiment(output_dir: Path) -> None:
                          color=METHOD_PALETTE[method])
         axes[1].errorbar(x_pos, sub["mae_mean"], yerr=sub["mae_std"],
                          fmt="s-", capsize=5, label=method, linewidth=2,
+                         color=METHOD_PALETTE[method])
+        axes[2].errorbar(x_pos, sub["mape_mean"], yerr=sub["mape_std"],
+                         fmt="^-", capsize=5, label=method, linewidth=2,
                          color=METHOD_PALETTE[method])
     for ax in axes:
         ax.set_xticks(range(len(client_nums)))
@@ -1672,6 +1688,8 @@ def run_client_scale_experiment(output_dir: Path) -> None:
     axes[0].set_ylabel("RMSE")
     axes[1].set_title("MAE vs Client Count")
     axes[1].set_ylabel("MAE")
+    axes[2].set_title("MAPE vs Client Count")
+    axes[2].set_ylabel("MAPE (%)")
     fig.suptitle("Client scale sensitivity", fontsize=13)
     fig.tight_layout()
     save_figure(fig, output_dir, "cnn_enhanced_client_scale.png")
@@ -1701,7 +1719,7 @@ def run_noniid_experiment(output_dir: Path) -> None:
             for r in ind_results:
                 all_rows.append({"seed": seed, "noniid_level": level, "method": "Independent",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
             # FedAvg
             fed_results, _ = run_federated_training(client_data, agg_method="fedavg",
@@ -1709,7 +1727,7 @@ def run_noniid_experiment(output_dir: Path) -> None:
             for r in fed_results:
                 all_rows.append({"seed": seed, "noniid_level": level, "method": "FedAvg",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
             # Proposed
             prop_results, _ = run_federated_training(client_data, agg_method="proposed",
@@ -1717,7 +1735,7 @@ def run_noniid_experiment(output_dir: Path) -> None:
             for r in prop_results:
                 all_rows.append({"seed": seed, "noniid_level": level, "method": "Proposed",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "cnn_enhanced_noniid_strength_metrics.csv")
@@ -1725,7 +1743,7 @@ def run_noniid_experiment(output_dir: Path) -> None:
     agg = df.groupby(["noniid_level", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
     ).reset_index()
     save_dataframe(agg, output_dir, "cnn_enhanced_noniid_strength_summary.csv")
     print("\n[noniid] Summary:\n", agg.to_string(index=False))
@@ -1733,8 +1751,8 @@ def run_noniid_experiment(output_dir: Path) -> None:
     # 绘制对比图 — 横轴固定顺序 low -> medium -> high
     level_order = ["low", "medium", "high"]
     methods = ["Independent", "FedAvg", "Proposed"]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
-    for idx, metric in enumerate(["rmse", "mae"]):
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.8))
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         plot_df = agg.copy()
         plot_df["noniid_level"] = pd.Categorical(plot_df["noniid_level"], categories=level_order, ordered=True)
         plot_df = plot_df.sort_values("noniid_level")
@@ -1806,7 +1824,7 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
             "traffic_pattern": cfg["pattern"],
             "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
             "incident_prob": cfg.get("incident_prob", 0),
-            "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"],
+            "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"], "mape": im["mape"],
             "improvement_over_fedavg_rmse": float("nan"),
             "improvement_over_independent_rmse": float("nan"),
         })
@@ -1816,7 +1834,7 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
             "traffic_pattern": cfg["pattern"],
             "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
             "incident_prob": cfg.get("incident_prob", 0),
-            "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"],
+            "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"], "mape": fm["mape"],
             "improvement_over_fedavg_rmse": float("nan"),
             "improvement_over_independent_rmse": float("nan"),
         })
@@ -1826,7 +1844,7 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
             "traffic_pattern": cfg["pattern"],
             "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
             "incident_prob": cfg.get("incident_prob", 0),
-            "mse": pm["mse"], "rmse": pm["rmse"], "mae": pm["mae"],
+            "mse": pm["mse"], "rmse": pm["rmse"], "mae": pm["mae"], "mape": pm["mape"],
             "improvement_over_fedavg_rmse": round(imp_fedavg, 2),
             "improvement_over_independent_rmse": round(imp_ind, 2),
         })
@@ -1953,7 +1971,7 @@ def run_peak_experiment(output_dir: Path) -> None:
         mae_val = float(np.mean([r for r in grp["mae"]]))
         metrics_rows.append({
             "method": method, "client_id": cid, "period": period,
-            "mse": mse_val, "rmse": rmse_val, "mae": mae_val,
+            "mse": mse_val, "rmse": rmse_val, "mae": mae_val, "mape": mape_val,
             "num_samples": len(grp),
         })
 
@@ -1964,18 +1982,18 @@ def run_peak_experiment(output_dir: Path) -> None:
     agg_sum = df_metrics.groupby(["method", "period"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
         total_samples=("num_samples", "sum"),
     ).reset_index()
     save_dataframe(agg_sum, output_dir, "cnn_enhanced_peak_offpeak_summary.csv")
     print("\n[peak] Summary:\n", agg_sum.to_string(index=False))
 
     # 绘图
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
     methods = ["Independent", "FedAvg", "Proposed"]
     period_order = ["morning_peak", "evening_peak", "off_peak", "incident_period"]
     agg_sum["period"] = pd.Categorical(agg_sum["period"], categories=period_order, ordered=True)
-    for idx, metric in enumerate(["rmse", "mae"]):
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         sns.barplot(
             data=agg_sum.sort_values("period"),
             x="period",
@@ -2023,7 +2041,7 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
             for r in fed_results:
                 all_rows.append({"seed": seed, "feature_set": fs, "method": "FedAvg",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
             # Proposed
             prop_results, _ = run_federated_training(client_data, agg_method="proposed",
@@ -2031,7 +2049,7 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
             for r in prop_results:
                 all_rows.append({"seed": seed, "feature_set": fs, "method": "Proposed",
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "cnn_enhanced_feature_ablation.csv")
@@ -2039,7 +2057,7 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
     agg = df.groupby(["feature_set", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
     ).reset_index()
     save_dataframe(agg, output_dir, "cnn_enhanced_feature_ablation_summary.csv")
     print("\n[feature_ablation] Summary:\n", agg.to_string(index=False))
@@ -2049,7 +2067,7 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
                  "flow_event": "+ Event", "flow_region": "+ Region", "full": "Full"}
     fs_order = list(feature_sets)
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.8))
     plot_df = agg.copy()
     plot_df["feature_label"] = plot_df["feature_set"].map(fs_labels)
     plot_df["feature_label"] = pd.Categorical(
@@ -2057,7 +2075,7 @@ def run_feature_ablation_experiment(output_dir: Path) -> None:
         categories=[fs_labels[fs] for fs in fs_order],
         ordered=True,
     )
-    for idx, metric in enumerate(["rmse", "mae"]):
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         sns.barplot(
             data=plot_df.sort_values("feature_label"),
             x="feature_label",

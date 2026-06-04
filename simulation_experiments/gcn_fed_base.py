@@ -1,10 +1,10 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 GCN 基础联邦仿真实验。
 
 本文件实现基于 GCN-BiLSTM-Attention 的联邦仿真基础实验，包含：
 1. data_viz: 基础数据集可视化（含图结构可视化）；
-2. main: Independent / FedAvg 主结果对比（MSE、RMSE、MAE）；
+2. main: Independent / FedAvg 主结果对比（MSE、RMSE、MAE、MAPE）；
 3. convergence: 联邦训练收敛曲线；
 4. all: 依次运行上述全部工作流。
 
@@ -44,6 +44,8 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+TRAFFIC_MIN_VALUE = 0.0
+MAPE_EPS = 1.0
 
 METHOD_PALETTE = {
     "Independent": "#4C72B0",
@@ -298,6 +300,8 @@ def generate_base_traffic_data(
                     + sample_noise[node]
                 )
                 X_client[i, node, :] = node_flow
+            X_client[i] = np.clip(X_client[i], TRAFFIC_MIN_VALUE, None)
+            
 
             # 目标值：最后 pred_len 个时间步内所有节点的平均流量
             Y_client[i] = X_client[i, :, -pred_len:].mean()
@@ -644,7 +648,8 @@ class FederatedClient:
         mse = float((diff ** 2).mean().item())
         rmse = float(torch.sqrt((diff ** 2).mean()).item())
         mae = float(diff.abs().mean().item())
-        return {"mse": mse, "rmse": rmse, "mae": mae}
+        mape = float((diff.abs() / torch.clamp(truths.abs(), min=MAPE_EPS)).mean().item()) * 100
+        return {"mse": mse, "rmse": rmse, "mae": mae, "mape": mape}
 
 
 class IndependentClient(FederatedClient):
@@ -968,17 +973,19 @@ def run_main_experiment(output_dir: Path) -> None:
         fm = fed_metrics[cid]
         im = ind_metrics[cid]
         print(f"Client {cid}:")
-        print(f"  FedAvg       - MSE={fm['mse']:.6f} RMSE={fm['rmse']:.6f} MAE={fm['mae']:.6f}")
-        print(f"  Independent  - MSE={im['mse']:.6f} RMSE={im['rmse']:.6f} MAE={im['mae']:.6f}")
+        print(f"  FedAvg       - MSE={fm['mse']:.6f} RMSE={fm['rmse']:.6f} MAE={fm['mae']:.6f} MAPE={fm['mape']:.2f}%")
+        print(f"  Independent  - MSE={im['mse']:.6f} RMSE={im['rmse']:.6f} MAE={im['mae']:.6f} MAPE={im['mape']:.2f}%")
 
     rows = []
     for cid in range(num_clients):
         fm = fed_metrics[cid]
         im = ind_metrics[cid]
         rows.append({"method": "FedAvg", "client_id": cid,
-                     "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"]})
+                     "mse": fm["mse"], "rmse": fm["rmse"], "mape": fm["mape"],
+                     "mae": fm["mae"]})
         rows.append({"method": "Independent", "client_id": cid,
-                     "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"]})
+                     "mse": im["mse"], "rmse": im["rmse"], "mape": im["mape"],
+                     "mae": im["mae"]})
     df_metrics = pd.DataFrame(rows)
     save_dataframe(df_metrics, output_dir, "gcn_base_metrics.csv")
 
@@ -991,7 +998,9 @@ def run_main_experiment(output_dir: Path) -> None:
             "mse_std": float(sub["mse"].std(ddof=0)),
             "rmse_mean": float(sub["rmse"].mean()),
             "rmse_std": float(sub["rmse"].std(ddof=0)),
+            "mape_mean": float(sub["mape"].mean()),
             "mae_mean": float(sub["mae"].mean()),
+            "mape_std": float(sub["mape"].std(ddof=0)),
             "mae_std": float(sub["mae"].std(ddof=0)),
         })
     df_summary = pd.DataFrame(summary_rows)
@@ -999,9 +1008,9 @@ def run_main_experiment(output_dir: Path) -> None:
     print("\n[main] Summary:\n", df_summary.to_string(index=False))
 
     # 对比柱状图
-    fig, axes = plt.subplots(1, 3, figsize=(12, 4))
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     client_labels = [f"Client {i}" for i in range(num_clients)]
-    for idx, metric in enumerate(["mse", "rmse", "mae"]):
+    for idx, metric in enumerate(["mse", "rmse", "mae", "mape"]):
         ax = axes[idx]
         plot_df = pd.DataFrame(
             {
@@ -1023,7 +1032,8 @@ def run_main_experiment(output_dir: Path) -> None:
         )
         ax.set_xticklabels(client_labels, rotation=30, ha="right")
         ax.set_title(metric.upper())
-        ax.set_ylabel(f"{metric.upper()} (lower is better)")
+        ylabel_map = f"{metric.upper()} (%) (lower is better)" if metric == "mape" else f"{metric.upper()} (lower is better)"
+        ax.set_ylabel(ylabel_map)
         ax.set_xlabel("Client")
         if idx == 0:
             ax.legend(loc="best", fontsize=8, title=None)

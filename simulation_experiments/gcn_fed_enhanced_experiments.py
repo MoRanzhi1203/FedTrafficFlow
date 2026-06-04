@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 GCN 一审增强仿真实验组。
 
@@ -54,6 +54,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
 from cnn_fed_enhanced_experiments import (
     CLIENT_CONFIGS_BASE,
+    TRAFFIC_MIN_VALUE,
     generate_traffic_flow,
     sample_distribution_noise,
     build_noniid_client_configs,
@@ -61,6 +62,7 @@ from cnn_fed_enhanced_experiments import (
 )
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MAPE_EPS = 1.0
 
 METHOD_PALETTE = {
     "Independent": "#4C72B0",
@@ -91,17 +93,17 @@ FIGURE_INDEX_ENTRIES = [
     {"figure_file": "enhanced_gcn_functional_similarity_matrix.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Functional similarity matrix estimated from node traffic profiles.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "enhanced_gcn_congestion_delay_matrix.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Congestion propagation delay matrix for the enhanced GCN setting.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "enhanced_gcn_peak_graph_change.png", "workflow": "fixed_vs_dynamic", "figure_type": "heatmap", "description": "Graph structure changes across off-peak and peak traffic periods.", "source_csv": "enhanced_gcn_graph_summary.csv", "used_in_paper": "yes"},
-    {"figure_file": "gcn_enhanced_fixed_vs_dynamic_comparison.png", "workflow": "fixed_vs_dynamic", "figure_type": "bar", "description": "Performance comparison under fixed, dynamic, and functional graph definitions.", "source_csv": "gcn_enhanced_fixed_vs_dynamic_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "gcn_enhanced_congestion_delay_comparison.png", "workflow": "congestion_delay", "figure_type": "bar", "description": "Performance comparison across congestion-delay-related graph definitions.", "source_csv": "gcn_enhanced_congestion_delay_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "gcn_enhanced_main_rmse_comparison.png", "workflow": "main", "figure_type": "bar", "description": "Main comparison of Independent, GCN-FedAvg, and GCN-Proposed.", "source_csv": "gcn_enhanced_main_metrics_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "gcn_enhanced_aggregation_ablation.png", "workflow": "aggregation", "figure_type": "bar", "description": "Aggregation strategy ablation on RMSE and MAE.", "source_csv": "gcn_enhanced_aggregation_ablation_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_fixed_vs_dynamic_comparison.png", "workflow": "fixed_vs_dynamic", "figure_type": "bar", "description": "Performance comparison under fixed, dynamic, and functional graph definitions measured by RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_fixed_vs_dynamic_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_congestion_delay_comparison.png", "workflow": "congestion_delay", "figure_type": "bar", "description": "Performance comparison across congestion-delay-related graph definitions measured by RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_congestion_delay_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_main_rmse_comparison.png", "workflow": "main", "figure_type": "bar", "description": "Main comparison of Independent, GCN-FedAvg, and GCN-Proposed using RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_main_metrics_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_aggregation_ablation.png", "workflow": "aggregation", "figure_type": "bar", "description": "Aggregation strategy ablation on RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_aggregation_ablation_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "gcn_enhanced_lambda_sensitivity.png", "workflow": "lambda", "figure_type": "line", "description": "Lambda sensitivity analysis for the data-loss weighted GCN aggregation strategy.", "source_csv": "gcn_enhanced_lambda_sensitivity_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "gcn_enhanced_client_scale.png", "workflow": "client_scale", "figure_type": "line", "description": "Client-scale sensitivity analysis for the enhanced GCN setting.", "source_csv": "gcn_enhanced_client_scale_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "gcn_enhanced_noniid_strength.png", "workflow": "noniid", "figure_type": "bar", "description": "Method comparison under different Non-IID strengths for enhanced GCN.", "source_csv": "gcn_enhanced_noniid_strength_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_client_scale.png", "workflow": "client_scale", "figure_type": "line", "description": "Client-scale sensitivity analysis for the enhanced GCN setting measured by RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_client_scale_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_noniid_strength.png", "workflow": "noniid", "figure_type": "bar", "description": "Method comparison under different Non-IID strengths for enhanced GCN measured by RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_noniid_strength_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "gcn_enhanced_global_validation_rmse.png", "workflow": "convergence", "figure_type": "line", "description": "Global validation RMSE across communication rounds for enhanced GCN.", "source_csv": "gcn_enhanced_convergence_summary.csv", "used_in_paper": "recommended"},
     {"figure_file": "gcn_enhanced_client_training_loss.png", "workflow": "convergence", "figure_type": "line", "description": "Per-client training loss across communication rounds for GCN-FedAvg and GCN-Proposed.", "source_csv": "gcn_enhanced_convergence_round_metrics.csv", "used_in_paper": "recommended"},
     {"figure_file": "gcn_enhanced_client_rmse_comparison.png", "workflow": "client_metrics", "figure_type": "bar", "description": "Per-client RMSE comparison across Independent, GCN-FedAvg, and GCN-Proposed.", "source_csv": "gcn_enhanced_client_metrics.csv", "used_in_paper": "recommended"},
-    {"figure_file": "gcn_enhanced_peak_offpeak_comparison.png", "workflow": "peak", "figure_type": "bar", "description": "Performance comparison across peak, off-peak, and incident periods for enhanced GCN.", "source_csv": "gcn_enhanced_peak_offpeak_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "gcn_enhanced_peak_offpeak_comparison.png", "workflow": "peak", "figure_type": "bar", "description": "Performance comparison across peak, off-peak, and incident periods for enhanced GCN measured by RMSE, MAE, and MAPE.", "source_csv": "gcn_enhanced_peak_offpeak_summary.csv", "used_in_paper": "recommended"},
 ]
 
 # 全局常量（与 CNN 增强实验保持一致）
@@ -641,7 +643,8 @@ def build_client_data(cfgs, num_nodes, seq_len, pred_len, seed):
 
 def compute_metrics(preds, truths):
     mse = float(np.mean((preds - truths) ** 2))
-    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths)))
+    mape = float(np.mean(np.abs(preds - truths) / np.maximum(np.abs(truths), MAPE_EPS))) * 100
+    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths))), mape
 
 
 def cos_sim(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -728,7 +731,7 @@ class FederatedClient:
 
     @torch.no_grad()
     def val_metrics(self, y_mean, y_std):
-        """在 val_loader 上计算真实尺度 MSE/RMSE/MAE。"""
+        """在 val_loader 上计算真实尺度 MSE/RMSE/MAE/MAPE。"""
         self.model.eval()
         preds, truths = [], []
         for x, y in self.val_loader:
@@ -846,12 +849,13 @@ def run_federated_training(cfgs, graph_type, agg_method, lam=0.5, seed=42,
     server.set_client_data_sizes(sizes)
 
     convergence = {"round": [], "avg_train_loss": [], "avg_val_rmse": [], "avg_val_rmse_std": [],
-                    "avg_val_mae": [], "avg_val_mae_std": []}
+                    "avg_val_mae": [], "avg_val_mae_std": [], "avg_val_mape": [], "avg_val_mape_std": []}
     for cid in range(nc):
         convergence[f"c{cid}_train"] = []
         convergence[f"c{cid}_val_mse"] = []
         convergence[f"c{cid}_val_rmse"] = []
         convergence[f"c{cid}_val_mae"] = []
+        convergence[f"c{cid}_val_mape"] = []
 
     for rnd in range(comm_rounds):
         cw_list, cl_list = [], []
@@ -862,30 +866,33 @@ def run_federated_training(cfgs, graph_type, agg_method, lam=0.5, seed=42,
         server.aggregate(cw_list, cl_list)
 
         if record_convergence:
-            val_mses, val_rmses, val_maes = [], [], []
+            val_mses, val_rmses, val_maes, val_mapes = [], [], [], []
             for cid, client in enumerate(clients):
                 client.model.load_state_dict(server.global_model.state_dict())
                 cd = client_data[cid]
-                mse, rmse, mae = client.val_metrics(cd["y_mean"], cd["y_std"])
-                val_mses.append(mse); val_rmses.append(rmse); val_maes.append(mae)
+                mse, rmse, mae, mape = client.val_metrics(cd["y_mean"], cd["y_std"])
+                val_mses.append(mse); val_rmses.append(rmse); val_maes.append(mae); val_mapes.append(mape)
             convergence["round"].append(rnd + 1)
             convergence["avg_train_loss"].append(float(np.mean(cl_list)))
             convergence["avg_val_rmse"].append(float(np.mean(val_rmses)))
             convergence["avg_val_rmse_std"].append(float(np.std(val_rmses, ddof=0)))
             convergence["avg_val_mae"].append(float(np.mean(val_maes)))
             convergence["avg_val_mae_std"].append(float(np.std(val_maes, ddof=0)))
+            convergence["avg_val_mape"].append(float(np.mean(val_mapes)))
+            convergence["avg_val_mape_std"].append(float(np.std(val_mapes, ddof=0)))
             for cid in range(nc):
                 convergence[f"c{cid}_train"].append(cl_list[cid])
                 convergence[f"c{cid}_val_mse"].append(val_mses[cid])
                 convergence[f"c{cid}_val_rmse"].append(val_rmses[cid])
                 convergence[f"c{cid}_val_mae"].append(val_maes[cid])
+                convergence[f"c{cid}_val_mape"].append(val_mapes[cid])
 
     results = []
     for cid in range(nc):
         clients[cid].model.load_state_dict(server.global_model.state_dict())
-        mse, rmse, mae = clients[cid].test_metrics(
+        mse, rmse, mae, mape = clients[cid].test_metrics(
             client_data[cid]["y_mean"], client_data[cid]["y_std"])
-        results.append({"client_id": cid, "mse": mse, "rmse": rmse, "mae": mae})
+        results.append({"client_id": cid, "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
 
     conv = convergence if record_convergence else None
     return results, conv
@@ -926,8 +933,8 @@ def run_independent_training(cfgs, graph_type, seed=42, num_nodes=NUM_NODES,
         preds = np.concatenate(preds); truths = np.concatenate(truths)
         preds_raw = preds * d["y_std"] + d["y_mean"]
         truths_raw = truths * d["y_std"] + d["y_mean"]
-        mse, rmse, mae = compute_metrics(preds_raw, truths_raw)
-        results.append({"client_id": d["cid"], "mse": mse, "rmse": rmse, "mae": mae})
+        mse, rmse, mae, mape = compute_metrics(preds_raw, truths_raw)
+        results.append({"client_id": d["cid"], "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
     return results
 
 
@@ -1071,6 +1078,8 @@ def run_data_visualization_enhanced(output_dir: Path) -> None:
             "incident_prob": cfg.get("incident_prob", 0),
             "mean_flow": float(np.mean(ts)), "std_flow": float(np.std(ts)),
             "min_flow": float(np.min(ts)), "max_flow": float(np.max(ts)),
+            "min_flow_after_clip": float(np.min(np.clip(ts, TRAFFIC_MIN_VALUE, None))),
+            "negative_count_after_clip": int(np.sum(np.clip(ts, TRAFFIC_MIN_VALUE, None) < 0)),
         })
     df_sum = pd.DataFrame(rows)
     save_dataframe(df_sum, output_dir, "enhanced_dataset_summary.csv")
@@ -1184,11 +1193,11 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
         for r in fed:
             all_train_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-FedAvg",
                                    "client_id": r["client_id"],
-                                   "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                   "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
         for r in prop:
             all_train_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-Proposed",
                                    "client_id": r["client_id"],
-                                   "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                   "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df_train = pd.DataFrame(all_train_rows)
     save_dataframe(df_train, output_dir, "gcn_enhanced_fixed_vs_dynamic_metrics.csv")
@@ -1329,11 +1338,11 @@ def run_congestion_delay_experiment(output_dir: Path) -> None:
         for r in fed:
             all_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-FedAvg",
                              "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
         for r in prop:
             all_rows.append({"seed": seed, "graph_type": gt, "method": "GCN-Proposed",
                              "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df_cd = pd.DataFrame(all_rows)
     save_dataframe(df_cd, output_dir, "gcn_enhanced_congestion_delay_metrics.csv")
@@ -1389,19 +1398,19 @@ def run_main_experiment(output_dir: Path) -> None:
         for r in ind:
             all_rows.append({"seed": seed, "method": "Independent", "graph_type": graph_type,
                              "aggregation_method": "none", "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
         # GCN-FedAvg
         fed, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed, comm_rounds=5, local_epochs=2)
         for r in fed:
             all_rows.append({"seed": seed, "method": "GCN-FedAvg", "graph_type": graph_type,
                              "aggregation_method": "fedavg", "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
         # GCN-Proposed
         prop, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed, comm_rounds=5, local_epochs=2)
         for r in prop:
             all_rows.append({"seed": seed, "method": "GCN-Proposed", "graph_type": graph_type,
                              "aggregation_method": "proposed", "client_id": r["client_id"],
-                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                             "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "gcn_enhanced_main_metrics.csv")
@@ -1413,8 +1422,8 @@ def run_main_experiment(output_dir: Path) -> None:
     print("\n[main] Summary:\n", agg.to_string(index=False))
 
     methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    for idx, metric in enumerate(["rmse", "mae"]):
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         plot_df = pd.DataFrame(
             {
                 "method": methods,
@@ -1454,7 +1463,7 @@ def run_aggregation_experiment(output_dir: Path) -> None:
             for r in results:
                 all_rows.append({"seed": seed, "aggregation_method": label, "graph_type": graph_type,
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "gcn_enhanced_aggregation_ablation.csv")
@@ -1465,8 +1474,8 @@ def run_aggregation_experiment(output_dir: Path) -> None:
     save_dataframe(agg, output_dir, "gcn_enhanced_aggregation_ablation_summary.csv")
     print("\n[aggregation] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-    for idx, metric in enumerate(["rmse", "mae"]):
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         plot_df = pd.DataFrame(
             {
                 "aggregation_method": agg_labels,
@@ -1505,7 +1514,7 @@ def run_lambda_experiment(output_dir: Path) -> None:
             for r in results:
                 all_rows.append({"seed": seed, "lambda": lam, "graph_type": graph_type,
                                  "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "gcn_enhanced_lambda_sensitivity.csv")
@@ -1551,21 +1560,21 @@ def run_client_scale_experiment(output_dir: Path) -> None:
             for r in ind:
                 all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
                                  "method": "Independent", "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
             # GCN-FedAvg
             fed, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
                                           comm_rounds=5, local_epochs=2)
             for r in fed:
                 all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
                                  "method": "GCN-FedAvg", "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
             # GCN-Proposed
             prop, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
                                            comm_rounds=5, local_epochs=2)
             for r in prop:
                 all_rows.append({"seed": seed, "num_clients": nc, "graph_type": graph_type,
                                  "method": "GCN-Proposed", "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "gcn_enhanced_client_scale_metrics.csv")
@@ -1619,21 +1628,21 @@ def run_noniid_experiment(output_dir: Path) -> None:
             for r in ind:
                 all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
                                  "method": "Independent", "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
             # GCN-FedAvg
             fed, _ = run_federated_training(cfgs, graph_type, "fedavg", seed=seed,
                                           comm_rounds=5, local_epochs=2)
             for r in fed:
                 all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
                                  "method": "GCN-FedAvg", "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
             # GCN-Proposed
             prop, _ = run_federated_training(cfgs, graph_type, "proposed", seed=seed,
                                            comm_rounds=5, local_epochs=2)
             for r in prop:
                 all_rows.append({"seed": seed, "noniid_level": level, "graph_type": graph_type,
                                  "method": "GCN-Proposed", "client_id": r["client_id"],
-                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"]})
+                                 "mse": r["mse"], "rmse": r["rmse"], "mae": r["mae"], "mape": r["mape"]})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, output_dir, "gcn_enhanced_noniid_strength_metrics.csv")
@@ -1646,11 +1655,11 @@ def run_noniid_experiment(output_dir: Path) -> None:
 
     level_order = ["low", "medium", "high"]
     methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4.8))
     plot_df = agg.copy()
     plot_df["noniid_level"] = pd.Categorical(plot_df["noniid_level"], categories=level_order, ordered=True)
     plot_df = plot_df.sort_values("noniid_level")
-    for idx, metric in enumerate(["rmse", "mae"]):
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         sns.barplot(data=plot_df, x="noniid_level", y=f"{metric}_mean", hue="method", hue_order=methods, palette=METHOD_PALETTE, ax=axes[idx], errorbar=None)
         axes[idx].set_title(f"{metric.upper()} by Non-IID strength")
         axes[idx].set_xlabel("Non-IID level")
@@ -1811,21 +1820,21 @@ def run_client_metrics_experiment(output_dir: Path) -> None:
                      "distribution_type": cfg["dist"], "traffic_pattern": cfg["pattern"],
                      "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
                      "incident_prob": cfg.get("incident_prob", 0),
-                     "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"],
+                     "mse": im["mse"], "rmse": im["rmse"], "mae": im["mae"], "mape": im["mape"],
                      "improvement_over_fedavg_rmse": float("nan"),
                      "improvement_over_independent_rmse": float("nan")})
         rows.append({"method": "GCN-FedAvg", "graph_type": graph_type, "client_id": cid,
                      "distribution_type": cfg["dist"], "traffic_pattern": cfg["pattern"],
                      "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
                      "incident_prob": cfg.get("incident_prob", 0),
-                     "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"],
+                     "mse": fm["mse"], "rmse": fm["rmse"], "mae": fm["mae"], "mape": fm["mape"],
                      "improvement_over_fedavg_rmse": float("nan"),
                      "improvement_over_independent_rmse": float("nan")})
         rows.append({"method": "GCN-Proposed", "graph_type": graph_type, "client_id": cid,
                      "distribution_type": cfg["dist"], "traffic_pattern": cfg["pattern"],
                      "sample_size": cfg["n_samples"], "noise_level": cfg["noise"],
                      "incident_prob": cfg.get("incident_prob", 0),
-                     "mse": pm["mse"], "rmse": pm["rmse"], "mae": pm["mae"],
+                     "mse": pm["mse"], "rmse": pm["rmse"], "mae": pm["mae"], "mape": pm["mape"],
                      "improvement_over_fedavg_rmse": round(imp_fedavg, 2),
                      "improvement_over_independent_rmse": round(imp_ind, 2)})
 
@@ -1991,17 +2000,17 @@ def run_peak_experiment(output_dir: Path) -> None:
     agg_sum = df_metrics.groupby(["method", "period"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"), mape_mean=("mape", "mean"), mape_std=("mape", "std"),
         total_samples=("num_samples", "sum")).reset_index()
     save_dataframe(agg_sum, output_dir, "gcn_enhanced_peak_offpeak_summary.csv")
     print("\n[peak] Summary:\n", agg_sum.to_string(index=False))
 
     # 图
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4.8))
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.8))
     methods = ["Independent", "GCN-FedAvg", "GCN-Proposed"]
     period_order = ["morning_peak", "evening_peak", "off_peak", "incident_period"]
     agg_sum["period"] = pd.Categorical(agg_sum["period"], categories=period_order, ordered=True)
-    for idx, metric in enumerate(["rmse", "mae"]):
+    for idx, metric in enumerate(["rmse", "mae", "mape"]):
         sns.barplot(data=agg_sum.sort_values("period"), x="period", y=f"{metric}_mean", hue="method", hue_order=methods, palette=METHOD_PALETTE, ax=axes[idx], errorbar=None)
         axes[idx].set_title(f"{metric.upper()} across traffic periods")
         axes[idx].set_xlabel("Traffic period")

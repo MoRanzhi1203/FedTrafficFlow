@@ -6,7 +6,7 @@
 复用 cnn_fed_enhanced_experiments.py 的数据生成和模型训练框架。
 
 workflow:
-    all / communication_cost / client_dropout / communication_delay / dp_noise
+    all / communication_cost / client_dropout / communication_delay / gradient_noise
 
 输出目录: results/simulation_experiments/fed_robustness/
 """
@@ -48,8 +48,10 @@ from gcn_fed_enhanced_experiments import (
 )
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+TRAFFIC_MIN_VALUE = 0.0
+MAPE_EPS = 1.0
 NUM_NODES = 8; SEQ_LEN = 12; PRED_LEN = 1; BATCH_SIZE = 32; HIDDEN_DIM = 64
-COMM_ROUNDS = 3; LOCAL_EPOCHS = 2; LR = 0.001
+COMM_ROUNDS = 10; LOCAL_EPOCHS = 2; LR = 0.001
 
 METHOD_PALETTE = {
     "FedAvg": "#DD8452",
@@ -57,9 +59,9 @@ METHOD_PALETTE = {
 }
 FIGURE_INDEX_ENTRIES = [
     {"figure_file": "fed_robustness_communication_cost.png", "workflow": "communication_cost", "figure_type": "line", "description": "Communication cost comparison under different client counts and communication rounds.", "source_csv": "fed_communication_cost.csv", "used_in_paper": "recommended"},
-    {"figure_file": "fed_robustness_client_dropout.png", "workflow": "client_dropout", "figure_type": "line", "description": "Robustness to client dropout measured by RMSE and MAE.", "source_csv": "fed_client_dropout_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "fed_robustness_communication_delay.png", "workflow": "communication_delay", "figure_type": "line", "description": "Robustness to communication delay measured by RMSE and MAE.", "source_csv": "fed_communication_delay_summary.csv", "used_in_paper": "recommended"},
-    {"figure_file": "fed_robustness_dp_noise.png", "workflow": "dp_noise", "figure_type": "line", "description": "Sensitivity to privacy-preserving noise measured by RMSE and MAE.", "source_csv": "fed_dp_noise_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "fed_robustness_client_dropout.png", "workflow": "client_dropout", "figure_type": "line", "description": "Robustness to client dropout measured by RMSE, MAE, and MAPE.", "source_csv": "fed_client_dropout_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "fed_robustness_communication_delay.png", "workflow": "communication_delay", "figure_type": "line", "description": "Robustness to communication delay measured by RMSE, MAE, and MAPE.", "source_csv": "fed_communication_delay_summary.csv", "used_in_paper": "recommended"},
+    {"figure_file": "fed_robustness_gradient_noise.png", "workflow": "gradient_noise", "figure_type": "line", "description": "Sensitivity to Gaussian parameter perturbation (lightweight simulation, NOT formal DP) measured by RMSE, MAE, and MAPE.", "source_csv": "fed_gradient_noise_summary.csv", "used_in_paper": "recommended"},
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -106,7 +108,8 @@ def export_figure_index(output_dir: Path) -> Path:
 
 def compute_metrics(preds, truths):
     mse = float(np.mean((preds - truths) ** 2))
-    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths)))
+    mape = float(np.mean(np.abs(preds - truths) / np.maximum(np.abs(truths), MAPE_EPS))) * 100
+    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths))), mape
 
 # ══════════════════════════════════════════════════════════════
 # 模型参数量计算
@@ -314,30 +317,35 @@ def run_client_dropout_experiment(out: Path) -> None:
 
             for cid in range(nc):
                 clients[cid].model.load_state_dict(server.gm.state_dict())
-                mse, rmse, mae = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
+                mse, rmse, mae, mape = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
                 all_rows.append({"seed": seed, "model_type": "CNN/CCN",
                                  "dropout_rate": dr, "method": agg_name,
                                  "client_id": cid,
-                                 "mse": mse, "rmse": rmse, "mae": mae})
+                                 "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, out, "fed_client_dropout_metrics.csv")
     agg = df.groupby(["dropout_rate", "method"]).agg(
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, out, "fed_client_dropout_summary.csv")
     print("\n[client_dropout] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    for method, color, fmt in [("FedAvg", "#3498db", "o-"), ("Proposed", "#2ecc71", "s--")]:
+    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+    for method in ["FedAvg", "Proposed"]:
         sub = agg[agg["method"] == method]
+        color = METHOD_PALETTE.get(method, "#333333")
         axes[0].errorbar(sub["dropout_rate"], sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt=fmt, capsize=5, label=method, color=color)
+                         fmt="o-", capsize=5, label=method, color=color)
         axes[1].errorbar(sub["dropout_rate"], sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt=fmt, capsize=5, label=method, color=color)
+                         fmt="s--", capsize=5, label=method, color=color)
+        axes[2].errorbar(sub["dropout_rate"], sub["mape_mean"], yerr=sub["mape_std"],
+                         fmt="^-.", capsize=5, label=method, color=color)
     axes[0].set_xlabel("Dropout Rate"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs Dropout")
     axes[1].set_xlabel("Dropout Rate"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Dropout")
-    axes[0].legend(); axes[1].legend()
+    axes[2].set_xlabel("Dropout Rate"); axes[2].set_ylabel("MAPE (%)"); axes[2].set_title("MAPE vs Dropout")
+    for ax in axes: ax.legend()
     plt.tight_layout()
     save_figure(fig, out, "fed_robustness_client_dropout.png")
     print("[client_dropout] Done.\n")
@@ -388,43 +396,48 @@ def run_communication_delay_experiment(out: Path) -> None:
 
             for cid in range(nc):
                 clients[cid].model.load_state_dict(server.gm.state_dict())
-                mse, rmse, mae = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
+                mse, rmse, mae, mape = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
                 all_rows.append({"seed": seed, "model_type": "CNN/CCN",
                                  "delay_rate": dr, "method": agg_name,
                                  "client_id": cid,
-                                 "mse": mse, "rmse": rmse, "mae": mae})
+                                 "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
 
     df = pd.DataFrame(all_rows)
     save_dataframe(df, out, "fed_communication_delay_metrics.csv")
     agg = df.groupby(["delay_rate", "method"]).agg(
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, out, "fed_communication_delay_summary.csv")
     print("\n[communication_delay] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    for method, color, fmt in [("FedAvg", "#3498db", "o-"), ("Proposed", "#2ecc71", "s--")]:
+    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+    for method in ["FedAvg", "Proposed"]:
         sub = agg[agg["method"] == method]
+        color = METHOD_PALETTE.get(method, "#333333")
         axes[0].errorbar(sub["delay_rate"], sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt=fmt, capsize=5, label=method, color=color)
+                         fmt="o-", capsize=5, label=method, color=color)
         axes[1].errorbar(sub["delay_rate"], sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt=fmt, capsize=5, label=method, color=color)
+                         fmt="s--", capsize=5, label=method, color=color)
+        axes[2].errorbar(sub["delay_rate"], sub["mape_mean"], yerr=sub["mape_std"],
+                         fmt="^-.", capsize=5, label=method, color=color)
     axes[0].set_xlabel("Delay Rate"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs Delay")
     axes[1].set_xlabel("Delay Rate"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Delay")
-    axes[0].legend(); axes[1].legend()
+    axes[2].set_xlabel("Delay Rate"); axes[2].set_ylabel("MAPE (%)"); axes[2].set_title("MAPE vs Delay")
+    for ax in axes: ax.legend()
     plt.tight_layout()
     save_figure(fig, out, "fed_robustness_communication_delay.png")
     print("[communication_delay] Done.\n")
 
 
 # ══════════════════════════════════════════════════════════════
-# Workflow 4: dp_noise
+# Workflow 4: gradient_noise (Gaussian parameter perturbation, NOT formal DP)
 # ══════════════════════════════════════════════════════════════
 
-def run_dp_noise_experiment(out: Path) -> None:
+def run_gradient_noise_experiment(out: Path) -> None:
     print("\n" + "=" * 60)
-    print("[dp_noise] Privacy-Preserving Noise Simulation")
-    print("(NOTE: lightweight simulation, NOT formal differential privacy)")
+    print("[gradient_noise] Gaussian Parameter Perturbation Simulation")
+    print("(NOTE: lightweight Gaussian noise on uploaded parameters, NOT formal DP)")
     print("=" * 60)
     ensure_output_dir(out)
     cfgs = list(CLIENT_CONFIGS_BASE); nc = len(cfgs)
@@ -459,35 +472,40 @@ def run_dp_noise_experiment(out: Path) -> None:
 
             for cid in range(nc):
                 clients[cid].model.load_state_dict(server.gm.state_dict())
-                mse, rmse, mae = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
+                mse, rmse, mae, mape = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
                 all_rows.append({"seed": seed, "model_type": "CNN/CCN",
                                  "noise_sigma": sigma, "method": agg_name,
                                  "client_id": cid,
-                                 "mse": mse, "rmse": rmse, "mae": mae})
+                                 "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
 
     df = pd.DataFrame(all_rows)
-    save_dataframe(df, out, "fed_dp_noise_metrics.csv")
+    save_dataframe(df, out, "fed_gradient_noise_metrics.csv")
     agg = df.groupby(["noise_sigma", "method"]).agg(
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
-    save_dataframe(agg, out, "fed_dp_noise_summary.csv")
-    print("\n[dp_noise] Summary:\n", agg.to_string(index=False))
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
+    save_dataframe(agg, out, "fed_gradient_noise_summary.csv")
+    print("\n[gradient_noise] Summary:\n", agg.to_string(index=False))
 
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    for method, color, fmt in [("FedAvg", "#3498db", "o-"), ("Proposed", "#2ecc71", "s--")]:
+    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+    for method in ["FedAvg", "Proposed"]:
         sub = agg[agg["method"] == method]
+        color = METHOD_PALETTE.get(method, "#333333")
         axes[0].errorbar(sub["noise_sigma"], sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt=fmt, capsize=5, label=method, color=color)
+                         fmt="o-", capsize=5, label=method, color=color)
         axes[1].errorbar(sub["noise_sigma"], sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt=fmt, capsize=5, label=method, color=color)
-    axes[0].set_xlabel("Noise Sigma"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs DP Noise")
-    axes[1].set_xlabel("Noise Sigma"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs DP Noise")
-    axes[0].legend(); axes[1].legend()
-    axes[1].text(0.5, -0.25, "(Lightweight privacy-noise simulation, NOT formal DP proof)",
-                 ha="center", transform=axes[1].transAxes, fontsize=8, color="gray")
+                         fmt="s--", capsize=5, label=method, color=color)
+        axes[2].errorbar(sub["noise_sigma"], sub["mape_mean"], yerr=sub["mape_std"],
+                         fmt="^-.", capsize=5, label=method, color=color)
+    axes[0].set_xlabel("Noise Sigma"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs Gaussian Noise")
+    axes[1].set_xlabel("Noise Sigma"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Gaussian Noise")
+    axes[2].set_xlabel("Noise Sigma"); axes[2].set_ylabel("MAPE (%)"); axes[2].set_title("MAPE vs Gaussian Noise")
+    for ax in axes: ax.legend()
+    axes[2].text(0.5, -0.25, "(Lightweight Gaussian parameter perturbation, NOT formal DP)",
+                 ha="center", transform=axes[2].transAxes, fontsize=8, color="gray")
     plt.tight_layout()
-    save_figure(fig, out, "fed_robustness_dp_noise.png")
-    print("[dp_noise] Done.\n")
+    save_figure(fig, out, "fed_robustness_gradient_noise.png")
+    print("[gradient_noise] Done.\n")
 
 
 # ══════════════════════════════════════════════════════════════
@@ -495,17 +513,17 @@ def run_dp_noise_experiment(out: Path) -> None:
 # ══════════════════════════════════════════════════════════════
 
 WORKFLOW_MAP = {
-    "all": ["communication_cost", "client_dropout", "communication_delay", "dp_noise"],
+    "all": ["communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
     "communication_cost": ["communication_cost"],
     "client_dropout": ["client_dropout"],
     "communication_delay": ["communication_delay"],
-    "dp_noise": ["dp_noise"],
+    "gradient_noise_scale": ["gradient_noise"],
 }
 WORKFLOW_FUNCTIONS = {
     "communication_cost": run_communication_cost_experiment,
     "client_dropout": run_client_dropout_experiment,
     "communication_delay": run_communication_delay_experiment,
-    "dp_noise": run_dp_noise_experiment,
+    "gradient_noise": run_gradient_noise_experiment,
 }
 
 def run_project(workflow: str, out: Path) -> None:
