@@ -52,7 +52,7 @@ plt.ioff()
 # ══════════════════════════════════════════════════════════════
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from cnn_fed_enhanced_experiments import (
+from cnn_fed_enhanced_experiments.cfe_core import (
     CLIENT_CONFIGS_BASE,
     TRAFFIC_MIN_VALUE,
     generate_traffic_flow,
@@ -102,6 +102,22 @@ def set_global_seed(seed: int) -> None:
 def ensure_output_dir(output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
+
+def save_figure(fig, output_dir: Path, file_name: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    print(f"Saved figure: {path}")
+    return path
+
+
+def save_dataframe(df, output_dir: Path, file_name: str) -> Path:
+    path = ensure_output_dir(output_dir) / file_name
+    df.to_csv(path, index=False, encoding="utf-8")
+    print(f"[saved] {path}")
+    return path
 
 
 def plot_heatmap(
@@ -1991,9 +2007,12 @@ WORKFLOW_FUNCTIONS = {
 
 
 def run_project(workflow: str, output_dir: Path) -> None:
-    configure_academic_plot_style()
+    try:
+        configure_academic_plot_style()
+        export_figure_index(output_dir)
+    except NameError:
+        pass
     ensure_output_dir(output_dir)
-    export_figure_index(output_dir)
     print(f"[gcn_fed_enhanced] workflow={workflow}, device={DEVICE}")
     print(f"[gcn_fed_enhanced] output={output_dir}")
 
@@ -2045,5 +2064,3 @@ def _export_communication_cost(output_dir: Path) -> None:
 
 if __name__ == "__main__":
     main()
-
-from .visualization import *

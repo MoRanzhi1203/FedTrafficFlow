@@ -39,11 +39,11 @@ plt.ioff()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-from cnn_fed_enhanced_experiments import (
+from cnn_fed_enhanced_experiments.cfe_core import (
     CLIENT_CONFIGS_BASE, generate_traffic_flow, set_global_seed,
     build_noniid_client_configs,
 )
-from gcn_fed_enhanced_experiments import (
+from gcn_fed_enhanced_experiments.gfe_core import (
     GCNEnhancedModel, build_fixed_adjacency, get_adj_matrix,
 )
 
@@ -61,6 +61,27 @@ METHOD_PALETTE = {
 # ══════════════════════════════════════════════════════════════
 # 工具
 # ══════════════════════════════════════════════════════════════
+
+def ensure_output_dir(output_dir: Path) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    return output_dir
+
+
+def save_figure(fig, output_dir: Path, file_name: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    print(f"Saved figure: {path}")
+    return path
+
+
+def save_dataframe(df, output_dir: Path, file_name: str) -> Path:
+    path = ensure_output_dir(output_dir) / file_name
+    df.to_csv(path, index=False, encoding="utf-8")
+    print(f"[saved] {path}")
+    return path
 
 def ensure_output_dir(d: Path) -> Path:
     d.mkdir(parents=True, exist_ok=True); return d
@@ -486,9 +507,12 @@ WORKFLOW_FUNCTIONS = {
 }
 
 def run_project(workflow: str, out: Path) -> None:
-    configure_academic_plot_style()
+    try:
+        configure_academic_plot_style()
+        export_figure_index(out)
+    except NameError:
+        pass
     ensure_output_dir(out)
-    export_figure_index(out)
     print(f"[fed_robustness] workflow={workflow}, device={DEVICE}")
     for step in WORKFLOW_MAP[workflow]:
         print(f"\n>>> Running step: {step}")
@@ -507,5 +531,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     main()
-
-from .visualization import *

@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-CNN/CCN 基础联邦仿真实验。
+GCN 基础联邦仿真实验。
 
-本文件实现基于 CNN-BiLSTM-Attention 的联邦仿真基础实验，包含：
-1. data_viz: 基础数据集可视化（时间序列、热力图、箱线图、划分概览、样本量）；
-2. main: Independent / FedAvg 主结果对比（MSE、RMSE、MAE）；
+本文件实现基于 GCN-BiLSTM-Attention 的联邦仿真基础实验，包含：
+1. data_viz: 基础数据集可视化（含图结构可视化）；
+2. main: Independent / FedAvg 主结果对比（MSE、RMSE、MAE、MAPE）；
 3. convergence: 联邦训练收敛曲线；
 4. all: 依次运行上述全部工作流。
 
-与 gcn_fed_base.py 共享相同的数据生成逻辑和随机种子，保证基础对比公平。
+与 cnn_fed_base.py 共享相同的数据生成逻辑和随机种子，保证基础对比公平。
+区别在于 GCN 使用图卷积代替 CNN 作为空间建模模块，并额外使用邻接矩阵。
 
 主要依赖：PyTorch, NumPy, pandas, matplotlib。
 """
@@ -49,8 +50,8 @@ MAPE_EPS = 1.0
 METHOD_PALETTE = {
     "Independent": "#4C72B0",
     "FedAvg": "#DD8452",
-    "CNN-FedAvg": "#DD8452",
-    "CNN-Proposed": "#55A868",
+    "GCN-FedAvg": "#DD8452",
+    "GCN-Proposed": "#55A868",
     "Proposed": "#55A868",
     "Loss-weighted": "#C44E52",
     "Data-loss weighted": "#8172B3",
@@ -61,7 +62,7 @@ SPLIT_PALETTE = ["#55A868", "#DD8452", "#C44E52"]
 
 
 # ──────────────────────────────────────────────────────────
-# 基础实验共享超参数（与 gcn_fed_base.py 保持一致）
+# 基础实验共享超参数（与 cnn_fed_base.py 保持一致）
 # ──────────────────────────────────────────────────────────
 BASE_SEED = 42
 BASE_NUM_CLIENTS = 5
@@ -98,6 +99,22 @@ def ensure_output_dir(output_dir: Path) -> Path:
     """创建并返回输出目录。"""
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
+
+def save_figure(fig, output_dir: Path, file_name: str) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path = output_dir / file_name
+    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
+    import matplotlib.pyplot as _plt
+    _plt.close(fig)
+    print(f"Saved figure: {path}")
+    return path
+
+
+def save_dataframe(df, output_dir: Path, file_name: str) -> Path:
+    path = ensure_output_dir(output_dir) / file_name
+    df.to_csv(path, index=False, encoding="utf-8")
+    print(f"[saved] {path}")
+    return path
 
 
 def generate_base_traffic_data(
@@ -187,6 +204,60 @@ def generate_base_traffic_data(
     return all_X, all_Y, metadata
 
 
+def generate_adjacency_matrix(num_nodes: int = BASE_NUM_NODES, seed: int = BASE_SEED):
+    """为 GCN 生成固定的归一化邻接矩阵。
+
+    构造一个基于路网拓扑的邻接矩阵：节点按编号顺序排列，相邻节点相连，
+    并加入少量随机跨连接模拟交叉口。最终进行对称归一化。
+
+    返回:
+        a_norm: np.ndarray, shape [num_nodes, num_nodes], 归一化邻接矩阵
+        a_raw: np.ndarray, 原始邻接矩阵（用于可视化）
+        graph_meta: dict, 图结构摘要信息
+    """
+    rng = np.random.RandomState(seed)
+
+    # 初始化邻接矩阵：相邻节点连接（线型拓扑）
+    A = np.zeros((num_nodes, num_nodes), dtype=np.float32)
+    for i in range(num_nodes - 1):
+        A[i, i + 1] = 1.0
+        A[i + 1, i] = 1.0
+
+    # 添加少量跨连接（模拟交叉口或支路），使图不完全为线型
+    cross_edges = min(num_nodes // 2, 3)
+    for _ in range(cross_edges):
+        u = rng.randint(0, num_nodes)
+        v = rng.randint(0, num_nodes)
+        if u != v and A[u, v] == 0:
+            w = 0.3 + 0.4 * rng.rand()  # 弱连接权重
+            A[u, v] = w
+            A[v, u] = w
+
+    # 自环
+    A_self = A + np.eye(num_nodes, dtype=np.float32)
+
+    # 对称归一化: D^{-1/2} @ A @ D^{-1/2}
+    deg = A_self.sum(axis=1)
+    deg_inv_sqrt = np.power(deg + 1e-12, -0.5)
+    D_inv_sqrt = np.diag(deg_inv_sqrt)
+    A_norm = D_inv_sqrt @ A_self @ D_inv_sqrt
+
+    # 计算图统计信息
+    degrees = A.sum(axis=1)
+    num_edges = int(np.sum(A > 0) / 2)
+
+    graph_meta = {
+        "num_nodes": num_nodes,
+        "num_edges": num_edges,
+        "avg_degree": float(np.mean(degrees)),
+        "max_degree": float(np.max(degrees)),
+        "min_degree": float(np.min(degrees)),
+        "adjacency_type": "fixed_line_with_cross",
+    }
+
+    return A_norm.astype(np.float32), A.astype(np.float32), graph_meta
+
+
 def split_train_val_test(
     X: np.ndarray,
     Y: np.ndarray,
@@ -194,7 +265,7 @@ def split_train_val_test(
     train_ratio: float = BASE_TRAIN_RATIO,
     val_ratio: float = BASE_VAL_RATIO,
 ):
-    """按时间顺序划分训练/验证/测试集。
+    """按随机顺序划分训练/验证/测试集。
 
     返回:
         (X_train, Y_train, X_val, Y_val, X_test, Y_test)
@@ -237,7 +308,7 @@ class TrafficDataset(Dataset):
 
 
 # ──────────────────────────────────────────────────────────
-# 模型定义
+# GCN 模型组件
 # ──────────────────────────────────────────────────────────
 
 class AdaptiveSwish(nn.Module):
@@ -254,27 +325,92 @@ class AdaptiveSwish(nn.Module):
         return x * torch.sigmoid(self.beta * x)
 
 
-class CNNBaseModel(nn.Module):
-    """CNN-BiLSTM-Attention 基础联邦模型。
+class SimpleGCNLayer(nn.Module):
+    """基础图卷积层：A_norm @ X @ W。"""
+
+    def __init__(self, in_dim: int, out_dim: int, bias: bool = True):
+        super().__init__()
+        self.lin = nn.Linear(in_dim, out_dim, bias=bias)
+
+    def forward(self, x, a_norm):
+        """x: [B, K, F], a_norm: [K, K]"""
+        ax = torch.einsum("ij,bjf->bif", a_norm, x)
+        return self.lin(ax)
+
+
+class GCNEncoder(nn.Module):
+    """GCN 编码器：可学习邻接矩阵 + 两层图卷积。"""
+
+    def __init__(self, k: int, t: int, hidden_dim: int = 64, use_fixed_adj: bool = True,
+                 fixed_adj: np.ndarray = None):
+        super().__init__()
+        self.k = k
+        self.t = t
+        self.hidden_dim = hidden_dim
+        self.use_fixed_adj = use_fixed_adj
+
+        # 将每个节点长度为 T 的时间序列投影到隐藏空间
+        self.node_proj = nn.Sequential(
+            nn.Linear(t, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            AdaptiveSwish(),
+        )
+        self.gcn1 = SimpleGCNLayer(hidden_dim, hidden_dim)
+        self.gcn2 = SimpleGCNLayer(hidden_dim, hidden_dim)
+        self.norm1 = nn.LayerNorm(hidden_dim)
+        self.norm2 = nn.LayerNorm(hidden_dim)
+        self.act = AdaptiveSwish()
+
+        # 可学习邻接矩阵参数（用于微调或从头学习）
+        self.a_param = nn.Parameter(torch.randn(k, k) * 0.01)
+
+        # 如果提供了固定邻接矩阵，注册为 buffer
+        if fixed_adj is not None:
+            self.register_buffer("fixed_adj", torch.tensor(fixed_adj, dtype=torch.float32))
+        else:
+            self.fixed_adj = None
+
+    def _normalize_adj(self, a):
+        """对称归一化邻接矩阵。"""
+        a = torch.relu(a)
+        a = a + torch.eye(self.k, device=a.device, dtype=a.dtype)
+        deg = a.sum(dim=1)
+        deg_inv_sqrt = torch.pow(deg + 1e-12, -0.5)
+        d_inv_sqrt = torch.diag(deg_inv_sqrt)
+        return d_inv_sqrt @ a @ d_inv_sqrt
+
+    def forward(self, x):
+        x = x.to(dtype=torch.float32)
+        x = self.node_proj(x)
+
+        if self.use_fixed_adj and self.fixed_adj is not None:
+            a_norm = self.fixed_adj
+        else:
+            a_norm = self._normalize_adj(self.a_param)
+
+        h = self.gcn1(x, a_norm)
+        h = self.norm1(h)
+        h = self.act(h)
+        h = self.gcn2(h, a_norm)
+        h = self.norm2(h)
+        h = self.act(h)
+        return h.mean(dim=1)  # [B, hidden_dim]
+
+
+class GCNBaseModel(nn.Module):
+    """GCN-BiLSTM-Attention 基础联邦模型。
 
     结构：
-    1. CNN 分支：一维卷积提取局部时间邻域模式；
+    1. GCN 分支：基于固定邻接矩阵执行节点间消息传递；
     2. BiLSTM 分支：捕捉双向时序依赖；
     3. 多头注意力融合两个分支特征。
     """
 
-    def __init__(self, k: int, t: int, hidden_dim: int = 64, num_heads: int = 4):
+    def __init__(self, k: int, t: int, hidden_dim: int = 64, num_heads: int = 4,
+                 fixed_adj: np.ndarray = None):
         super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(in_channels=k, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.Conv1d(in_channels=hidden_dim, out_channels=hidden_dim, kernel_size=3, padding=1),
-            nn.BatchNorm1d(hidden_dim),
-            AdaptiveSwish(),
-            nn.AdaptiveAvgPool1d(1),
-            nn.Flatten(),
-        )
+        self.gcn_encoder = GCNEncoder(k=k, t=t, hidden_dim=hidden_dim,
+                                       fixed_adj=fixed_adj)
         self.lstm = nn.LSTM(
             input_size=k, hidden_size=hidden_dim // 2,
             num_layers=1, batch_first=True, bidirectional=True,
@@ -293,14 +429,14 @@ class CNNBaseModel(nn.Module):
 
     def forward(self, x):
         x = x.to(dtype=torch.float32)
-        x_cnn = self.cnn(x)
+        x_gcn = self.gcn_encoder(x)
 
         x_lstm = x.permute(0, 2, 1)
         x_lstm, _ = self.lstm(x_lstm)
         x_lstm = x_lstm.mean(dim=1)
         x_lstm = self.lstm_proj(x_lstm)
 
-        feat_seq = torch.stack([x_cnn, x_lstm], dim=1)
+        feat_seq = torch.stack([x_gcn, x_lstm], dim=1)
         attn_output, attn_weights = self.multihead_attn(feat_seq, feat_seq, feat_seq)
         attn_output = self.attn_norm(attn_output + feat_seq)
         x_fused = attn_output.mean(dim=1)
@@ -365,7 +501,6 @@ class FederatedClient:
 
     @torch.no_grad()
     def validate(self, loader=None):
-        """在指定数据加载器上评估损失。"""
         if loader is None:
             loader = self.val_loader
         self.model.eval()
@@ -392,7 +527,6 @@ class FederatedClient:
 
     @torch.no_grad()
     def test_metrics(self):
-        """计算测试集 MSE、RMSE、MAE、MAPE。"""
         self.model.eval()
         preds, truths = [], []
         for x, y in self.test_loader:
@@ -452,24 +586,25 @@ class FedAvgServer:
 
 
 # ══════════════════════════════════════════════════════════
-# Workflow: data_viz — 基础数据集可视化
+# Workflow: data_viz — 基础数据集可视化（含图结构）
 # ══════════════════════════════════════════════════════════
 
 def run_data_visualization_base(output_dir: Path) -> None:
-    """基于基础实验数据生成逻辑，生成并保存 5 张图 + 1 份 CSV。"""
+    """基于基础实验数据生成逻辑，生成可视化图（含 GCN 图结构）。"""
     print("\n" + "=" * 60)
-    print("[data_viz] Generating base dataset visualizations...")
+    print("[data_viz] Generating base dataset visualizations (GCN)...")
     print("=" * 60)
 
     set_global_seed(BASE_SEED)
     all_X, all_Y, meta = generate_base_traffic_data()
+    _, A_raw, graph_meta = generate_adjacency_matrix()
 
     ensure_output_dir(output_dir)
 
     # ── 1. 每个 client 的平均交通流时间序列 ──
     fig, ax = plt.subplots(figsize=(7, 4.5))
     for cid in range(meta["num_clients"]):
-        ts_mean = all_X[cid].mean(axis=(0, 1))  # shape [seq_len,]
+        ts_mean = all_X[cid].mean(axis=(0, 1))
         sns.lineplot(
             x=np.arange(len(ts_mean)),
             y=ts_mean,
@@ -488,8 +623,8 @@ def run_data_visualization_base(output_dir: Path) -> None:
 
     # ── 2. 代表性 client 的节点-时间热力图 ──
     rep_cid = 0
-    X_rep = all_X[rep_cid]  # [samples, nodes, seq_len]
-    node_time_matrix = X_rep.mean(axis=0)  # [nodes, seq_len]
+    X_rep = all_X[rep_cid]
+    node_time_matrix = X_rep.mean(axis=0)
 
     fig, ax = plt.subplots(figsize=(7, 4.5))
     sns.heatmap(
@@ -588,10 +723,53 @@ def run_data_visualization_base(output_dir: Path) -> None:
             "min_flow": float(np.min(all_vals)),
             "max_flow": float(np.max(all_vals)),
         })
-
     df_summary = pd.DataFrame(summary_rows)
     save_dataframe(df_summary, output_dir, "base_dataset_summary.csv")
+
+    # ── 7. GCN 邻接矩阵热力图 ──
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(
+        A_raw,
+        ax=ax,
+        cmap="mako",
+        vmin=0,
+        vmax=1,
+        square=True,
+        annot=True,
+        fmt=".2f",
+        cbar_kws={"label": "Adjacency weight"},
+    )
+    ax.set_xlabel("Node ID")
+    ax.set_ylabel("Node ID")
+    ax.set_title("Fixed adjacency matrix")
+    save_figure(fig, output_dir, "base_gcn_adjacency_matrix.png")
+
+    # ── 8. 节点度分布柱状图 ──
+    degrees = A_raw.sum(axis=1)
+    fig, ax = plt.subplots(figsize=(8, 4.8))
+    df_degree = pd.DataFrame({"node": [f"Node {i}" for i in range(len(degrees))], "degree": degrees})
+    sns.barplot(
+        data=df_degree,
+        x="node",
+        y="degree",
+        ax=ax,
+        color=METHOD_PALETTE["FedAvg"],
+        errorbar=None,
+    )
+    ax.set_xlabel("Node ID")
+    ax.set_ylabel("Degree")
+    ax.set_title("Node degree distribution")
+    ax.set_xticklabels(df_degree["node"], rotation=30, ha="right")
+    for i, deg in enumerate(degrees):
+        ax.text(i, deg + 0.05, f"{deg:.1f}", ha="center", fontsize=9)
+    save_figure(fig, output_dir, "base_gcn_degree_distribution.png")
+
+    # ── 9. 图结构摘要 CSV ──
+    df_graph = pd.DataFrame([graph_meta])
+    save_dataframe(df_graph, output_dir, "base_gcn_graph_summary.csv")
+
     print("[data_viz] Dataset summary:\n", df_summary.to_string(index=False))
+    print("[data_viz] Graph summary:\n", df_graph.to_string(index=False))
     print("[data_viz] Done.\n")
 
 
@@ -602,11 +780,12 @@ def run_data_visualization_base(output_dir: Path) -> None:
 def run_main_experiment(output_dir: Path) -> None:
     """运行基础实验主结果：Independent vs FedAvg。"""
     print("\n" + "=" * 60)
-    print("[main] Running CNN FedAvg base experiment...")
+    print("[main] Running GCN FedAvg base experiment...")
     print("=" * 60)
 
     set_global_seed(BASE_SEED)
     all_X, all_Y, _ = generate_base_traffic_data()
+    A_norm, _, _ = generate_adjacency_matrix()
     ensure_output_dir(output_dir)
 
     criterion = nn.MSELoss()
@@ -614,7 +793,6 @@ def run_main_experiment(output_dir: Path) -> None:
     k = BASE_NUM_NODES
     t = BASE_SEQ_LEN
 
-    # 构建数据加载器
     train_loaders, val_loaders, test_loaders = [], [], []
     train_sizes = []
     for cid in range(num_clients):
@@ -631,12 +809,14 @@ def run_main_experiment(output_dir: Path) -> None:
 
     # ── FedAvg 训练 ──
     fed_clients = [
-        FederatedClient(cid, CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM),
+        FederatedClient(cid, GCNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM,
+                                           fixed_adj=A_norm),
                         train_loaders[cid], val_loaders[cid], test_loaders[cid],
                         criterion, lr=1e-3)
         for cid in range(num_clients)
     ]
-    server = FedAvgServer(CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM), num_clients)
+    server = FedAvgServer(GCNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM,
+                                        fixed_adj=A_norm), num_clients)
     server.set_client_data_sizes(train_sizes)
 
     print("\n[FedAvg Training]")
@@ -649,7 +829,6 @@ def run_main_experiment(output_dir: Path) -> None:
             client_losses.append(loss)
         server.aggregate(client_weights, client_losses)
 
-        # 聚合后在每个客户端的验证集上评估
         val_losses = []
         for client in fed_clients:
             client.model.load_state_dict(server.global_model.state_dict())
@@ -658,7 +837,6 @@ def run_main_experiment(output_dir: Path) -> None:
         print(f"  Round {rnd+1}/{FED_ROUNDS} | Avg Train Loss: {server.round_losses[-1]:.6f} "
               f"| Avg Val Loss: {server.round_val_losses[-1]:.6f}")
 
-    # 记录 FedAvg 最终测试指标
     fed_metrics = []
     for client in fed_clients:
         client.model.load_state_dict(server.global_model.state_dict())
@@ -690,21 +868,19 @@ def run_main_experiment(output_dir: Path) -> None:
         print(f"  FedAvg       - MSE={fm['mse']:.6f} RMSE={fm['rmse']:.6f} MAE={fm['mae']:.6f} MAPE={fm['mape']:.2f}%")
         print(f"  Independent  - MSE={im['mse']:.6f} RMSE={im['rmse']:.6f} MAE={im['mae']:.6f} MAPE={im['mape']:.2f}%")
 
-    # 保存详细指标
     rows = []
     for cid in range(num_clients):
         fm = fed_metrics[cid]
         im = ind_metrics[cid]
         rows.append({"method": "FedAvg", "client_id": cid,
                      "mse": fm["mse"], "rmse": fm["rmse"], "mape": fm["mape"],
-        "mae": fm["mae"]})
+                     "mae": fm["mae"]})
         rows.append({"method": "Independent", "client_id": cid,
                      "mse": im["mse"], "rmse": im["rmse"], "mape": im["mape"],
-        "mae": im["mae"]})
+                     "mae": im["mae"]})
     df_metrics = pd.DataFrame(rows)
-    save_dataframe(df_metrics, output_dir, "cnn_base_metrics.csv")
+    save_dataframe(df_metrics, output_dir, "gcn_base_metrics.csv")
 
-    # 汇总表
     summary_rows = []
     for method in ["FedAvg", "Independent"]:
         sub = df_metrics[df_metrics["method"] == method]
@@ -720,10 +896,10 @@ def run_main_experiment(output_dir: Path) -> None:
             "mae_std": float(sub["mae"].std(ddof=0)),
         })
     df_summary = pd.DataFrame(summary_rows)
-    save_dataframe(df_summary, output_dir, "cnn_base_metrics_summary.csv")
+    save_dataframe(df_summary, output_dir, "gcn_base_metrics_summary.csv")
     print("\n[main] Summary:\n", df_summary.to_string(index=False))
 
-    # ── 绘制对比柱状图 ──
+    # 对比柱状图
     fig, axes = plt.subplots(1, 4, figsize=(16, 4))
     client_labels = [f"Client {i}" for i in range(num_clients)]
     for idx, metric in enumerate(["mse", "rmse", "mae", "mape"]):
@@ -748,16 +924,16 @@ def run_main_experiment(output_dir: Path) -> None:
         )
         ax.set_xticklabels(client_labels, rotation=30, ha="right")
         ax.set_title(metric.upper())
-        ylabel = f"{metric.upper()} (%) (lower is better)" if metric == "mape" else f"{metric.upper()} (lower is better)" if metric in {"rmse", "mae", "mse"} else metric.upper()
-        ax.set_ylabel(ylabel)
+        ylabel_map = f"{metric.upper()} (%) (lower is better)" if metric == "mape" else f"{metric.upper()} (lower is better)"
+        ax.set_ylabel(ylabel_map)
         ax.set_xlabel("Client")
         if idx == 0:
             ax.legend(loc="best", fontsize=8, title=None)
         else:
             ax.get_legend().remove()
-    fig.suptitle("CNN base method comparison", fontsize=13)
+    fig.suptitle("GCN base method comparison", fontsize=13)
     fig.tight_layout()
-    save_figure(fig, output_dir, "cnn_base_main_comparison.png")
+    save_figure(fig, output_dir, "gcn_base_main_comparison.png")
     print("[main] Done.\n")
 
 
@@ -768,18 +944,19 @@ def run_main_experiment(output_dir: Path) -> None:
 def run_convergence_experiment(output_dir: Path) -> None:
     """输出基础训练收敛曲线。"""
     print("\n" + "=" * 60)
-    print("[convergence] Running CNN convergence analysis...")
+    print("[convergence] Running GCN convergence analysis...")
     print("=" * 60)
 
     set_global_seed(BASE_SEED)
     all_X, all_Y, _ = generate_base_traffic_data()
+    A_norm, _, _ = generate_adjacency_matrix()
     ensure_output_dir(output_dir)
 
     criterion = nn.MSELoss()
     num_clients = BASE_NUM_CLIENTS
     k = BASE_NUM_NODES
     t = BASE_SEQ_LEN
-    convergence_rounds = 15  # 更多轮次观察收敛
+    convergence_rounds = 15
 
     train_loaders, val_loaders, test_loaders = [], [], []
     train_sizes = []
@@ -796,15 +973,16 @@ def run_convergence_experiment(output_dir: Path) -> None:
                                         batch_size=FED_BATCH_SIZE, shuffle=False))
 
     fed_clients = [
-        FederatedClient(cid, CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM),
+        FederatedClient(cid, GCNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM,
+                                           fixed_adj=A_norm),
                         train_loaders[cid], val_loaders[cid], test_loaders[cid],
                         criterion, lr=1e-3)
         for cid in range(num_clients)
     ]
-    server = FedAvgServer(CNNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM), num_clients)
+    server = FedAvgServer(GCNBaseModel(k=k, t=t, hidden_dim=FED_HIDDEN_DIM,
+                                        fixed_adj=A_norm), num_clients)
     server.set_client_data_sizes(train_sizes)
 
-    # 记录每轮数据
     round_data = {
         "round": [], "avg_train_loss": [], "avg_val_rmse": [],
     }
@@ -822,7 +1000,6 @@ def run_convergence_experiment(output_dir: Path) -> None:
             client_losses.append(loss)
         server.aggregate(client_weights, client_losses)
 
-        # 全局模型在每个客户端验证集上的评估
         val_rmses = []
         for client in fed_clients:
             client.model.load_state_dict(server.global_model.state_dict())
@@ -842,14 +1019,11 @@ def run_convergence_experiment(output_dir: Path) -> None:
               f"Train Loss: {server.round_losses[-1]:.6f} | "
               f"Val RMSE: {server.round_val_losses[-1]:.6f}")
 
-    # 保存收敛 CSV
     df_conv = pd.DataFrame(round_data)
-    save_dataframe(df_conv, output_dir, "cnn_base_convergence.csv")
+    save_dataframe(df_conv, output_dir, "gcn_base_convergence.csv")
 
-    # 绘制收敛曲线
     fig, axes = plt.subplots(1, 2, figsize=(10, 4))
 
-    # 左图：全局平均 train loss 和 validation RMSE
     ax = axes[0]
     sns.lineplot(
         x=round_data["round"],
@@ -882,7 +1056,6 @@ def run_convergence_experiment(output_dir: Path) -> None:
     ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
     ax.set_title("Global validation RMSE across communication rounds")
 
-    # 右图：每个 client 的 local training loss
     ax = axes[1]
     for cid in range(num_clients):
         sns.lineplot(
@@ -899,7 +1072,7 @@ def run_convergence_experiment(output_dir: Path) -> None:
     ax.set_title("Per-client local training loss")
     ax.legend(fontsize=8)
     fig.tight_layout()
-    save_figure(fig, output_dir, "cnn_base_convergence.png")
+    save_figure(fig, output_dir, "gcn_base_convergence.png")
     print("[convergence] Done.\n")
 
 
@@ -908,12 +1081,15 @@ def run_convergence_experiment(output_dir: Path) -> None:
 # ══════════════════════════════════════════════════════════
 
 def run_project(workflow: str, output_dir: Path) -> None:
-    """按工作流执行 CNN 基础实验。"""
-    configure_academic_plot_style()
+    """按工作流执行 GCN 基础实验。"""
+    try:
+        configure_academic_plot_style()
+        export_figure_index(output_dir)
+    except NameError:
+        pass
     ensure_output_dir(output_dir)
-    export_figure_index(output_dir)
-    print(f"[cnn_fed_base] workflow={workflow}, output={output_dir}")
-    print(f"[cnn_fed_base] device={DEVICE}")
+    print(f"[gcn_fed_base] workflow={workflow}, output={output_dir}")
+    print(f"[gcn_fed_base] device={DEVICE}")
 
     if workflow in ("all", "data_viz"):
         run_data_visualization_base(output_dir)
@@ -924,12 +1100,12 @@ def run_project(workflow: str, output_dir: Path) -> None:
     if workflow in ("all", "convergence"):
         run_convergence_experiment(output_dir)
 
-    print(f"\n[cnn_fed_base] All done. Results in: {output_dir}")
+    print(f"\n[gcn_fed_base] All done. Results in: {output_dir}")
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
     """解析命令行参数。"""
-    parser = argparse.ArgumentParser(description="CNN/CCN Base Federated Simulation")
+    parser = argparse.ArgumentParser(description="GCN Base Federated Simulation")
     parser.add_argument(
         "--workflow",
         choices=["all", "data_viz", "main", "convergence"],
@@ -942,12 +1118,9 @@ def parse_args(argv: Optional[Sequence[str]] = None):
 def main(argv: Optional[Sequence[str]] = None):
     """程序主入口。"""
     args = parse_args(argv)
-    output_dir = SIMULATION_RESULTS_ROOT / "cnn_fed_base"
+    output_dir = SIMULATION_RESULTS_ROOT / "gcn_fed_base"
     run_project(args.workflow, output_dir)
 
 
 if __name__ == "__main__":
     main()
-
-from .visualization import *
-
