@@ -1,0 +1,7 @@
+graph_type,num_nodes,num_edges,avg_degree,max_degree,min_degree,density,description
+fixed_adjacency,8,10,2.1455368995666504,3.0426836013793945,1.0,0.35714285714285715,chain_with_cross_connections
+dynamic_morning_peak,8,9,3.25,6.0,1.0,0.32142857142857145,correlation_based_dynamic_morning_peak
+dynamic_evening_peak,8,9,3.25,6.0,1.0,0.32142857142857145,correlation_based_dynamic_evening_peak
+dynamic_off_peak,8,9,3.25,5.0,1.0,0.32142857142857145,correlation_based_dynamic_off_peak
+functional_similarity,8,14,4.5,7.0,1.0,0.5,pearson_correlation_based
+congestion_delay,8,0,1.1666666269302368,2.0,0.0,1.0,cross_correlation_delay_max_lag_5

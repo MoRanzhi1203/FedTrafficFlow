@@ -1908,6 +1908,7 @@ def run_peak_experiment(output_dir: Path) -> None:
                     "mse": float(errors[i] ** 2),
                     "rmse": float(abs(errors[i])),
                     "mae": float(abs(errors[i])),
+                    "mape": float(abs(errors[i]) / max(abs(truths_raw[i]), 1.0) * 100),
                     "num_samples": 1,
                 })
 
@@ -1919,6 +1920,8 @@ def run_peak_experiment(output_dir: Path) -> None:
         mse_val = float(np.mean([r for r in grp["mse"]]))
         rmse_val = float(np.sqrt(mse_val))
         mae_val = float(np.mean([r for r in grp["mae"]]))
+        mape_vals = [r for r in grp["mape"]]
+        mape_val = float(np.mean(mape_vals)) if mape_vals else 0.0
         metrics_rows.append({
             "method": method, "client_id": cid, "period": period,
             "mse": mse_val, "rmse": rmse_val, "mae": mae_val, "mape": mape_val,

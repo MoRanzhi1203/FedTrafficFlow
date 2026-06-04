@@ -1148,7 +1148,8 @@ def run_fixed_vs_dynamic_experiment(output_dir: Path) -> None:
     agg_train = df_train.groupby(["graph_type", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg_train, output_dir, "gcn_enhanced_fixed_vs_dynamic_summary.csv")
     print("\n[fixed_vs_dynamic] Training results:\n", agg_train.to_string(index=False))
 
@@ -1293,7 +1294,8 @@ def run_congestion_delay_experiment(output_dir: Path) -> None:
     agg_cd = df_cd.groupby(["graph_type", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg_cd, output_dir, "gcn_enhanced_congestion_delay_summary.csv")
     print("\n[congestion_delay] Training results:\n", agg_cd.to_string(index=False))
 
@@ -1361,7 +1363,8 @@ def run_main_experiment(output_dir: Path) -> None:
     agg = df.groupby(["method", "graph_type", "aggregation_method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, output_dir, "gcn_enhanced_main_metrics_summary.csv")
     print("\n[main] Summary:\n", agg.to_string(index=False))
 
@@ -1414,7 +1417,8 @@ def run_aggregation_experiment(output_dir: Path) -> None:
     agg = df.groupby(["aggregation_method", "graph_type"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, output_dir, "gcn_enhanced_aggregation_ablation_summary.csv")
     print("\n[aggregation] Summary:\n", agg.to_string(index=False))
 
@@ -1465,7 +1469,8 @@ def run_lambda_experiment(output_dir: Path) -> None:
     agg = df.groupby(["lambda", "graph_type"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, output_dir, "gcn_enhanced_lambda_sensitivity_summary.csv")
     print("\n[lambda] Summary:\n", agg.to_string(index=False))
 
@@ -1525,7 +1530,8 @@ def run_client_scale_experiment(output_dir: Path) -> None:
     agg = df.groupby(["num_clients", "graph_type", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, output_dir, "gcn_enhanced_client_scale_summary.csv")
     print("\n[client_scale] Summary:\n", agg.to_string(index=False))
 
@@ -1593,7 +1599,8 @@ def run_noniid_experiment(output_dir: Path) -> None:
     agg = df.groupby(["noniid_level", "graph_type", "method"]).agg(
         mse_mean=("mse", "mean"), mse_std=("mse", "std"),
         rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std")).reset_index()
+        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
+        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
     save_dataframe(agg, output_dir, "gcn_enhanced_noniid_strength_summary.csv")
     print("\n[noniid] Summary:\n", agg.to_string(index=False))
 
@@ -1926,17 +1933,22 @@ def run_peak_experiment(output_dir: Path) -> None:
                 all_rows.append({"method": method_label, "graph_type": graph_type,
                                  "client_id": cid, "period": period,
                                  "mse": float(err ** 2), "rmse": float(abs(err)),
-                                 "mae": float(abs(err)), "num_samples": 1})
+                                 "mae": float(abs(err)),
+                                 "mape": float(abs(err) / max(abs(truths_raw[i]), 1.0) * 100),
+                                 "num_samples": 1})
 
     df = pd.DataFrame(all_rows)
     # Aggregate
     metrics_rows = []
     for (method, cid, period), grp in df.groupby(["method", "client_id", "period"]):
         mse_val = float(np.mean([r for r in grp["mse"]]))
+        mape_vals = [r for r in grp["mape"]]
+        mape_val = float(np.mean(mape_vals)) if mape_vals else 0.0
         metrics_rows.append({"method": method, "graph_type": graph_type, "client_id": cid,
                              "period": period, "mse": mse_val,
                              "rmse": float(np.sqrt(mse_val)),
                              "mae": float(np.mean([r for r in grp["mae"]])),
+                             "mape": mape_val,
                              "num_samples": len(grp)})
     df_metrics = pd.DataFrame(metrics_rows)
     save_dataframe(df_metrics, output_dir, "gcn_enhanced_peak_offpeak_metrics.csv")

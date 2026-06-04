@@ -1,8 +1,0 @@
-figure_file,workflow,figure_type,description,source_csv,used_in_paper
-base_dataset_client_timeseries.png,data_viz,line,Per-client average traffic flow time series for the base dataset.,base_dataset_summary.csv,recommended
-base_dataset_node_heatmap.png,data_viz,heatmap,Node-time traffic flow heatmap for a representative base client.,base_dataset_summary.csv,recommended
-base_dataset_client_boxplot.png,data_viz,box,Traffic flow distribution comparison across clients in the base dataset.,base_dataset_summary.csv,recommended
-base_dataset_split_overview.png,data_viz,bar,"Train, validation, and test split overview for the base dataset.",base_dataset_summary.csv,yes
-base_dataset_client_sample_size.png,data_viz,bar,Sample size comparison across clients in the base dataset.,base_dataset_summary.csv,yes
-cnn_base_main_comparison.png,main,bar,"Client-level MSE, RMSE, and MAE comparison between Independent and FedAvg.",cnn_base_metrics_summary.csv,recommended
-cnn_base_convergence.png,convergence,line,Global validation RMSE and local training loss across communication rounds.,cnn_base_convergence.csv,recommended
