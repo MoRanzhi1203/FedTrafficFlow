@@ -10,7 +10,12 @@ CNN/CCN 基础联邦仿真实验。
 
 与 gcn_fed_base.py 共享相同的数据生成逻辑和随机种子，保证基础对比公平。
 
-主要依赖：PyTorch, NumPy, pandas, matplotlib。
+主要依赖：PyTorch, NumPy, pandas。
+功能：数据生成、模型训练（FedAvg / Independent）、指标计算、数据导出。
+导出数据：results/simulation_experiments/cnn_fed_base/
+    - base_dataset_*.csv
+    - main_metrics.csv
+    - convergence_history.csv
 """
 
 import argparse
@@ -22,18 +27,12 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Optional, Sequence
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, random_split
-
-plt.ioff()
 
 # ──────────────────────────────────────────────────────────
 # 全局路径与设备常量
@@ -45,20 +44,6 @@ SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TRAFFIC_MIN_VALUE = 0.0
 MAPE_EPS = 1.0
-
-METHOD_PALETTE = {
-    "Independent": "#4C72B0",
-    "FedAvg": "#DD8452",
-    "CNN-FedAvg": "#DD8452",
-    "CNN-Proposed": "#55A868",
-    "Proposed": "#55A868",
-    "Loss-weighted": "#C44E52",
-    "Data-loss weighted": "#8172B3",
-    "Similarity-aware": "#937860",
-}
-CLIENT_PALETTE = sns.color_palette("tab10")
-SPLIT_PALETTE = ["#55A868", "#DD8452", "#C44E52"]
-
 
 # ──────────────────────────────────────────────────────────
 # 基础实验共享超参数（与 gcn_fed_base.py 保持一致）
@@ -98,15 +83,6 @@ def ensure_output_dir(output_dir: Path) -> Path:
     """创建并返回输出目录。"""
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
-
-def save_figure(fig, output_dir: Path, file_name: str) -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / file_name
-    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
-    import matplotlib.pyplot as _plt
-    _plt.close(fig)
-    print(f"Saved figure: {path}")
-    return path
 
 
 def save_dataframe(df, output_dir: Path, file_name: str) -> Path:
@@ -468,13 +444,13 @@ class FedAvgServer:
 
 
 # ══════════════════════════════════════════════════════════
-# Workflow: data_viz — 基础数据集可视化
+# Workflow: data_viz — 导出基础数据集可视化所需数据
 # ══════════════════════════════════════════════════════════
 
-def run_data_visualization_base(output_dir: Path) -> None:
-    """基于基础实验数据生成逻辑，生成并保存 5 张图 + 1 份 CSV。"""
+def export_base_dataset_artifacts(output_dir: Path) -> None:
+    """只导出基础数据集可视化所需的数据文件，不画图。"""
     print("\n" + "=" * 60)
-    print("[data_viz] Generating base dataset visualizations...")
+    print("[data_viz] Exporting base dataset artifacts")
     print("=" * 60)
 
     set_global_seed(BASE_SEED)
@@ -483,105 +459,56 @@ def run_data_visualization_base(output_dir: Path) -> None:
     ensure_output_dir(output_dir)
 
     # ── 1. 每个 client 的平均交通流时间序列 ──
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    ts_rows = []
     for cid in range(meta["num_clients"]):
         ts_mean = all_X[cid].mean(axis=(0, 1))  # shape [seq_len,]
-        sns.lineplot(
-            x=np.arange(len(ts_mean)),
-            y=ts_mean,
-            ax=ax,
-            linewidth=2.0,
-            alpha=0.9,
-            color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)],
-            label=f"Client {cid}",
-        )
-    ax.set_xlabel("Time Step")
-    ax.set_ylabel("Traffic Flow")
-    ax.set_title("Per-client average traffic flow")
-    ax.legend(loc="best", ncol=2, fontsize=8)
-    ax.set_xlim(0, meta["seq_len"] - 1)
-    save_figure(fig, output_dir, "base_dataset_client_timeseries.png")
+        for t_step, val in enumerate(ts_mean):
+            ts_rows.append({"client_id": cid, "time_step": t_step, "traffic_flow": float(val)})
+    save_dataframe(pd.DataFrame(ts_rows), output_dir, "base_dataset_client_timeseries.csv")
 
-    # ── 2. 代表性 client 的节点-时间热力图 ──
-    rep_cid = 0
-    X_rep = all_X[rep_cid]  # [samples, nodes, seq_len]
-    node_time_matrix = X_rep.mean(axis=0)  # [nodes, seq_len]
+    # ── 2. 代表性 client 的节点-时间热力图数据 ──
+    heatmap_rows = []
+    for cid in range(meta["num_clients"]):
+        X_c = all_X[cid]  # [samples, nodes, seq_len]
+        node_time_matrix = X_c.mean(axis=0)  # [nodes, seq_len]
+        for node_id in range(node_time_matrix.shape[0]):
+            for t_step in range(node_time_matrix.shape[1]):
+                heatmap_rows.append({
+                    "client_id": cid,
+                    "node_id": node_id,
+                    "time_step": t_step,
+                    "traffic_flow": float(node_time_matrix[node_id, t_step])
+                })
+    save_dataframe(pd.DataFrame(heatmap_rows), output_dir, "base_dataset_node_heatmap.csv")
 
-    fig, ax = plt.subplots(figsize=(7, 4.5))
-    sns.heatmap(
-        node_time_matrix,
-        ax=ax,
-        cmap="viridis",
-        cbar_kws={"label": "Traffic flow"},
-        xticklabels=1,
-        yticklabels=1,
-    )
-    ax.set_xlabel("Time Step")
-    ax.set_ylabel("Node ID")
-    ax.set_title(f"Node-time traffic heatmap for client {rep_cid}")
-    save_figure(fig, output_dir, "base_dataset_node_heatmap.png")
-
-    # ── 3. 不同 client 的流量分布箱线图 ──
-    fig, ax = plt.subplots(figsize=(7, 4.5))
+    # ── 3. 不同 client 的流量分布数据 ──
     dist_rows = []
     for cid in range(meta["num_clients"]):
         sampled_values = all_X[cid].ravel()[::8]
         dist_rows.extend(
-            {"client": f"Client {cid}", "traffic_flow": float(value)}
+            {"client_id": cid, "traffic_flow": float(value)}
             for value in sampled_values
         )
-    df_dist = pd.DataFrame(dist_rows)
-    sns.boxplot(
-        data=df_dist,
-        x="client",
-        y="traffic_flow",
-        ax=ax,
-        palette=CLIENT_PALETTE[: meta["num_clients"]],
-        showfliers=False,
-        linewidth=1.0,
-    )
-    ax.set_xlabel("Client")
-    ax.set_ylabel("Traffic flow")
-    ax.set_title("Non-IID traffic distribution by client")
-    save_figure(fig, output_dir, "base_dataset_client_boxplot.png")
+    save_dataframe(pd.DataFrame(dist_rows), output_dir, "base_dataset_client_distribution.csv")
 
     # ── 4. train / val / test 划分概览 ──
-    fig, ax = plt.subplots(figsize=(10, 4))
     total_samples = sum(meta["samples_per_client"])
     train_n = int(total_samples * BASE_TRAIN_RATIO)
     val_n = int(total_samples * BASE_VAL_RATIO)
     test_n = total_samples - train_n - val_n
-    labels = [f"Train ({BASE_TRAIN_RATIO*100:.0f}%)",
-              f"Val ({BASE_VAL_RATIO*100:.0f}%)",
-              f"Test ({BASE_TEST_RATIO*100:.0f}%)"]
-    sizes = [train_n, val_n, test_n]
-    left = 0
-    for size, label, color in zip(sizes, labels, SPLIT_PALETTE):
-        ax.barh(["Dataset split"], [size], left=[left], color=color, label=label)
-        left += size
-    ax.set_xlabel("Number of Samples")
-    ax.set_title("Train, validation, and test split")
-    ax.legend(loc="upper right")
-    ax.set_xlim(0, total_samples + 50)
-    save_figure(fig, output_dir, "base_dataset_split_overview.png")
+    split_rows = [
+        {"split": "Train", "num_samples": train_n, "ratio": BASE_TRAIN_RATIO},
+        {"split": "Val", "num_samples": val_n, "ratio": BASE_VAL_RATIO},
+        {"split": "Test", "num_samples": test_n, "ratio": BASE_TEST_RATIO},
+    ]
+    save_dataframe(pd.DataFrame(split_rows), output_dir, "base_dataset_split_overview.csv")
 
     # ── 5. 每个 client 的样本量 ──
-    fig, ax = plt.subplots(figsize=(8, 4.8))
-    client_ids = [f"Client {i}" for i in range(meta["num_clients"])]
-    df_counts = pd.DataFrame({"client": client_ids, "samples": meta["samples_per_client"]})
-    sns.barplot(
-        data=df_counts,
-        x="client",
-        y="samples",
-        ax=ax,
-        palette=CLIENT_PALETTE[: meta["num_clients"]],
-    )
-    ax.set_xlabel("Client")
-    ax.set_ylabel("Number of Samples")
-    ax.set_title("Sample size by client")
-    for i, v in enumerate(meta["samples_per_client"]):
-        ax.text(i, v + 2, str(v), ha="center", fontsize=10)
-    save_figure(fig, output_dir, "base_dataset_client_sample_size.png")
+    sample_size_rows = [
+        {"client_id": i, "num_samples": meta["samples_per_client"][i]}
+        for i in range(meta["num_clients"])
+    ]
+    save_dataframe(pd.DataFrame(sample_size_rows), output_dir, "base_dataset_client_sample_size.csv")
 
     # ── 6. 数据集汇总 CSV ──
     summary_rows = []
@@ -607,8 +534,7 @@ def run_data_visualization_base(output_dir: Path) -> None:
 
     df_summary = pd.DataFrame(summary_rows)
     save_dataframe(df_summary, output_dir, "base_dataset_summary.csv")
-    print("[data_viz] Dataset summary:\n", df_summary.to_string(index=False))
-    print("[data_viz] Done.\n")
+    print("[data_viz] Export Done.\n")
 
 
 # ══════════════════════════════════════════════════════════
@@ -618,7 +544,7 @@ def run_data_visualization_base(output_dir: Path) -> None:
 def run_main_experiment(output_dir: Path) -> None:
     """运行基础实验主结果：Independent vs FedAvg。"""
     print("\n" + "=" * 60)
-    print("[main] Running CNN FedAvg base experiment...")
+    print("[main] Running CNN FedAvg base experiment")
     print("=" * 60)
 
     set_global_seed(BASE_SEED)
@@ -708,17 +634,45 @@ def run_main_experiment(output_dir: Path) -> None:
 
     # 保存详细指标
     rows = []
+    pred_rows = []
     for cid in range(num_clients):
         fm = fed_metrics[cid]
         im = ind_metrics[cid]
         rows.append({"method": "FedAvg", "client_id": cid,
-                     "mse": fm["mse"], "rmse": fm["rmse"], "mape": fm["mape"],
-        "mae": fm["mae"]})
+                     "mse": fm["mse"], "rmse": fm["rmse"], "mape": fm["mape"], "mae": fm["mae"]})
         rows.append({"method": "Independent", "client_id": cid,
-                     "mse": im["mse"], "rmse": im["rmse"], "mape": im["mape"],
-        "mae": im["mae"]})
+                     "mse": im["mse"], "rmse": im["rmse"], "mape": im["mape"], "mae": im["mae"]})
+
+        for client, method_name in (
+            (fed_clients[cid], "FedAvg"),
+            (ind_clients[cid], "Independent"),
+        ):
+            client.model.eval()
+            with torch.no_grad():
+                X_test, Y_test = next(
+                    iter(
+                        DataLoader(
+                            client.test_loader.dataset,
+                            batch_size=len(client.test_loader.dataset),
+                        )
+                    )
+                )
+                X_test = X_test.to(DEVICE).float()
+                Y_test = Y_test.to(DEVICE).float()
+                pred, _ = client.model(X_test)
+                y_pred = pred.view(-1).detach().cpu().numpy()
+                y_true = Y_test.view(-1).detach().cpu().numpy()
+                for sample_id in range(min(200, len(y_true))):
+                    pred_rows.append({
+                        "method": method_name,
+                        "client_id": cid,
+                        "sample_id": sample_id,
+                        "y_true": float(y_true[sample_id]),
+                        "y_pred": float(y_pred[sample_id]),
+                    })
+
     df_metrics = pd.DataFrame(rows)
-    save_dataframe(df_metrics, output_dir, "cnn_base_metrics.csv")
+    save_dataframe(df_metrics, output_dir, "main_metrics.csv")
 
     # 汇总表
     summary_rows = []
@@ -736,45 +690,11 @@ def run_main_experiment(output_dir: Path) -> None:
             "mae_std": float(sub["mae"].std(ddof=0)),
         })
     df_summary = pd.DataFrame(summary_rows)
-    save_dataframe(df_summary, output_dir, "cnn_base_metrics_summary.csv")
-    print("\n[main] Summary:\n", df_summary.to_string(index=False))
+    save_dataframe(df_summary, output_dir, "main_summary.csv")
 
-    # ── 绘制对比柱状图 ──
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-    client_labels = [f"Client {i}" for i in range(num_clients)]
-    for idx, metric in enumerate(["mse", "rmse", "mae", "mape"]):
-        ax = axes[idx]
-        plot_df = pd.DataFrame(
-            {
-                "client": client_labels * 2,
-                "method": ["Independent"] * num_clients + ["FedAvg"] * num_clients,
-                "value": [ind_metrics[c][metric] for c in range(num_clients)]
-                + [fed_metrics[c][metric] for c in range(num_clients)],
-            }
-        )
-        sns.barplot(
-            data=plot_df,
-            x="client",
-            y="value",
-            hue="method",
-            hue_order=["Independent", "FedAvg"],
-            palette=METHOD_PALETTE,
-            ax=ax,
-            errorbar=None,
-        )
-        ax.set_xticklabels(client_labels, rotation=30, ha="right")
-        ax.set_title(metric.upper())
-        ylabel = f"{metric.upper()} (%) (lower is better)" if metric == "mape" else f"{metric.upper()} (lower is better)" if metric in {"rmse", "mae", "mse"} else metric.upper()
-        ax.set_ylabel(ylabel)
-        ax.set_xlabel("Client")
-        if idx == 0:
-            ax.legend(loc="best", fontsize=8, title=None)
-        else:
-            ax.get_legend().remove()
-    fig.suptitle("CNN base method comparison", fontsize=13)
-    fig.tight_layout()
-    save_figure(fig, output_dir, "cnn_base_main_comparison.png")
-    print("[main] Done.\n")
+    save_dataframe(pd.DataFrame(pred_rows), output_dir, "main_predictions.csv")
+
+    print("\n[main] Done.\n")
 
 
 # ══════════════════════════════════════════════════════════
@@ -784,7 +704,7 @@ def run_main_experiment(output_dir: Path) -> None:
 def run_convergence_experiment(output_dir: Path) -> None:
     """输出基础训练收敛曲线。"""
     print("\n" + "=" * 60)
-    print("[convergence] Running CNN convergence analysis...")
+    print("[convergence] Running CNN convergence analysis")
     print("=" * 60)
 
     set_global_seed(BASE_SEED)
@@ -821,12 +741,7 @@ def run_convergence_experiment(output_dir: Path) -> None:
     server.set_client_data_sizes(train_sizes)
 
     # 记录每轮数据
-    round_data = {
-        "round": [], "avg_train_loss": [], "avg_val_rmse": [],
-    }
-    for cid in range(num_clients):
-        round_data[f"client_{cid}_train_loss"] = []
-        round_data[f"client_{cid}_val_rmse"] = []
+    round_rows = []
 
     print("\n[FedAvg Convergence Training]")
     for rnd in range(convergence_rounds):
@@ -839,83 +754,53 @@ def run_convergence_experiment(output_dir: Path) -> None:
         server.aggregate(client_weights, client_losses)
 
         # 全局模型在每个客户端验证集上的评估
+        val_losses = []
         val_rmses = []
+        val_maes = []
+        val_mapes = []
         for client in fed_clients:
             client.model.load_state_dict(server.global_model.state_dict())
             val_loss = client.validate(client.val_loader)
-            val_rmses.append(float(np.sqrt(val_loss)))
+            val_losses.append(float(val_loss))
+            client.model.eval()
+            preds, truths = [], []
+            with torch.no_grad():
+                for x_val, y_val in client.val_loader:
+                    x_val = x_val.to(DEVICE).float()
+                    y_val = y_val.to(DEVICE).float()
+                    pred, _ = client.model(x_val)
+                    preds.append(pred.view(-1).detach().cpu())
+                    truths.append(y_val.view(-1).detach().cpu())
+            y_pred = torch.cat(preds).numpy()
+            y_true = torch.cat(truths).numpy()
+            diff = y_pred - y_true
+            val_rmses.append(float(np.sqrt(np.mean(diff ** 2))))
+            val_maes.append(float(np.mean(np.abs(diff))))
+            val_mapes.append(float(np.mean(np.abs(diff) / np.maximum(np.abs(y_true), MAPE_EPS)) * 100))
 
-        server.round_val_losses.append(float(np.mean(val_rmses)))
+        avg_val_loss = float(np.mean(val_losses))
+        avg_val_rmse = float(np.mean(val_rmses))
+        avg_val_mae = float(np.mean(val_maes))
+        avg_val_mape = float(np.mean(val_mapes))
+        server.round_val_losses.append(avg_val_loss)
 
-        round_data["round"].append(rnd + 1)
-        round_data["avg_train_loss"].append(server.round_losses[-1])
-        round_data["avg_val_rmse"].append(server.round_val_losses[-1])
-        for cid in range(num_clients):
-            round_data[f"client_{cid}_train_loss"].append(client_losses[cid])
-            round_data[f"client_{cid}_val_rmse"].append(val_rmses[cid])
+        round_rows.append({
+            "round": rnd + 1,
+            "method": "FedAvg",
+            "avg_train_loss": float(server.round_losses[-1]),
+            "avg_val_loss": avg_val_loss,
+            "avg_val_rmse": avg_val_rmse,
+            "avg_val_mae": avg_val_mae,
+            "avg_val_mape": avg_val_mape,
+        })
 
         print(f"  Round {rnd+1}/{convergence_rounds} | "
               f"Train Loss: {server.round_losses[-1]:.6f} | "
-              f"Val RMSE: {server.round_val_losses[-1]:.6f}")
+              f"Val RMSE: {avg_val_rmse:.6f}")
 
     # 保存收敛 CSV
-    df_conv = pd.DataFrame(round_data)
-    save_dataframe(df_conv, output_dir, "cnn_base_convergence.csv")
-
-    # 绘制收敛曲线
-    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
-
-    # 左图：全局平均 train loss 和 validation RMSE
-    ax = axes[0]
-    sns.lineplot(
-        x=round_data["round"],
-        y=round_data["avg_train_loss"],
-        ax=ax,
-        marker="o",
-        linewidth=2.0,
-        color=METHOD_PALETTE["FedAvg"],
-        label="Average train loss",
-    )
-    ax.set_xlabel("Communication Round")
-    ax.set_ylabel("Training loss (MSE)", color=METHOD_PALETTE["FedAvg"])
-    ax.tick_params(axis="y", labelcolor=METHOD_PALETTE["FedAvg"])
-
-    ax2 = ax.twinx()
-    sns.lineplot(
-        x=round_data["round"],
-        y=round_data["avg_val_rmse"],
-        ax=ax2,
-        marker="s",
-        linewidth=2.0,
-        color=METHOD_PALETTE["Independent"],
-        label="Average validation RMSE",
-    )
-    ax2.set_ylabel("Validation RMSE", color=METHOD_PALETTE["Independent"])
-    ax2.tick_params(axis="y", labelcolor=METHOD_PALETTE["Independent"])
-
-    lines1, labels1 = ax.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines1 + lines2, labels1 + labels2, loc="upper right")
-    ax.set_title("Global validation RMSE across communication rounds")
-
-    # 右图：每个 client 的 local training loss
-    ax = axes[1]
-    for cid in range(num_clients):
-        sns.lineplot(
-            x=round_data["round"],
-            y=round_data[f"client_{cid}_train_loss"],
-            ax=ax,
-            linewidth=2.0,
-            alpha=0.8,
-            color=CLIENT_PALETTE[cid % len(CLIENT_PALETTE)],
-            label=f"Client {cid}",
-        )
-    ax.set_xlabel("Communication Round")
-    ax.set_ylabel("Training loss (MSE)")
-    ax.set_title("Per-client local training loss")
-    ax.legend(fontsize=8)
-    fig.tight_layout()
-    save_figure(fig, output_dir, "cnn_base_convergence.png")
+    df_conv = pd.DataFrame(round_rows)
+    save_dataframe(df_conv, output_dir, "convergence_history.csv")
     print("[convergence] Done.\n")
 
 
@@ -925,17 +810,12 @@ def run_convergence_experiment(output_dir: Path) -> None:
 
 def run_project(workflow: str, output_dir: Path) -> None:
     """按工作流执行 CNN 基础实验。"""
-    try:
-        configure_academic_plot_style()
-        export_figure_index(output_dir)
-    except NameError:
-        pass
     ensure_output_dir(output_dir)
     print(f"[cnn_fed_base] workflow={workflow}, output={output_dir}")
     print(f"[cnn_fed_base] device={DEVICE}")
 
     if workflow in ("all", "data_viz"):
-        run_data_visualization_base(output_dir)
+        export_base_dataset_artifacts(output_dir)
 
     if workflow in ("all", "main"):
         run_main_experiment(output_dir)
@@ -955,13 +835,19 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         default="all",
         help="Workflow to execute (default: all).",
     )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=None,
+        help="Directory for exported experiment artifacts.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None):
     """程序主入口。"""
     args = parse_args(argv)
-    output_dir = SIMULATION_RESULTS_ROOT / "cnn_fed_base"
+    output_dir = Path(args.output_dir) if args.output_dir else SIMULATION_RESULTS_ROOT / "cnn_fed_base"
     run_project(args.workflow, output_dir)
 
 

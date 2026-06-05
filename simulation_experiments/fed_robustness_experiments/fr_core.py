@@ -1,14 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-联邦鲁棒性补充实验。
-
-本文件实现通信开销、客户端掉线、通信延迟、DP 噪声等鲁棒性实验。
-复用 cnn_fed_enhanced_experiments.py 的数据生成和模型训练框架。
-
-workflow:
-    all / communication_cost / client_dropout / communication_delay / gradient_noise
-
-输出目录: results/simulation_experiments/fed_robustness/
+联邦鲁棒性实验核心逻辑。
+负责真实通信开销统计、客户端掉线、通信延迟、梯度噪声实验与结果导出。
 """
 
 import argparse
@@ -16,518 +9,313 @@ import copy
 import os
 import random
 import sys
+from collections import OrderedDict
 from pathlib import Path
 from typing import Optional, Sequence
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-_cjk_candidates = ["Microsoft YaHei", "SimHei"]
-_available = {f.name for f in fm.fontManager.ttflist}
-_cjk_font = next((fn for fn in _cjk_candidates if fn in _available), "DejaVu Sans")
-plt.rcParams["font.sans-serif"] = [_cjk_font, "DejaVu Sans"]
-plt.rcParams["axes.unicode_minus"] = False
 import numpy as np
 import pandas as pd
-import seaborn as sns
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-
-plt.ioff()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR))
-from cnn_fed_enhanced_experiments.cfe_core import (
-    CLIENT_CONFIGS_BASE, generate_traffic_flow, set_global_seed,
-    build_noniid_client_configs,
-)
-from gcn_fed_enhanced_experiments.gfe_core import (
-    GCNEnhancedModel, build_fixed_adjacency, get_adj_matrix,
-)
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-TRAFFIC_MIN_VALUE = 0.0
-MAPE_EPS = 1.0
-NUM_NODES = 8; SEQ_LEN = 12; PRED_LEN = 1; BATCH_SIZE = 32; HIDDEN_DIM = 64
-COMM_ROUNDS = 10; LOCAL_EPOCHS = 2; LR = 0.001
+from simulation_experiments.cnn_fed_base.cfb_core import CNNBaseModel
+from simulation_experiments.cnn_fed_enhanced_experiments import cfe_core
+from simulation_experiments.gcn_fed_base.gfb_core import GCNBaseModel, generate_adjacency_matrix
+from simulation_experiments.gcn_fed_enhanced_experiments.gfe_core import GCNEnhancedModel
 
-METHOD_PALETTE = {
-    "FedAvg": "#DD8452",
-    "Proposed": "#55A868",
-}
+RESULTS_ROOT = PROJECT_ROOT / "results"
+SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
+DEVICE = cfe_core.DEVICE
 
-# ══════════════════════════════════════════════════════════════
-# 工具
-# ══════════════════════════════════════════════════════════════
+SEEDS = [42, 2024, 2025]
+ROBUST_COMM_ROUNDS = 3
+ROBUST_LOCAL_EPOCHS = 1
+DROPOUT_RATES = [0.0, 0.2, 0.4]
+DELAY_ROUNDS = [0, 1, 2]
+NOISE_STDS = [0.0, 0.02, 0.05]
+
+
+def set_global_seed(seed: int) -> None:
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 
 def ensure_output_dir(output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     return output_dir
 
 
-def save_figure(fig, output_dir: Path, file_name: str) -> Path:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    path = output_dir / file_name
-    fig.savefig(path, dpi=300, bbox_inches="tight", pad_inches=0.05)
-    import matplotlib.pyplot as _plt
-    _plt.close(fig)
-    print(f"Saved figure: {path}")
-    return path
-
-
-def save_dataframe(df, output_dir: Path, file_name: str) -> Path:
+def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
     path = ensure_output_dir(output_dir) / file_name
     df.to_csv(path, index=False, encoding="utf-8")
     print(f"[saved] {path}")
     return path
 
-def ensure_output_dir(d: Path) -> Path:
-    d.mkdir(parents=True, exist_ok=True); return d
 
-def compute_metrics(preds, truths):
-    mse = float(np.mean((preds - truths) ** 2))
-    mape = float(np.mean(np.abs(preds - truths) / np.maximum(np.abs(truths), MAPE_EPS))) * 100
-    return mse, float(np.sqrt(mse)), float(np.mean(np.abs(preds - truths))), mape
-
-# ══════════════════════════════════════════════════════════════
-# 模型参数量计算
-# ══════════════════════════════════════════════════════════════
-
-class CNNBaseModel(nn.Module):
-    """用于计算参数量的简化 CNN 模型（与 cnn_fed_base 中一致）。"""
-    def __init__(self, k=8, t=12, hd=64):
-        super().__init__()
-        self.cnn = nn.Sequential(
-            nn.Conv1d(k, hd, 3, padding=1), nn.GroupNorm(4, hd), nn.ReLU(),
-            nn.Conv1d(hd, hd, 3, padding=1), nn.GroupNorm(4, hd), nn.ReLU(),
-            nn.AdaptiveAvgPool1d(1), nn.Flatten())
-        self.lstm = nn.LSTM(k, hd // 2, 1, batch_first=True, bidirectional=True)
-        self.lstm_proj = nn.Linear(hd, hd)
-        self.mha = nn.MultiheadAttention(hd, 4, batch_first=True)
-        self.norm = nn.LayerNorm(hd)
-        self.head = nn.Sequential(nn.Linear(hd, 32), nn.LayerNorm(32), nn.ReLU(), nn.Linear(32, 1))
-
-    def forward(self, x):
-        return self.head(self.cnn(x)), None
+def count_model_stats(model: nn.Module):
+    num_parameters = sum(param.numel() for param in model.parameters())
+    parameter_size_mb = num_parameters * 4 / (1024 ** 2)
+    return num_parameters, parameter_size_mb
 
 
-def count_parameters(model):
-    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+def build_client_data(seed: int):
+    return cfe_core.build_client_data(
+        list(cfe_core.CLIENT_CONFIGS_BASE),
+        cfe_core.NUM_NODES,
+        cfe_core.SEQ_LEN,
+        cfe_core.PRED_LEN,
+        seed,
+    )
 
 
-# ══════════════════════════════════════════════════════════════
-# 数据处理（精简复用 CNN 增强框架）
-# ══════════════════════════════════════════════════════════════
-
-def build_sequences(data, sl, pl):
-    X, y = [], []
-    for i in range(len(data) - sl - pl + 1):
-        X.append(data[i:i + sl]); y.append(data[i + sl + pl - 1, 0])
-    return np.array(X, dtype=np.float32), np.array(y, dtype=np.float32)
-
-class TSDS(torch.utils.data.Dataset):
-    def __init__(self, X, y):
-        self.X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
-        self.y = torch.tensor(y, dtype=torch.float32)
-    def __len__(self): return len(self.X)
-    def __getitem__(self, i): return self.X[i], self.y[i]
-
-def build_client_data(cfgs, nn, sl, pl, seed):
-    buf = sl + pl + 10; B = 32; all_d = []
-    for cid, cfg in enumerate(cfgs):
-        data, _ = generate_traffic_flow(cfg, cfg["n_samples"] + buf, nn, seed + cid * 100)
-        X, y = build_sequences(data, sl, pl)
-        n = len(X); nt = int(n * 0.70); nv = int(n * 0.10)
-        Xt, yt = X[:nt], y[:nt]; Xv, yv = X[nt:nt + nv], y[nt:nt + nv]
-        Xtest, ytest = X[nt + nv:], y[nt + nv:]
-        xm = Xt.mean(axis=(0, 1), keepdims=True); xs = Xt.std(axis=(0, 1), keepdims=True) + 1e-8
-        ym, ys = yt.mean(), yt.std() + 1e-8
-        tl = DataLoader(TSDS((Xt - xm) / xs, (yt - ym) / ys), B, shuffle=True)
-        vl = DataLoader(TSDS((Xv - xm) / xs, (yv - ym) / ys), B, shuffle=False)
-        tl2 = DataLoader(TSDS((Xtest - xm) / xs, (ytest - ym) / ys), B, shuffle=False)
-        all_d.append({"cid": cid, "train_loader": tl, "val_loader": vl, "test_loader": tl2,
-                       "train_size": len(Xt), "y_mean": ym, "y_std": ys})
-    return all_d
-
-# ══════════════════════════════════════════════════════════════
-# 联邦客户端 / 服务端（带鲁棒性支持）
-# ══════════════════════════════════════════════════════════════
-
-def _make_cnn_model(): return CNNBaseModel(k=NUM_NODES, t=SEQ_LEN, hd=HIDDEN_DIM)
-
-class FedClient:
-    def __init__(self, cid, model, tl, vl, tl2, lr=1e-3):
-        self.cid = cid; self.model = model.to(DEVICE).float()
-        self.tl = tl; self.vl = vl; self.tl2 = tl2
-        self.crit = nn.MSELoss()
-        self.opt = torch.optim.Adam(self.model.parameters(), lr=lr, weight_decay=1e-4)
-
-    def train_epoch(self):
-        self.model.train(); total = 0.0
-        for x, y in self.tl:
-            x, y = x.to(DEVICE).float(), y.to(DEVICE).float()
-            self.opt.zero_grad()
-            pred, _ = self.model(x)
-            loss = self.crit(pred.view(-1), y)
-            loss.backward(); torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
-            self.opt.step(); total += loss.item() * x.shape[0]
-        return total / len(self.tl.dataset)
-
-    def train_local(self, epochs=2, gm=None):
-        if gm is not None: self.model.load_state_dict(gm.state_dict())
-        for _ in range(epochs): self.train_epoch()
-        return copy.deepcopy(self.model.state_dict())
-
-    def test_metrics(self, ym, ys):
-        self.model.eval(); p, t = [], []
-        with torch.no_grad():
-            for x, y in self.tl2:
-                x = x.to(DEVICE).float()
-                po, _ = self.model(x)
-                p.append(po.view(-1).cpu().numpy()); t.append(y.cpu().numpy())
-        p = np.concatenate(p); t = np.concatenate(t)
-        return compute_metrics(p * ys + ym, t * ys + ym)
+def build_clients(client_data, lr=cfe_core.LR):
+    criterion = nn.MSELoss()
+    feature_dim = client_data[0].get("k_dim", cfe_core.NUM_NODES)
+    return [
+        cfe_core.FederatedClient(
+            item["cid"],
+            cfe_core.CNNEnhancedModel(feature_dim, cfe_core.SEQ_LEN),
+            item["train_loader"],
+            item["val_loader"],
+            item["test_loader"],
+            criterion,
+            lr,
+        )
+        for item in client_data
+    ]
 
 
-class FedAvgServer:
-    def __init__(self, model, nc): self.gm = model.to(DEVICE).float(); self.nc = nc
-    def set_sizes(self, s): self.sizes = s
-
-    def aggregate(self, cw_list, active_indices=None):
-        if active_indices is None: active_idx = list(range(self.nc))
-        else: active_idx = list(active_indices)
-        sizes_active = [self.sizes[i] for i in active_idx]
-        tn = float(sum(sizes_active))
-        w = np.array(sizes_active) / tn
-        gd = self.gm.state_dict()
-        nd = {k: torch.zeros_like(v, dtype=torch.float32) for k, v in gd.items()}
-        for key in nd:
-            for j in range(len(cw_list)):
-                cw = cw_list[j][key].to(DEVICE, dtype=torch.float32)
-                nd[key] += cw * torch.tensor(float(w[j]), device=DEVICE, dtype=torch.float32)
-        self.gm.load_state_dict(nd)
-        return self.gm.state_dict()
+def compute_method_weights(method_key: str, losses, data_sizes):
+    data_sizes = np.array(data_sizes, dtype=float)
+    data_weights = data_sizes / np.maximum(data_sizes.sum(), 1e-8)
+    if method_key == "fedavg":
+        return data_weights
+    inv_loss = 1.0 / (np.array(losses, dtype=float) + 1e-8)
+    loss_weights = inv_loss / np.maximum(inv_loss.sum(), 1e-8)
+    if method_key == "proposed":
+        coeff_var = float(np.std(losses) / (np.mean(losses) + 1e-8))
+        data_loss_mix = 1.0 / (1.0 + coeff_var)
+        weights = 0.8 * (data_loss_mix * data_weights + (1.0 - data_loss_mix) * loss_weights) + 0.2 / len(losses)
+        return weights / np.maximum(weights.sum(), 1e-8)
+    return data_weights
 
 
-# ══════════════════════════════════════════════════════════════
-# Workflow 1: communication_cost
-# ══════════════════════════════════════════════════════════════
+def aggregate_states(global_model: nn.Module, state_dicts, losses, data_sizes, method_key: str):
+    weights = compute_method_weights(method_key, losses, data_sizes)
+    new_state = OrderedDict()
+    reference = global_model.state_dict()
+    for key in reference:
+        new_state[key] = sum(
+            state_dicts[idx][key].to(DEVICE).float() * float(weights[idx])
+            for idx in range(len(state_dicts))
+        )
+    return new_state
 
-def run_communication_cost_experiment(out: Path) -> None:
-    print("\n" + "=" * 60)
-    print("[communication_cost] Communication Overhead Estimation")
-    print("=" * 60)
-    ensure_output_dir(out)
 
-    cnn_m = _make_cnn_model()
-    gcn_m = GCNEnhancedModel(k=NUM_NODES, t=SEQ_LEN, hidden_dim=HIDDEN_DIM)
+def add_weight_noise(state_dict, noise_std: float):
+    if noise_std <= 0:
+        return state_dict
+    noisy_state = OrderedDict()
+    for key, value in state_dict.items():
+        if value.dtype.is_floating_point:
+            noisy_state[key] = value + torch.randn_like(value) * noise_std
+        else:
+            noisy_state[key] = value
+    return noisy_state
 
+
+def evaluate_clients(clients, client_data, method_name: str, seed: int, extra_field: str, extra_value):
     rows = []
-    for name, model in [("CNN/CCN", cnn_m), ("GCN", gcn_m)]:
-        n_params = count_parameters(model)
-        size_mb = n_params * 4 / (1024 ** 2)
-        for nc in [3, 5, 8, 10]:
-            for cr in [5, 10, 15]:
-                total_comm_mb = 2 * nc * size_mb * cr
-                rows.append({"model_type": name, "num_clients": nc,
-                             "communication_rounds": cr,
-                             "num_parameters": n_params,
-                             "parameter_size_mb": round(size_mb, 4),
-                             "total_communication_mb": round(total_comm_mb, 2)})
-
-    df = pd.DataFrame(rows)
-    save_dataframe(df, out, "fed_communication_cost.csv")
-    print("\n[communication_cost] Summary:")
-    print(df.head(8).to_string(index=False))
-
-    # Figure
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-    for m_idx, model_name in enumerate(["CNN/CCN", "GCN"]):
-        ax = axes[m_idx]; sub = df[df["model_type"] == model_name]
-        for cr in [5, 10, 15]:
-            d = sub[sub["communication_rounds"] == cr]
-            ax.plot(d["num_clients"], d["total_communication_mb"], "o-",
-                    label=f"Rounds={cr}", linewidth=2)
-        ax.set_xlabel("Num Clients"); ax.set_ylabel("Total Communication (MB)")
-        ax.set_title(f"{model_name} Communication Cost"); ax.legend()
-    plt.tight_layout()
-    save_figure(fig, out, "fed_robustness_communication_cost.png")
-    print("[communication_cost] Done.\n")
+    for client, item in zip(clients, client_data):
+        metrics = client.test_metrics()
+        preds = metrics["preds"] * item["y_std"] + item["y_mean"]
+        truths = metrics["truths"] * item["y_std"] + item["y_mean"]
+        mse, rmse, mae, mape = cfe_core.compute_metrics(preds, truths)
+        rows.append({
+            "seed": seed,
+            "method": method_name,
+            "client_id": item["cid"],
+            "mse": mse,
+            "rmse": rmse,
+            "mae": mae,
+            "mape": mape,
+            extra_field: extra_value,
+        })
+    return rows
 
 
-# ══════════════════════════════════════════════════════════════
-# Workflow 2: client_dropout
-# ══════════════════════════════════════════════════════════════
-
-def run_client_dropout_experiment(out: Path) -> None:
-    print("\n" + "=" * 60)
-    print("[client_dropout] Client Dropout Robustness")
-    print("=" * 60)
-    ensure_output_dir(out)
-    cfgs = list(CLIENT_CONFIGS_BASE); nc = len(cfgs)
-    drop_rates = [0.0, 0.1, 0.2, 0.3]
-    seed = 42
-
-    all_rows = []
-    cd = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
-    sizes = [d["train_size"] for d in cd]
-    for dr in drop_rates:
-        for agg_name in ["FedAvg", "Proposed"]:
-            print(f"  Dropout={dr} {agg_name}")
-            set_global_seed(seed)
-            rng = np.random.RandomState(seed + int(dr * 100))
-            clients = [FedClient(d["cid"], _make_cnn_model(), d["train_loader"],
-                                 d["val_loader"], d["test_loader"]) for d in cd]
-            server = FedAvgServer(_make_cnn_model(), nc)
-            server.set_sizes(sizes)
-
-            for rnd in range(COMM_ROUNDS):
-                cw_list = []
-                if dr > 0:
-                    n_active = max(1, int(nc * (1 - dr)))
-                    active = rng.choice(nc, n_active, replace=False)
-                else:
-                    active = np.arange(nc)
-                for cid in active:
-                    cw = clients[cid].train_local(epochs=LOCAL_EPOCHS, gm=server.gm)
-                    cw_list.append(cw)
-                server.aggregate(cw_list, active_indices=active)
-
-            for cid in range(nc):
-                clients[cid].model.load_state_dict(server.gm.state_dict())
-                mse, rmse, mae, mape = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
-                all_rows.append({"seed": seed, "model_type": "CNN/CCN",
-                                 "dropout_rate": dr, "method": agg_name,
-                                 "client_id": cid,
-                                 "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
-
-    df = pd.DataFrame(all_rows)
-    save_dataframe(df, out, "fed_client_dropout_metrics.csv")
-    agg = df.groupby(["dropout_rate", "method"]).agg(
-        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
-        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
-    save_dataframe(agg, out, "fed_client_dropout_summary.csv")
-    print("\n[client_dropout] Summary:\n", agg.to_string(index=False))
-
-    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
-    for method in ["FedAvg", "Proposed"]:
-        sub = agg[agg["method"] == method]
-        color = METHOD_PALETTE.get(method, "#333333")
-        axes[0].errorbar(sub["dropout_rate"], sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt="o-", capsize=5, label=method, color=color)
-        axes[1].errorbar(sub["dropout_rate"], sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt="s--", capsize=5, label=method, color=color)
-        axes[2].errorbar(sub["dropout_rate"], sub["mape_mean"], yerr=sub["mape_std"],
-                         fmt="^-.", capsize=5, label=method, color=color)
-    axes[0].set_xlabel("Dropout Rate"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs Dropout")
-    axes[1].set_xlabel("Dropout Rate"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Dropout")
-    axes[2].set_xlabel("Dropout Rate"); axes[2].set_ylabel("MAPE (%)"); axes[2].set_title("MAPE vs Dropout")
-    for ax in axes: ax.legend()
-    plt.tight_layout()
-    save_figure(fig, out, "fed_robustness_client_dropout.png")
-    print("[client_dropout] Done.\n")
+def build_summary(df: pd.DataFrame, group_cols):
+    summary = (
+        df.groupby(group_cols)[["rmse", "mae", "mape"]]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    summary.columns = [
+        "_".join([str(part) for part in col if part]).rstrip("_")
+        if isinstance(col, tuple) else col
+        for col in summary.columns
+    ]
+    return summary
 
 
-# ══════════════════════════════════════════════════════════════
-# Workflow 3: communication_delay
-# ══════════════════════════════════════════════════════════════
-# 策略：延迟的 client 使用上一轮的旧权重参与聚合。
-
-def run_communication_delay_experiment(out: Path) -> None:
-    print("\n" + "=" * 60)
-    print("[communication_delay] Communication Delay Robustness")
-    print("=" * 60)
-    ensure_output_dir(out)
-    cfgs = list(CLIENT_CONFIGS_BASE); nc = len(cfgs)
-    seed = 42
-    delay_rates = [0.0, 0.1, 0.2, 0.3]
-
-    all_rows = []
-    cd = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
-    sizes = [d["train_size"] for d in cd]
-    for dr in delay_rates:
-        for agg_name in ["FedAvg", "Proposed"]:
-            print(f"  Delay={dr} {agg_name}")
-            set_global_seed(seed)
-            rng = np.random.RandomState(seed + int(dr * 100))
-            clients = [FedClient(d["cid"], _make_cnn_model(), d["train_loader"],
-                                 d["val_loader"], d["test_loader"]) for d in cd]
-            server = FedAvgServer(_make_cnn_model(), nc)
-            server.set_sizes(sizes)
-            # 保存上一轮的权重
-            stale_weights = [copy.deepcopy(clients[i].model.state_dict()) for i in range(nc)]
-
-            for rnd in range(COMM_ROUNDS):
-                cw_list = []
-                active = []
-                for cid in range(nc):
-                    if dr > 0 and rng.rand() < dr:
-                        cw_list.append(copy.deepcopy(stale_weights[cid]))
-                        active.append(cid)
-                    else:
-                        cw = clients[cid].train_local(epochs=LOCAL_EPOCHS, gm=server.gm)
-                        cw_list.append(cw)
-                        stale_weights[cid] = copy.deepcopy(cw)
-                        active.append(cid)
-                server.aggregate(cw_list, active_indices=active)
-
-            for cid in range(nc):
-                clients[cid].model.load_state_dict(server.gm.state_dict())
-                mse, rmse, mae, mape = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
-                all_rows.append({"seed": seed, "model_type": "CNN/CCN",
-                                 "delay_rate": dr, "method": agg_name,
-                                 "client_id": cid,
-                                 "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
-
-    df = pd.DataFrame(all_rows)
-    save_dataframe(df, out, "fed_communication_delay_metrics.csv")
-    agg = df.groupby(["delay_rate", "method"]).agg(
-        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
-        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
-    save_dataframe(agg, out, "fed_communication_delay_summary.csv")
-    print("\n[communication_delay] Summary:\n", agg.to_string(index=False))
-
-    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
-    for method in ["FedAvg", "Proposed"]:
-        sub = agg[agg["method"] == method]
-        color = METHOD_PALETTE.get(method, "#333333")
-        axes[0].errorbar(sub["delay_rate"], sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt="o-", capsize=5, label=method, color=color)
-        axes[1].errorbar(sub["delay_rate"], sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt="s--", capsize=5, label=method, color=color)
-        axes[2].errorbar(sub["delay_rate"], sub["mape_mean"], yerr=sub["mape_std"],
-                         fmt="^-.", capsize=5, label=method, color=color)
-    axes[0].set_xlabel("Delay Rate"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs Delay")
-    axes[1].set_xlabel("Delay Rate"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Delay")
-    axes[2].set_xlabel("Delay Rate"); axes[2].set_ylabel("MAPE (%)"); axes[2].set_title("MAPE vs Delay")
-    for ax in axes: ax.legend()
-    plt.tight_layout()
-    save_figure(fig, out, "fed_robustness_communication_delay.png")
-    print("[communication_delay] Done.\n")
+def run_dropout_delay_noise_training(seed: int, method_key: str, dropout_rate=0.0, delay_rounds=0, noise_std=0.0):
+    set_global_seed(seed)
+    rng = np.random.RandomState(seed + int(dropout_rate * 100) + delay_rounds * 10 + int(noise_std * 1000))
+    client_data = build_client_data(seed)
+    clients = build_clients(client_data)
+    feature_dim = client_data[0].get("k_dim", cfe_core.NUM_NODES)
+    global_model = cfe_core.CNNEnhancedModel(feature_dim, cfe_core.SEQ_LEN).to(DEVICE)
+    state_history = [copy.deepcopy(global_model.state_dict())]
+    for _ in range(ROBUST_COMM_ROUNDS):
+        active_indices = [idx for idx in range(len(clients)) if rng.rand() >= dropout_rate]
+        if not active_indices:
+            active_indices = [int(rng.randint(0, len(clients)))]
+        delayed_count = 0 if delay_rounds <= 0 else max(1, len(active_indices) // 3)
+        delayed_indices = set(rng.choice(active_indices, size=delayed_count, replace=False).tolist()) if delayed_count else set()
+        local_states = []
+        local_losses = []
+        local_sizes = []
+        for idx in active_indices:
+            if idx in delayed_indices and delay_rounds > 0:
+                history_idx = max(0, len(state_history) - 1 - delay_rounds)
+                stale_model = cfe_core.CNNEnhancedModel(feature_dim, cfe_core.SEQ_LEN).to(DEVICE)
+                stale_model.load_state_dict(state_history[history_idx])
+                reference_model = stale_model
+            else:
+                reference_model = global_model
+            train_loss, local_state, _ = clients[idx].train_local(ROBUST_LOCAL_EPOCHS, reference_model)
+            local_states.append(add_weight_noise(local_state, noise_std))
+            local_losses.append(train_loss)
+            local_sizes.append(client_data[idx]["train_size"])
+        aggregated_state = aggregate_states(global_model, local_states, local_losses, local_sizes, method_key)
+        global_model.load_state_dict(aggregated_state)
+        state_history.append(copy.deepcopy(aggregated_state))
+        for client in clients:
+            client.model.load_state_dict(global_model.state_dict())
+    return clients, client_data
 
 
-# ══════════════════════════════════════════════════════════════
-# Workflow 4: gradient_noise (Gaussian parameter perturbation, NOT formal DP)
-# ══════════════════════════════════════════════════════════════
-
-def run_gradient_noise_experiment(out: Path) -> None:
-    print("\n" + "=" * 60)
-    print("[gradient_noise] Gaussian Parameter Perturbation Simulation")
-    print("(NOTE: lightweight Gaussian noise on uploaded parameters, NOT formal DP)")
-    print("=" * 60)
-    ensure_output_dir(out)
-    cfgs = list(CLIENT_CONFIGS_BASE); nc = len(cfgs)
-    seed = 42
-    sigmas = [0.0, 0.001, 0.005, 0.01]
-
-    all_rows = []
-    cd = build_client_data(cfgs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
-    sizes = [d["train_size"] for d in cd]
-    for sigma in sigmas:
-        for agg_name in ["FedAvg", "Proposed"]:
-            print(f"  sigma={sigma} {agg_name}")
-            set_global_seed(seed)
-            clients = [FedClient(d["cid"], _make_cnn_model(), d["train_loader"],
-                                 d["val_loader"], d["test_loader"]) for d in cd]
-            server = FedAvgServer(_make_cnn_model(), nc)
-            server.set_sizes(sizes)
-
-            for rnd in range(COMM_ROUNDS):
-                cw_list, cl_list = [], []
-                for cid in range(nc):
-                    cw = clients[cid].train_local(epochs=LOCAL_EPOCHS, gm=server.gm)
-                    if sigma > 0:
-                        noisy_cw = {}
-                        for key, val in cw.items():
-                            noise = torch.randn_like(val) * sigma
-                            noisy_cw[key] = val + noise
-                        cw_list.append(noisy_cw)
-                    else:
-                        cw_list.append(cw)
-                server.aggregate(cw_list)
-
-            for cid in range(nc):
-                clients[cid].model.load_state_dict(server.gm.state_dict())
-                mse, rmse, mae, mape = clients[cid].test_metrics(cd[cid]["y_mean"], cd[cid]["y_std"])
-                all_rows.append({"seed": seed, "model_type": "CNN/CCN",
-                                 "noise_sigma": sigma, "method": agg_name,
-                                 "client_id": cid,
-                                 "mse": mse, "rmse": rmse, "mae": mae, "mape": mape})
-
-    df = pd.DataFrame(all_rows)
-    save_dataframe(df, out, "fed_gradient_noise_metrics.csv")
-    agg = df.groupby(["noise_sigma", "method"]).agg(
-        rmse_mean=("rmse", "mean"), rmse_std=("rmse", "std"),
-        mae_mean=("mae", "mean"), mae_std=("mae", "std"),
-        mape_mean=("mape", "mean"), mape_std=("mape", "std")).reset_index()
-    save_dataframe(agg, out, "fed_gradient_noise_summary.csv")
-    print("\n[gradient_noise] Summary:\n", agg.to_string(index=False))
-
-    fig, axes = plt.subplots(1, 3, figsize=(20, 5))
-    for method in ["FedAvg", "Proposed"]:
-        sub = agg[agg["method"] == method]
-        color = METHOD_PALETTE.get(method, "#333333")
-        axes[0].errorbar(sub["noise_sigma"], sub["rmse_mean"], yerr=sub["rmse_std"],
-                         fmt="o-", capsize=5, label=method, color=color)
-        axes[1].errorbar(sub["noise_sigma"], sub["mae_mean"], yerr=sub["mae_std"],
-                         fmt="s--", capsize=5, label=method, color=color)
-        axes[2].errorbar(sub["noise_sigma"], sub["mape_mean"], yerr=sub["mape_std"],
-                         fmt="^-.", capsize=5, label=method, color=color)
-    axes[0].set_xlabel("Noise Sigma"); axes[0].set_ylabel("RMSE"); axes[0].set_title("RMSE vs Gaussian Noise")
-    axes[1].set_xlabel("Noise Sigma"); axes[1].set_ylabel("MAE"); axes[1].set_title("MAE vs Gaussian Noise")
-    axes[2].set_xlabel("Noise Sigma"); axes[2].set_ylabel("MAPE (%)"); axes[2].set_title("MAPE vs Gaussian Noise")
-    for ax in axes: ax.legend()
-    axes[2].text(0.5, -0.25, "(Lightweight Gaussian parameter perturbation, NOT formal DP)",
-                 ha="center", transform=axes[2].transAxes, fontsize=8, color="gray")
-    plt.tight_layout()
-    save_figure(fig, out, "fed_robustness_gradient_noise.png")
-    print("[gradient_noise] Done.\n")
+def run_communication_cost_experiment(output_dir: Path):
+    ensure_output_dir(output_dir)
+    adj_norm, _, _ = generate_adjacency_matrix()
+    model_specs = [
+        ("CNN-Base", CNNBaseModel(cfe_core.NUM_NODES, cfe_core.SEQ_LEN)),
+        ("CNN-Enhanced", cfe_core.CNNEnhancedModel(cfe_core.NUM_NODES, cfe_core.SEQ_LEN)),
+        ("GCN-Base", GCNBaseModel(cfe_core.NUM_NODES, cfe_core.SEQ_LEN, 64, adj_norm)),
+        ("GCN-Enhanced", GCNEnhancedModel(cfe_core.NUM_NODES, cfe_core.SEQ_LEN, 64, adj_norm)),
+    ]
+    rows = []
+    for model_type, model in model_specs:
+        num_parameters, parameter_size_mb = count_model_stats(model)
+        for num_clients in [3, 5, 8]:
+            for rounds in [3, 5]:
+                rows.append({
+                    "model_type": model_type,
+                    "num_clients": num_clients,
+                    "rounds": rounds,
+                    "num_parameters": num_parameters,
+                    "parameter_size_mb": parameter_size_mb,
+                    "total_communication_mb": parameter_size_mb * num_clients * rounds * 2,
+                })
+    save_dataframe(pd.DataFrame(rows), output_dir, "fed_communication_cost.csv")
 
 
-# ══════════════════════════════════════════════════════════════
-# 工作流调度
-# ══════════════════════════════════════════════════════════════
+def run_client_dropout_experiment(output_dir: Path):
+    ensure_output_dir(output_dir)
+    metric_rows = []
+    for seed in SEEDS:
+        for dropout_rate in DROPOUT_RATES:
+            for method_key, method_name in [("fedavg", "FedAvg"), ("proposed", "Proposed")]:
+                clients, client_data = run_dropout_delay_noise_training(
+                    seed=seed,
+                    method_key=method_key,
+                    dropout_rate=dropout_rate,
+                    delay_rounds=0,
+                    noise_std=0.0,
+                )
+                metric_rows.extend(evaluate_clients(clients, client_data, method_name, seed, "dropout_rate", dropout_rate))
+    metrics_df = pd.DataFrame(metric_rows)
+    save_dataframe(metrics_df, output_dir, "fed_client_dropout_metrics.csv")
+    save_dataframe(build_summary(metrics_df, ["dropout_rate", "method"]), output_dir, "fed_client_dropout_summary.csv")
 
-WORKFLOW_MAP = {
-    "all": ["communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
-    "communication_cost": ["communication_cost"],
-    "client_dropout": ["client_dropout"],
-    "communication_delay": ["communication_delay"],
-    "gradient_noise_scale": ["gradient_noise"],
-}
-WORKFLOW_FUNCTIONS = {
-    "communication_cost": run_communication_cost_experiment,
-    "client_dropout": run_client_dropout_experiment,
-    "communication_delay": run_communication_delay_experiment,
-    "gradient_noise": run_gradient_noise_experiment,
-}
 
-def run_project(workflow: str, out: Path) -> None:
-    try:
-        configure_academic_plot_style()
-        export_figure_index(out)
-    except NameError:
-        pass
-    ensure_output_dir(out)
-    print(f"[fed_robustness] workflow={workflow}, device={DEVICE}")
-    for step in WORKFLOW_MAP[workflow]:
-        print(f"\n>>> Running step: {step}")
-        WORKFLOW_FUNCTIONS[step](out)
-    print(f"\n[fed_robustness] All done. Results in: {out}")
+def run_communication_delay_experiment(output_dir: Path):
+    ensure_output_dir(output_dir)
+    metric_rows = []
+    for seed in SEEDS:
+        for delay_rounds in DELAY_ROUNDS:
+            for method_key, method_name in [("fedavg", "FedAvg"), ("proposed", "Proposed")]:
+                clients, client_data = run_dropout_delay_noise_training(
+                    seed=seed,
+                    method_key=method_key,
+                    dropout_rate=0.0,
+                    delay_rounds=delay_rounds,
+                    noise_std=0.0,
+                )
+                metric_rows.extend(evaluate_clients(clients, client_data, method_name, seed, "delay_rounds", delay_rounds))
+    metrics_df = pd.DataFrame(metric_rows)
+    save_dataframe(metrics_df, output_dir, "fed_communication_delay_metrics.csv")
+    save_dataframe(build_summary(metrics_df, ["delay_rounds", "method"]), output_dir, "fed_communication_delay_summary.csv")
 
-def parse_args(argv=None):
-    p = argparse.ArgumentParser(description="Federated Robustness Experiments")
-    p.add_argument("--workflow", choices=list(WORKFLOW_MAP.keys()), default="all")
-    return p.parse_args(argv)
 
-def main(argv=None):
+def run_gradient_noise_experiment(output_dir: Path):
+    ensure_output_dir(output_dir)
+    metric_rows = []
+    for seed in SEEDS:
+        for noise_std in NOISE_STDS:
+            for method_key, method_name in [("fedavg", "FedAvg"), ("proposed", "Proposed")]:
+                clients, client_data = run_dropout_delay_noise_training(
+                    seed=seed,
+                    method_key=method_key,
+                    dropout_rate=0.0,
+                    delay_rounds=0,
+                    noise_std=noise_std,
+                )
+                metric_rows.extend(evaluate_clients(clients, client_data, method_name, seed, "noise_std", noise_std))
+    metrics_df = pd.DataFrame(metric_rows)
+    save_dataframe(metrics_df, output_dir, "fed_gradient_noise_metrics.csv")
+    save_dataframe(build_summary(metrics_df, ["noise_std", "method"]), output_dir, "fed_gradient_noise_summary.csv")
+
+
+def run_project(workflow: str, output_dir: Path):
+    ensure_output_dir(output_dir)
+    workflow_map = {
+        "communication_cost": run_communication_cost_experiment,
+        "client_dropout": run_client_dropout_experiment,
+        "communication_delay": run_communication_delay_experiment,
+        "gradient_noise": run_gradient_noise_experiment,
+    }
+    selected = list(workflow_map) if workflow == "all" else [workflow]
+    for item in selected:
+        workflow_map[item](output_dir)
+
+
+def parse_args(argv: Optional[Sequence[str]] = None):
+    parser = argparse.ArgumentParser(description="Federated Robustness Core")
+    parser.add_argument(
+        "--workflow",
+        choices=["all", "communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
+        default="all",
+    )
+    parser.add_argument("--output_dir", type=str, default=None, help="Directory for exported experiment artifacts.")
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[Sequence[str]] = None):
     args = parse_args(argv)
-    root = SCRIPT_DIR.parent.parent / "results" / "simulation_experiments" / "fed_robustness"
-    run_project(args.workflow, root)
+    output_dir = Path(args.output_dir) if args.output_dir else SIMULATION_RESULTS_ROOT / "fed_robustness"
+    run_project(args.workflow, output_dir)
+
 
 if __name__ == "__main__":
     main()
