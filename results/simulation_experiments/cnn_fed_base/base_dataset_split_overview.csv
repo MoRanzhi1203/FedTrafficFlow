@@ -1,0 +1,4 @@
+split,num_samples,ratio
+Train,700,0.7
+Val,100,0.1
+Test,200,0.2

@@ -263,9 +263,10 @@ def export_graph_artifacts(output_dir: Path, client_configs, seed: int):
     save_dataframe(pd.DataFrame(interaction_rows), output_dir, "enhanced_gcn_congestion_delay_interaction.csv")
 
     summary_rows = []
-    for graph_name, (_, matrix) in graphs.items():
+    for graph_name, graph_value in graphs.items():
         if graph_name == "raw_series":
             continue
+        _, matrix = graph_value
         summary_rows.append({
             "graph_type": graph_name,
             "num_nodes": matrix.shape[0],

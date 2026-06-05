@@ -1,0 +1,6 @@
+client_id,distribution_type,traffic_pattern,sample_size,noise_level,base_flow,morning_mu,evening_mu,morning_amp,evening_amp,incident_prob
+0,normal,平稳通勤型,600,2.0,100.0,8.0,18.0,30.0,25.0,0.0
+1,student-t,波动型,500,5.0,80.0,7.5,17.5,35.0,30.0,0.0
+2,chi-square,偏态高流量型,700,8.0,120.0,8.5,18.5,25.0,20.0,0.0
+3,gaussian_mixture,双峰型,550,4.0,90.0,7.0,19.0,40.0,35.0,0.0
+4,log_normal,突发拥堵型,450,6.0,70.0,8.2,17.8,28.0,22.0,0.05

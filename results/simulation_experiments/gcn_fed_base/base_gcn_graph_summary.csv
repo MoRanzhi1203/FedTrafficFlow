@@ -1,2 +1,0 @@
-num_nodes,num_edges,avg_degree,max_degree,min_degree,adjacency_type
-8,10,2.1455368995666504,3.0426836013793945,1.0,fixed_line_with_cross

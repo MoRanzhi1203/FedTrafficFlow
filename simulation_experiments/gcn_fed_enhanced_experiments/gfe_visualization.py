@@ -64,7 +64,7 @@ def _plot_matrix(df: pd.DataFrame, title: str, output_dir: Path, filename: str, 
 def plot_enhanced_dataset_client_timeseries(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "enhanced_dataset_client_timeseries.csv")
     fig, ax = plt.subplots(figsize=(9, 4.8))
-    sns.lineplot(data=df, x="time_step", y="traffic_flow", hue="client_id", palette=CLIENT_PALETTE, ax=ax)
+    sns.lineplot(data=df, x="time_step", y="traffic_flow", hue="client_id", palette="tab10", ax=ax)
     ax.set_title("Enhanced Dataset Client Time Series")
     _save(fig, output_dir, "enhanced_dataset_client_timeseries.png")
 
@@ -72,7 +72,7 @@ def plot_enhanced_dataset_client_timeseries(input_dir: Path, output_dir: Path):
 def plot_enhanced_dataset_distribution(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "enhanced_dataset_distribution.csv")
     fig, ax = plt.subplots(figsize=(8, 4.8))
-    sns.boxplot(data=df, x="client_id", y="traffic_flow", palette=CLIENT_PALETTE, showfliers=False, ax=ax)
+    sns.boxplot(data=df, x="client_id", y="traffic_flow", hue="client_id", palette="tab10", showfliers=False, ax=ax, legend=False)
     ax.set_title("Enhanced Dataset Distribution")
     _save(fig, output_dir, "enhanced_dataset_distribution.png")
 
@@ -80,9 +80,9 @@ def plot_enhanced_dataset_distribution(input_dir: Path, output_dir: Path):
 def plot_enhanced_dataset_client_config(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "enhanced_dataset_client_config.csv")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
-    sns.barplot(data=df, x="client_id", y="sample_size", palette=CLIENT_PALETTE, ax=axes[0])
+    sns.barplot(data=df, x="client_id", y="sample_size", hue="client_id", palette="tab10", ax=axes[0], legend=False)
     axes[0].set_title("Client Sample Size")
-    sns.scatterplot(data=df, x="noise_level", y="base_flow", hue="client_id", palette=CLIENT_PALETTE, s=90, ax=axes[1])
+    sns.scatterplot(data=df, x="noise_level", y="base_flow", hue="client_id", palette="tab10", s=90, ax=axes[1])
     axes[1].set_title("Noise Level vs Base Flow")
     _save(fig, output_dir, "enhanced_dataset_client_config.png")
 
@@ -90,7 +90,7 @@ def plot_enhanced_dataset_client_config(input_dir: Path, output_dir: Path):
 def plot_enhanced_dataset_peak_pattern(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "enhanced_dataset_peak_pattern.csv")
     fig, ax = plt.subplots(figsize=(9, 4.8))
-    sns.lineplot(data=df, x="hour", y="traffic_flow", hue="client_id", palette=CLIENT_PALETTE, ax=ax)
+    sns.lineplot(data=df, x="hour", y="traffic_flow", hue="client_id", palette="tab10", ax=ax)
     ax.set_title("Peak Pattern by Client")
     _save(fig, output_dir, "enhanced_dataset_peak_pattern.png")
 
@@ -184,7 +184,7 @@ def plot_gcn_congestion_delay_distribution(input_dir: Path, output_dir: Path):
 def plot_gcn_congestion_delay_interaction(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "enhanced_gcn_congestion_delay_interaction.csv")
     fig, ax = plt.subplots(figsize=(8.5, 5))
-    sns.scatterplot(data=df, x="delay_rounds", y="strength", hue="source_node", palette=CLIENT_PALETTE, ax=ax)
+    sns.scatterplot(data=df, x="delay_rounds", y="strength", hue="source_node", palette="tab10", ax=ax)
     ax.set_title("Congestion Delay Interaction")
     _save(fig, output_dir, "enhanced_gcn_congestion_delay_interaction.png")
 
@@ -217,7 +217,7 @@ def plot_main_results(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "gcn_enhanced_main_metrics.csv")
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.8))
     for idx, metric_name in enumerate(["rmse", "mae", "mape"]):
-        sns.barplot(data=df, x="method", y=metric_name, ax=axes[idx], palette=METHOD_PALETTE)
+        sns.barplot(data=df, x="method", y=metric_name, hue="method", ax=axes[idx], palette=METHOD_PALETTE, legend=False)
         axes[idx].tick_params(axis="x", rotation=12)
         axes[idx].set_title(metric_name.upper())
     _save(fig, output_dir, "gcn_enhanced_main_results.png")
@@ -226,7 +226,7 @@ def plot_main_results(input_dir: Path, output_dir: Path):
 def plot_aggregation_results(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "gcn_enhanced_aggregation_metrics.csv")
     fig, ax = plt.subplots(figsize=(8.5, 4.8))
-    sns.barplot(data=df, x="method", y="rmse", palette=METHOD_PALETTE, ax=ax)
+    sns.barplot(data=df, x="method", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax, legend=False)
     ax.tick_params(axis="x", rotation=12)
     ax.set_title("Aggregation Strategy Comparison")
     _save(fig, output_dir, "gcn_enhanced_aggregation.png")

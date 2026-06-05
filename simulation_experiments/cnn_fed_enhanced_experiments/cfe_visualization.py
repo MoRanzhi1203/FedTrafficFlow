@@ -144,7 +144,7 @@ def plot_main_results(input_dir: Path, output_dir: Path):
     pred_df = read_required_csv(input_dir / "cnn_enhanced_main_predictions.csv")
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.8))
     for idx, metric_name in enumerate(["rmse", "mae", "mape"]):
-        sns.barplot(data=df, x="method", y=metric_name, ax=axes[idx], palette=METHOD_PALETTE)
+        sns.barplot(data=df, x="method", y=metric_name, hue="method", ax=axes[idx], palette=METHOD_PALETTE, legend=False)
         axes[idx].tick_params(axis="x", rotation=12)
         axes[idx].set_title(metric_name.upper())
     _save(fig, output_dir, "cnn_enhanced_main_comparison.png")
@@ -167,7 +167,7 @@ def plot_main_results(input_dir: Path, output_dir: Path):
 def plot_aggregation_results(input_dir: Path, output_dir: Path):
     df = read_required_csv(input_dir / "cnn_enhanced_aggregation_metrics.csv")
     fig, ax = plt.subplots(figsize=(8, 4.8))
-    sns.barplot(data=df, x="method", y="rmse", palette=METHOD_PALETTE, ax=ax)
+    sns.barplot(data=df, x="method", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax, legend=False)
     ax.set_title("Aggregation Strategy Comparison")
     ax.tick_params(axis="x", rotation=12)
     _save(fig, output_dir, "cnn_enhanced_aggregation.png")
