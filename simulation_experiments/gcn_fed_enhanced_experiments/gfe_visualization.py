@@ -15,8 +15,17 @@ import seaborn as sns
 
 plt.ioff()
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = SCRIPT_DIR.parent.parent
+DEFAULT_INPUT_DIR = PROJECT_ROOT / "results" / "simulation_experiments" / "gcn_fed_enhanced_experiments"
+DEFAULT_PAPER_READY_DIR = DEFAULT_INPUT_DIR / "paper_ready"
+FEDAVG_COLOR = "#0072B2"
+BAR_COLOR = "#0072B2"
+LINE_COLOR = "#0072B2"
+ACCENT_COLOR = "#D55E00"
+GRID_ALPHA = 0.35
 METHOD_PALETTE = {
-    "FedAvg": "#DD8452",
+    "FedAvg": FEDAVG_COLOR,
     "Proposed": "#55A868",
     "Independent": "#4C72B0",
     "Loss-weighted": "#C44E52",
@@ -32,6 +41,11 @@ def configure_plot_style():
         "savefig.dpi": 300,
         "axes.unicode_minus": False,
         "font.family": "DejaVu Sans",
+        "axes.titlesize": 11,
+        "axes.labelsize": 10,
+        "xtick.labelsize": 9,
+        "ytick.labelsize": 9,
+        "legend.fontsize": 10,
     })
 
 
@@ -49,21 +63,47 @@ def read_required_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
-def _save(fig, output_dir: Path, filename: str):
+def _save_fig(fig, output_dir: Path, filename: str):
     out_path = ensure_dir(output_dir) / filename
-    fig.savefig(out_path, bbox_inches="tight")
-
+    fig.savefig(out_path, bbox_inches="tight", dpi=300)
     pdf_path = out_path.with_suffix(".pdf")
-
     fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
+    return out_path, pdf_path
+
+
+def _style_axis(ax, rotate: int = 0):
+    ax.grid(axis="y", alpha=GRID_ALPHA, linewidth=0.8)
+    ax.set_axisbelow(True)
+    if rotate:
+        ax.tick_params(axis="x", rotation=rotate)
+    for spine in ["top", "right"]:
+        ax.spines[spine].set_visible(False)
+
+
+def _annotate_bar_values(ax, fmt: str = "{:.2f}", offset_ratio: float = 0.01):
+    patches = [patch for patch in ax.patches if patch.get_height() == patch.get_height()]
+    if not patches:
+        return
+    max_height = max(patch.get_height() for patch in patches)
+    offset = max(max_height * offset_ratio, 0.03)
+    for patch in patches:
+        height = patch.get_height()
+        ax.text(
+            patch.get_x() + patch.get_width() / 2,
+            height + offset,
+            fmt.format(height),
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
 
 
 def _plot_matrix(df: pd.DataFrame, title: str, output_dir: Path, filename: str, cmap="viridis", annot=False):
     fig, ax = plt.subplots(figsize=(6.5, 5.3))
     sns.heatmap(df, cmap=cmap, center=0 if cmap == "coolwarm" else None, annot=annot, fmt=".2f", ax=ax)
     ax.set_title(title)
-    _save(fig, output_dir, filename)
+    _save_fig(fig, output_dir, filename)
 
 
 def plot_enhanced_dataset_client_timeseries(input_dir: Path, output_dir: Path):
@@ -71,7 +111,7 @@ def plot_enhanced_dataset_client_timeseries(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(9, 4.8))
     sns.lineplot(data=df, x="time_step", y="traffic_flow", hue="client_id", palette="tab10", ax=ax)
     ax.set_title("Enhanced Dataset Client Time Series")
-    _save(fig, output_dir, "enhanced_dataset_client_timeseries.png")
+    _save_fig(fig, output_dir, "enhanced_dataset_client_timeseries.png")
 
 
 def plot_enhanced_dataset_distribution(input_dir: Path, output_dir: Path):
@@ -79,7 +119,7 @@ def plot_enhanced_dataset_distribution(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(8, 4.8))
     sns.boxplot(data=df, x="client_id", y="traffic_flow", hue="client_id", palette="tab10", showfliers=False, ax=ax, legend=False)
     ax.set_title("Enhanced Dataset Distribution")
-    _save(fig, output_dir, "enhanced_dataset_distribution.png")
+    _save_fig(fig, output_dir, "enhanced_dataset_distribution.png")
 
 
 def plot_enhanced_dataset_client_config(input_dir: Path, output_dir: Path):
@@ -89,7 +129,7 @@ def plot_enhanced_dataset_client_config(input_dir: Path, output_dir: Path):
     axes[0].set_title("Client Sample Size")
     sns.scatterplot(data=df, x="noise_level", y="base_flow", hue="client_id", palette="tab10", s=90, ax=axes[1])
     axes[1].set_title("Noise Level vs Base Flow")
-    _save(fig, output_dir, "enhanced_dataset_client_config.png")
+    _save_fig(fig, output_dir, "enhanced_dataset_client_config.png")
 
 
 def plot_enhanced_dataset_peak_pattern(input_dir: Path, output_dir: Path):
@@ -97,7 +137,7 @@ def plot_enhanced_dataset_peak_pattern(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(9, 4.8))
     sns.lineplot(data=df, x="hour", y="traffic_flow", hue="client_id", palette="tab10", ax=ax)
     ax.set_title("Peak Pattern by Client")
-    _save(fig, output_dir, "enhanced_dataset_peak_pattern.png")
+    _save_fig(fig, output_dir, "enhanced_dataset_peak_pattern.png")
 
 
 def plot_enhanced_dataset_incident_example(input_dir: Path, output_dir: Path):
@@ -110,7 +150,7 @@ def plot_enhanced_dataset_incident_example(input_dir: Path, output_dir: Path):
     if not incident_df.empty:
         ax.scatter(incident_df["time_step"], incident_df["traffic_flow"], color="#C44E52", s=16)
     ax.set_title(f"Incident Example (Client {rep_client_id})")
-    _save(fig, output_dir, "enhanced_dataset_incident_example.png")
+    _save_fig(fig, output_dir, "enhanced_dataset_incident_example.png")
 
 
 def plot_enhanced_dataset_client_correlation_matrix(input_dir: Path, output_dir: Path):
@@ -144,7 +184,7 @@ def plot_gcn_dynamic_adjacency_peak(input_dir: Path, output_dir: Path):
     axes[0].set_title("Morning Peak Dynamic Adjacency")
     sns.heatmap(evening, cmap="rocket", ax=axes[1])
     axes[1].set_title("Evening Peak Dynamic Adjacency")
-    _save(fig, output_dir, "enhanced_gcn_dynamic_peak.png")
+    _save_fig(fig, output_dir, "enhanced_gcn_dynamic_peak.png")
 
 
 def plot_gcn_dynamic_adjacency_offpeak(input_dir: Path, output_dir: Path):
@@ -160,7 +200,7 @@ def plot_gcn_fixed_dynamic_adjacency_comparison(input_dir: Path, output_dir: Pat
     axes[0].set_title("Fixed")
     sns.heatmap(dynamic_df, cmap="rocket", ax=axes[1])
     axes[1].set_title("Dynamic Morning Peak")
-    _save(fig, output_dir, "enhanced_gcn_fixed_dynamic_comparison.png")
+    _save_fig(fig, output_dir, "enhanced_gcn_fixed_dynamic_comparison.png")
 
 
 def plot_gcn_functional_similarity_matrix(input_dir: Path, output_dir: Path):
@@ -183,7 +223,7 @@ def plot_gcn_congestion_delay_distribution(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(8, 4.8))
     sns.histplot(data=df[df["source_node"] != df["target_node"]], x="delay_rounds", bins=4, ax=ax, color="#DD8452")
     ax.set_title("Congestion Delay Distribution")
-    _save(fig, output_dir, "enhanced_gcn_congestion_delay_distribution.png")
+    _save_fig(fig, output_dir, "enhanced_gcn_congestion_delay_distribution.png")
 
 
 def plot_gcn_congestion_delay_interaction(input_dir: Path, output_dir: Path):
@@ -191,7 +231,7 @@ def plot_gcn_congestion_delay_interaction(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(8.5, 5))
     sns.scatterplot(data=df, x="delay_rounds", y="strength", hue="source_node", palette="tab10", ax=ax)
     ax.set_title("Congestion Delay Interaction")
-    _save(fig, output_dir, "enhanced_gcn_congestion_delay_interaction.png")
+    _save_fig(fig, output_dir, "enhanced_gcn_congestion_delay_interaction.png")
 
 
 def plot_gcn_peak_graph_change(input_dir: Path, output_dir: Path):
@@ -207,7 +247,7 @@ def plot_gcn_fixed_vs_dynamic_training_comparison(input_dir: Path, output_dir: P
     sns.barplot(data=df, x="graph_type", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
     ax.set_title("Fixed vs Dynamic Training Comparison")
     ax.tick_params(axis="x", rotation=15)
-    _save(fig, output_dir, "gcn_enhanced_fixed_vs_dynamic.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_fixed_vs_dynamic.png")
 
 
 def plot_gcn_congestion_delay_training_comparison(input_dir: Path, output_dir: Path):
@@ -215,7 +255,7 @@ def plot_gcn_congestion_delay_training_comparison(input_dir: Path, output_dir: P
     fig, ax = plt.subplots(figsize=(9, 4.8))
     sns.barplot(data=df, x="graph_type", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
     ax.set_title("Congestion Delay Training Comparison")
-    _save(fig, output_dir, "gcn_enhanced_congestion_delay_comp.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_congestion_delay_comp.png")
 
 
 def plot_main_results(input_dir: Path, output_dir: Path):
@@ -225,7 +265,7 @@ def plot_main_results(input_dir: Path, output_dir: Path):
         sns.barplot(data=df, x="method", y=metric_name, hue="method", ax=axes[idx], palette=METHOD_PALETTE, legend=False)
         axes[idx].tick_params(axis="x", rotation=12)
         axes[idx].set_title(metric_name.upper())
-    _save(fig, output_dir, "gcn_enhanced_main_results.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_main_results.png")
 
 
 def plot_aggregation_results(input_dir: Path, output_dir: Path):
@@ -234,7 +274,7 @@ def plot_aggregation_results(input_dir: Path, output_dir: Path):
     sns.barplot(data=df, x="method", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax, legend=False)
     ax.tick_params(axis="x", rotation=12)
     ax.set_title("Aggregation Strategy Comparison")
-    _save(fig, output_dir, "gcn_enhanced_aggregation.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_aggregation.png")
 
 
 def plot_lambda_sensitivity(input_dir: Path, output_dir: Path):
@@ -242,7 +282,7 @@ def plot_lambda_sensitivity(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(8, 4.8))
     sns.lineplot(data=df, x="lambda_value", y="rmse", hue="method", marker="o", palette=METHOD_PALETTE, ax=ax)
     ax.set_title("Lambda Sensitivity")
-    _save(fig, output_dir, "gcn_enhanced_lambda.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_lambda.png")
 
 
 def plot_convergence(input_dir: Path, output_dir: Path):
@@ -252,7 +292,7 @@ def plot_convergence(input_dir: Path, output_dir: Path):
     axes[0].set_title("Average Training Loss")
     sns.lineplot(data=df, x="round", y="avg_val_rmse", hue="method", palette=METHOD_PALETTE, marker="s", ax=axes[1])
     axes[1].set_title("Average Validation RMSE")
-    _save(fig, output_dir, "gcn_enhanced_convergence.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_convergence.png")
 
 
 def plot_client_scale(input_dir: Path, output_dir: Path):
@@ -260,7 +300,7 @@ def plot_client_scale(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(8, 4.8))
     sns.lineplot(data=df, x="num_clients", y="rmse", hue="method", palette=METHOD_PALETTE, marker="o", ax=ax)
     ax.set_title("Client Scale Sensitivity")
-    _save(fig, output_dir, "gcn_enhanced_client_scale.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_client_scale.png")
 
 
 def plot_noniid(input_dir: Path, output_dir: Path):
@@ -268,7 +308,7 @@ def plot_noniid(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(8, 4.8))
     sns.barplot(data=df, x="noniid_level", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
     ax.set_title("Non-IID Sensitivity")
-    _save(fig, output_dir, "gcn_enhanced_noniid.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_noniid.png")
 
 
 def plot_client_metrics(input_dir: Path, output_dir: Path):
@@ -276,7 +316,7 @@ def plot_client_metrics(input_dir: Path, output_dir: Path):
     fig, ax = plt.subplots(figsize=(9, 4.8))
     sns.barplot(data=df, x="client_id", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
     ax.set_title("Per-client RMSE")
-    _save(fig, output_dir, "gcn_enhanced_client_metrics.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_client_metrics.png")
 
 
 def plot_peak_metrics(input_dir: Path, output_dir: Path):
@@ -285,7 +325,48 @@ def plot_peak_metrics(input_dir: Path, output_dir: Path):
     sns.barplot(data=df, x="period", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
     ax.tick_params(axis="x", rotation=15)
     ax.set_title("Peak-period Metrics")
-    _save(fig, output_dir, "gcn_enhanced_peak_metrics.png")
+    _save_fig(fig, output_dir, "gcn_enhanced_peak_metrics.png")
+
+
+def plot_paper_ready_fixed_vs_dynamic(input_dir: Path, output_dir: Path):
+    df = read_required_csv(input_dir / "gcn_enhanced_fixed_vs_dynamic_summary.csv")
+    df = df[df["method"] == "FedAvg"].copy()
+    if df.empty:
+        raise ValueError("No FedAvg rows found in gcn_enhanced_fixed_vs_dynamic_summary.csv.")
+    print("Single-seed preliminary result; interpret as trend evidence only.")
+    print("单种子初步结果，仅作为趋势性证据。")
+    graph_order = ["Fixed", "Dynamic-Morning", "Dynamic-Evening", "Dynamic-Offpeak"]
+    fig, ax = plt.subplots(figsize=(8.4, 4.8))
+    sns.barplot(
+        data=df,
+        x="graph_type",
+        y="mse_mean",
+        order=graph_order,
+        color=BAR_COLOR,
+        ax=ax,
+    )
+    ax.set_title("FedAvg with Fixed and Dynamic Graph Structures")
+    ax.set_xlabel("Graph Setting")
+    ax.set_ylabel("MSE")
+    _style_axis(ax, rotate=12)
+    fig.subplots_adjust(top=0.82)
+    _annotate_bar_values(ax, fmt="{:.2f}", offset_ratio=0.003)
+    fig.text(
+        0.5,
+        0.87,
+        "Single-seed preliminary result; interpret as trend evidence only.",
+        ha="center",
+        va="center",
+        fontsize=8.5,
+        color="#444444",
+    )
+    _save_fig(fig, output_dir, "gcn_fixed_vs_dynamic_fedavg_only.png")
+
+
+def run_paper_ready(input_dir: Path, output_dir: Path):
+    configure_plot_style()
+    ensure_dir(output_dir)
+    plot_paper_ready_fixed_vs_dynamic(input_dir, output_dir)
 
 
 def run_viz_project(workflow: str, input_dir: Path, output_dir: Path):
@@ -342,10 +423,20 @@ def main():
         ],
         default="all",
     )
-    parser.add_argument("--input_dir", required=True)
-    parser.add_argument("--output_dir", required=True)
+    parser.add_argument(
+        "--paper-ready",
+        action="store_true",
+        help="Generate FedAvg-only paper-ready PNG/PDF figures.",
+    )
+    parser.add_argument("--input_dir", default=str(DEFAULT_INPUT_DIR))
+    parser.add_argument("--output_dir", default=None)
     args = parser.parse_args()
-    run_viz_project(args.workflow, Path(args.input_dir), Path(args.output_dir))
+    input_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir) if args.output_dir else (DEFAULT_PAPER_READY_DIR if args.paper_ready else input_dir)
+    if args.paper_ready:
+        run_paper_ready(input_dir, output_dir)
+        return
+    run_viz_project(args.workflow, input_dir, output_dir)
 
 
 if __name__ == "__main__":

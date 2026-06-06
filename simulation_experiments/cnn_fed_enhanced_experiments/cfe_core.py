@@ -28,6 +28,8 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
+DEFAULT_ENHANCED_RESULTS_DIR = SIMULATION_RESULTS_ROOT / "cnn_fed_enhanced_experiments"
+DEFAULT_PAPER_READY_DIR = DEFAULT_ENHANCED_RESULTS_DIR / "paper_ready"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 TRAFFIC_MIN_VALUE = 0.0
 MAPE_EPS = 1.0
@@ -379,6 +381,125 @@ def _period_rows_from_results(results, method: str, seed: int):
                 "mape": mape,
             })
     return rows
+
+
+def _prepare_paper_ready_summary(summary_df: pd.DataFrame, scenario_col: str, experiment_name: str) -> pd.DataFrame:
+    ordered_columns = [
+        scenario_col,
+        "experiment_name",
+        "method",
+        "mse_mean",
+        "mse_std",
+        "rmse_mean",
+        "rmse_std",
+        "mae_mean",
+        "mae_std",
+        "mape_mean",
+        "mape_std",
+        "source_seeds",
+    ]
+    paper_ready_df = summary_df.copy()
+    paper_ready_df.insert(1, "experiment_name", experiment_name)
+    paper_ready_df["source_seeds"] = ",".join(str(seed) for seed in SEEDS)
+    return paper_ready_df[ordered_columns]
+
+
+def _run_and_export_fedavg_only(
+    output_dir: Path,
+    paper_ready_dir: Path,
+    scenario_values,
+    scenario_col: str,
+    metrics_filename: str,
+    summary_filename: str,
+    paper_ready_filename: str,
+    client_data_builder,
+    experiment_name: str,
+):
+    metric_rows = []
+    for seed in SEEDS:
+        for scenario_value in scenario_values:
+            client_data = client_data_builder(scenario_value, seed)
+            results, _ = run_federated_training(client_data, am="fedavg", seed=seed)
+            metric_rows.extend({
+                scenario_col: scenario_value,
+                "seed": seed,
+                "method": "FedAvg",
+                "client_id": result["client_id"],
+                "mse": result["mse"],
+                "rmse": result["rmse"],
+                "mae": result["mae"],
+                "mape": result["mape"],
+            } for result in results)
+
+    metrics_df = pd.DataFrame(metric_rows)
+    summary_df = _build_summary(metrics_df, [scenario_col, "method"])
+    save_dataframe(metrics_df, output_dir, metrics_filename)
+    save_dataframe(summary_df, output_dir, summary_filename)
+    paper_ready_df = _prepare_paper_ready_summary(summary_df, scenario_col, experiment_name)
+    save_dataframe(paper_ready_df, paper_ready_dir, paper_ready_filename)
+
+
+def run_missing_fedavg_workflows(
+    output_dir: Path = DEFAULT_ENHANCED_RESULTS_DIR,
+    paper_ready_dir: Path = DEFAULT_PAPER_READY_DIR,
+):
+    ensure_output_dir(output_dir)
+    ensure_output_dir(paper_ready_dir)
+
+    _run_and_export_fedavg_only(
+        output_dir=output_dir,
+        paper_ready_dir=paper_ready_dir,
+        scenario_values=["low", "medium", "high"],
+        scenario_col="noniid_level",
+        metrics_filename="cnn_enhanced_noniid_metrics_fedavg.csv",
+        summary_filename="cnn_enhanced_noniid_summary_fedavg.csv",
+        paper_ready_filename="cnn_enhanced_noniid_fedavg_only.csv",
+        client_data_builder=lambda noniid_level, seed: build_client_data(
+            build_noniid_client_configs(5, noniid_level),
+            NUM_NODES,
+            SEQ_LEN,
+            PRED_LEN,
+            seed,
+        ),
+        experiment_name="cnn_enhanced_noniid",
+    )
+
+    _run_and_export_fedavg_only(
+        output_dir=output_dir,
+        paper_ready_dir=paper_ready_dir,
+        scenario_values=[3, 5, 8],
+        scenario_col="num_clients",
+        metrics_filename="cnn_enhanced_client_scale_metrics_fedavg.csv",
+        summary_filename="cnn_enhanced_client_scale_summary_fedavg.csv",
+        paper_ready_filename="cnn_enhanced_client_scale_fedavg_only.csv",
+        client_data_builder=lambda num_clients, seed: build_client_data(
+            build_noniid_client_configs(num_clients),
+            NUM_NODES,
+            SEQ_LEN,
+            PRED_LEN,
+            seed,
+        ),
+        experiment_name="cnn_enhanced_client_scale",
+    )
+
+    _run_and_export_fedavg_only(
+        output_dir=output_dir,
+        paper_ready_dir=paper_ready_dir,
+        scenario_values=["flow_only", "flow_time", "flow_event", "flow_region", "full"],
+        scenario_col="feature_set",
+        metrics_filename="cnn_enhanced_feature_ablation_metrics_fedavg.csv",
+        summary_filename="cnn_enhanced_feature_ablation_summary_fedavg.csv",
+        paper_ready_filename="cnn_enhanced_feature_ablation_fedavg_only.csv",
+        client_data_builder=lambda feature_set, seed: build_feature_augmented_data(
+            CLIENT_CONFIGS_BASE,
+            feature_set,
+            NUM_NODES,
+            SEQ_LEN,
+            PRED_LEN,
+            seed,
+        ),
+        experiment_name="cnn_enhanced_feature_ablation",
+    )
 
 
 def run_federated_training(
@@ -837,12 +958,20 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         default=None,
         help="Directory for exported experiment artifacts.",
     )
+    parser.add_argument(
+        "--run-fedavg-missing",
+        action="store_true",
+        help="Generate missing FedAvg-only CSV artifacts for non-IID, client-scale, and feature-ablation experiments.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None):
     args = parse_args(argv)
-    output_dir = Path(args.output_dir) if args.output_dir else SIMULATION_RESULTS_ROOT / "cnn_fed_enhanced_experiments"
+    output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_ENHANCED_RESULTS_DIR
+    if args.run_fedavg_missing:
+        run_missing_fedavg_workflows(output_dir=output_dir, paper_ready_dir=output_dir / "paper_ready")
+        return
     run_project(args.workflow, output_dir)
 
 
