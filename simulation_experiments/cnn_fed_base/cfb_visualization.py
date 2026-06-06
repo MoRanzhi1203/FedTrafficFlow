@@ -29,9 +29,10 @@ SPLIT_PALETTE = ["#55A868", "#DD8452", "#C44E52"]
 def configure_plot_style():
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.2)
     plt.rcParams.update({
-        "figure.dpi": 300,
+        "figure.dpi": 150,
+        "savefig.dpi": 300,
         "axes.unicode_minus": False,
-        "font.family": "DejaVu Sans"
+        "font.family": "DejaVu Sans",
     })
 
 def ensure_dir(path: Path) -> Path:
@@ -67,6 +68,10 @@ def plot_base_dataset_client_timeseries(input_dir: Path, output_dir: Path) -> Pa
     
     out_path = ensure_dir(output_dir) / "base_dataset_client_timeseries.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     print(f"[viz] Saved: {out_path}")
     return out_path
@@ -86,6 +91,10 @@ def plot_base_dataset_node_heatmap(input_dir: Path, output_dir: Path) -> Path:
     
     out_path = ensure_dir(output_dir) / "base_dataset_node_heatmap.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     print(f"[viz] Saved: {out_path}")
     return out_path
@@ -112,6 +121,10 @@ def plot_base_dataset_client_boxplot(input_dir: Path, output_dir: Path) -> Path:
     
     out_path = ensure_dir(output_dir) / "base_dataset_client_boxplot.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     print(f"[viz] Saved: {out_path}")
     return out_path
@@ -133,6 +146,10 @@ def plot_base_dataset_split_overview(input_dir: Path, output_dir: Path) -> Path:
     
     out_path = ensure_dir(output_dir) / "base_dataset_split_overview.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     print(f"[viz] Saved: {out_path}")
     return out_path
@@ -151,6 +168,10 @@ def plot_base_dataset_client_sample_size(input_dir: Path, output_dir: Path) -> P
         
     out_path = ensure_dir(output_dir) / "base_dataset_client_sample_size.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     print(f"[viz] Saved: {out_path}")
     return out_path
@@ -167,6 +188,10 @@ def plot_main_metrics(input_dir: Path, output_dir: Path) -> Path:
         
     out_path = ensure_dir(output_dir) / "main_metrics_comparison.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     
     # 额外画预测对比图
@@ -214,6 +239,10 @@ def plot_convergence(input_dir: Path, output_dir: Path) -> Path:
     fig.tight_layout()
     out_path = ensure_dir(output_dir) / "convergence_curve.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     print(f"[viz] Saved: {out_path}")
     return out_path

@@ -24,7 +24,8 @@ METHOD_PALETTE = {
 def configure_plot_style():
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.15)
     plt.rcParams.update({
-        "figure.dpi": 300,
+        "figure.dpi": 150,
+        "savefig.dpi": 300,
         "axes.unicode_minus": False,
         "font.family": "DejaVu Sans",
     })
@@ -54,6 +55,10 @@ def plot_fed_robustness_communication_cost(input_dir: Path, output_dir: Path):
     ax.tick_params(axis="x", rotation=15)
     out_path = ensure_dir(output_dir) / "fed_robustness_communication_cost.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -66,6 +71,10 @@ def plot_fed_robustness_client_dropout(input_dir: Path, output_dir: Path):
     ax.set_title("Client Dropout Robustness")
     out_path = ensure_dir(output_dir) / "fed_robustness_client_dropout.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -78,6 +87,10 @@ def plot_fed_robustness_communication_delay(input_dir: Path, output_dir: Path):
     ax.set_title("Communication Delay Robustness")
     out_path = ensure_dir(output_dir) / "fed_robustness_communication_delay.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -90,6 +103,10 @@ def plot_fed_robustness_gradient_noise(input_dir: Path, output_dir: Path):
     ax.set_title("Gradient Noise Robustness")
     out_path = ensure_dir(output_dir) / "fed_robustness_gradient_noise.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 

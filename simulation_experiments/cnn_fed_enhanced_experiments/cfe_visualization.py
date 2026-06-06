@@ -28,7 +28,8 @@ CLIENT_PALETTE = sns.color_palette("tab10")
 def configure_plot_style():
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.15)
     plt.rcParams.update({
-        "figure.dpi": 300,
+        "figure.dpi": 150,
+        "savefig.dpi": 300,
         "axes.unicode_minus": False,
         "font.family": "DejaVu Sans",
     })
@@ -51,6 +52,10 @@ def read_required_csv(path: Path) -> pd.DataFrame:
 def _save(fig, output_dir: Path, filename: str):
     out_path = ensure_dir(output_dir) / filename
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 

@@ -26,7 +26,8 @@ SPLIT_PALETTE = ["#55A868", "#DD8452", "#C44E52"]
 def configure_plot_style():
     sns.set_theme(style="whitegrid", context="paper", font_scale=1.15)
     plt.rcParams.update({
-        "figure.dpi": 300,
+        "figure.dpi": 150,
+        "savefig.dpi": 300,
         "axes.unicode_minus": False,
         "font.family": "DejaVu Sans",
     })
@@ -63,6 +64,10 @@ def plot_base_dataset_client_timeseries(input_dir: Path, output_dir: Path):
     ax.legend(ncol=2, fontsize=8)
     out_path = ensure_dir(output_dir) / "base_dataset_client_timeseries.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -81,6 +86,10 @@ def plot_base_dataset_node_heatmap(input_dir: Path, output_dir: Path):
     ax.set_title(f"Node-Time Traffic Grid (Client {rep_client_id})")
     out_path = ensure_dir(output_dir) / "base_dataset_node_heatmap.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -93,6 +102,10 @@ def plot_base_dataset_client_boxplot(input_dir: Path, output_dir: Path):
     ax.set_title("Client Traffic Distribution")
     out_path = ensure_dir(output_dir) / "base_dataset_client_boxplot.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -114,6 +127,10 @@ def plot_base_dataset_split_overview(input_dir: Path, output_dir: Path):
     ax.legend(loc="upper right")
     out_path = ensure_dir(output_dir) / "base_dataset_split_overview.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -128,6 +145,10 @@ def plot_base_dataset_client_sample_size(input_dir: Path, output_dir: Path):
         ax.text(idx, row["num_samples"] + 2, int(row["num_samples"]), ha="center", fontsize=9)
     out_path = ensure_dir(output_dir) / "base_dataset_client_sample_size.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -138,6 +159,10 @@ def plot_base_graph_adjacency_matrix(input_dir: Path, output_dir: Path):
     ax.set_title("Base Graph Adjacency Matrix")
     out_path = ensure_dir(output_dir) / "base_graph_adjacency_matrix.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -151,6 +176,10 @@ def plot_main_metrics(input_dir: Path, output_dir: Path):
         axes[idx].tick_params(axis="x", rotation=12)
     out_path = ensure_dir(output_dir) / "main_metrics_comparison.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
     rep_client_id = int(pred_df["client_id"].min())
@@ -184,6 +213,10 @@ def plot_convergence(input_dir: Path, output_dir: Path):
     axes[1].set_ylabel("RMSE")
     out_path = ensure_dir(output_dir) / "convergence_curve.png"
     fig.savefig(out_path, bbox_inches="tight")
+
+    pdf_path = out_path.with_suffix(".pdf")
+
+    fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
 
 
