@@ -1,14 +1,14 @@
 Experiment: cnn_fed_enhanced_main
-Seeds: 42, 2024
+Seeds: 42, 1234, 2024, 3407, 5678
 
 Per-method statistics:
-- FedAvg: MAE=5.3200±0.3848, RMSE=6.8024±0.2352, MAPE=26.2727±0.9607, R2=0.2752±0.0334
-- Independent: MAE=5.9352±0.4862, RMSE=7.4915±0.5745, MAPE=22.4026±0.5150, R2=0.1123±0.0807
-- Proposed: MAE=5.3664±0.4941, RMSE=6.8805±0.3385, MAPE=26.2795±1.2212, R2=0.2677±0.0462
+- FedAvg: MAE=5.5194±0.5239, RMSE=7.1055±0.4556, MAPE=39.1712±23.7928, R2=0.3302±0.0604
+- Independent: MAE=6.0109±0.3545, RMSE=7.5618±0.4190, MAPE=44.6723±42.7436, R2=0.1894±0.0825
+- Proposed: MAE=5.4930±0.5214, RMSE=7.1025±0.4225, MAPE=38.2997±22.5504, R2=0.3318±0.0654
 
 Proposed vs FedAvg:
-- mae: mean improvement=-0.73% (std=2.00%), improved on 1/2 seeds
-- rmse: mean improvement=-1.10% (std=1.48%), improved on 1/2 seeds
-- mape: mean improvement=0.01% (std=0.99%), improved on 1/2 seeds
-- r2: mean improvement=-3.34% (std=5.06%), improved on 1/2 seeds
+- mae: mean improvement=0.47% (std=1.68%), improved on 4/5 seeds
+- rmse: mean improvement=0.01% (std=1.45%), improved on 3/5 seeds
+- mape: mean improvement=1.41% (std=1.75%), improved on 4/5 seeds
+- r2: mean improvement=0.18% (std=5.03%), improved on 3/5 seeds
 Proposed achieves average MAE/RMSE/MAPE gains across multiple seeds, showing that the performance gain is stable rather than caused by a single favorable seed.

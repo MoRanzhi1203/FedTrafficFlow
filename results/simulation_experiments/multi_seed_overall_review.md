@@ -27,26 +27,28 @@
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
 ### `cnn_fed_enhanced_experiments`
-- This round completed the target `5-seed` convergence experiment for the enhanced FedAvg setting.
-- Convergence CSV files exist and are non-empty: `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
-- Convergence figures exist: `convergence_curve.png`, `cnn_enhanced_multi_seed_convergence_curve.png`.
-- CSV audit for convergence: `FedAvg` and `Proposed` each cover all `5` seeds.
+- This directory has now completed both the target `5-seed` main experiment and the target `5-seed` convergence experiment for the enhanced FedAvg setting.
+- Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
+- Main and convergence figures exist: `cnn_enhanced_multi_seed_mean_std.png`, `cnn_enhanced_multi_seed_rmse_boxplot.png`, `cnn_enhanced_multi_seed_seed_pairing.png`, `convergence_curve.png`, `cnn_enhanced_multi_seed_convergence_curve.png`.
+- CSV audit: `FedAvg`, `Independent`, and `Proposed` each cover all `5` seeds in main results; `FedAvg` and `Proposed` each cover all `5` seeds in convergence results.
+- FedAvg-based enhanced setting main metrics: `RMSE=7.105499 +- 0.455617`, `MAE=5.519366 +- 0.523906`, `MAPE=39.171213 +- 23.792808`, `R2=0.330167 +- 0.060420`.
 - FedAvg-variant convergence at final round:
 - `FedAvg`: `Val RMSE=7.317845 +- 0.677953`, `Val MAE=5.401517 +- 0.489881`, `Val MAPE=21.254626 +- 30.641247`.
 - `Proposed` field is retained in code/results and should be described only as a `FedAvg-based enhanced setting`: `Val RMSE=7.314624 +- 0.680359`, `Val MAE=5.439574 +- 0.536262`, `Val MAPE=21.616120 +- 31.396728`.
-- Note: historical `multi_seed_raw_results.csv` and `multi_seed_summary.csv` remain non-empty but still reflect an earlier `2-seed` main-result run, which was not the target of this round.
-- Audit issues: no empty table in the targeted convergence outputs, no missing seed, no all-seed-identical anomaly.
+- Status update: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, and `multi_seed_improvement_summary.csv` have been refreshed from the earlier `2-seed` state to full `5-seed` outputs.
+- Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
 ### `gcn_fed_enhanced_experiments`
-- This round completed the target `5-seed` convergence experiment for the enhanced FedAvg setting.
-- Convergence CSV files exist and are non-empty: `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
-- Convergence figures exist: `convergence_curve.png`, `gcn_enhanced_multi_seed_convergence_curve.png`.
-- CSV audit for convergence: `FedAvg` and `Proposed` each cover all `5` seeds.
+- This directory has now completed both the target `5-seed` main experiment and the target `5-seed` convergence experiment for the enhanced FedAvg setting.
+- Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
+- Main and convergence figures exist: `gcn_enhanced_multi_seed_mean_std.png`, `gcn_enhanced_multi_seed_rmse_boxplot.png`, `gcn_enhanced_multi_seed_seed_pairing.png`, `convergence_curve.png`, `gcn_enhanced_multi_seed_convergence_curve.png`.
+- CSV audit: `FedAvg`, `Independent`, and `Proposed` each cover all `5` seeds in main results; `FedAvg` and `Proposed` each cover all `5` seeds in convergence results.
+- FedAvg variant main metrics: `RMSE=6.597295 +- 0.283484`, `MAE=4.986027 +- 0.341326`, `MAPE=37.811195 +- 22.980082`, `R2=0.386398 +- 0.036648`.
 - FedAvg-variant convergence at final round:
 - `FedAvg`: `Val RMSE=7.558264 +- 0.591032`, `Val MAE=5.689360 +- 0.353361`, `Val MAPE=23.389697 +- 35.407232`.
 - `Proposed` field is retained in code/results and should be described only as a `FedAvg variant`: `Val RMSE=7.410310 +- 0.600537`, `Val MAE=5.566195 +- 0.383980`, `Val MAPE=22.198595 +- 33.100592`.
-- Note: historical `multi_seed_raw_results.csv` and `multi_seed_summary.csv` remain non-empty but still reflect an earlier `2-seed` main-result run, which was not the target of this round.
-- Audit issues: no empty table in the targeted convergence outputs, no missing seed, no all-seed-identical anomaly.
+- Status update: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, and `multi_seed_improvement_summary.csv` have been refreshed from the earlier `2-seed` state to full `5-seed` outputs.
+- Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
 ### `fed_robustness_experiments`
 - This directory completed the target `5-seed` robustness experiment.
@@ -68,8 +70,8 @@
 - Audit issues: no empty table, no missing seed, no duplicate scenario-method seed coverage issue, no all-seed-identical anomaly.
 
 ## Cross-directory Findings
-- `cnn_fed_base`, `gcn_fed_base`, and `fed_robustness_experiments` completed their target `5-seed` outputs for this round.
-- `cnn_fed_enhanced_experiments` and `gcn_fed_enhanced_experiments` completed their target `5-seed` convergence outputs for this round.
+- `cnn_fed_base`, `gcn_fed_base`, `cnn_fed_enhanced_experiments`, `gcn_fed_enhanced_experiments`, and `fed_robustness_experiments` completed their target `5-seed` outputs for this round.
+- `cnn_fed_enhanced_experiments` and `gcn_fed_enhanced_experiments` now contain complete `5-seed` main results and `5-seed` convergence results.
 - Across all targeted `5-seed` outputs, the seed set is exactly `42, 2024, 3407, 1234, 5678`.
 - No targeted CSV is empty.
 - No targeted `method` or `scenario + method` group is missing seeds.
@@ -79,4 +81,4 @@
 - The core conclusion of this round is that `FedAvg` demonstrates reproducible behavior across multiple random seeds in federated traffic flow prediction.
 - On both CNN and GCN structures, `FedAvg` shows stable main metrics and a clear convergence trend when results are reported as `mean +- std`.
 - Under federated perturbation scenarios including client dropout, communication delay, and gradient noise, `FedAvg` preserves workable predictive performance with moderate variation across seeds.
-- Any `Proposed` field should be described only as a supplemental `FedAvg-based enhanced setting` or `FedAvg variant`, not as a replacement for `FedAvg`.
+- Enhanced experiments should not be interpreted as evidence that `Proposed` replaces `FedAvg`; instead, they should be described as supplemental analyses of `FedAvg-based enhanced settings` or `FedAvg variants` within the FedAvg framework.

@@ -1,5 +1,5 @@
 experiment,baseline_method,enhanced_method,metric,mean_improvement_percent,std_improvement_percent,improved_seed_count,total_seed_count,improved_seed_ratio,per_seed_improved
-cnn_fed_enhanced_main,FedAvg,Proposed,mae,-0.7265797218738745,2.001965385233643,1,2,0.5,"42:N,2024:Y"
-cnn_fed_enhanced_main,FedAvg,Proposed,rmse,-1.0966064501379142,1.4818958907667212,1,2,0.5,"42:N,2024:Y"
-cnn_fed_enhanced_main,FedAvg,Proposed,mape,0.01029093460649233,0.9916823919293041,1,2,0.5,"42:N,2024:Y"
-cnn_fed_enhanced_main,FedAvg,Proposed,r2,-3.3363353106488183,5.0584780627586685,1,2,0.5,"42:N,2024:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,mae,0.4681788630321212,1.6785619905479585,4,5,0.8,"42:N,1234:Y,2024:Y,3407:Y,5678:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,rmse,0.005622787529829499,1.4506008852557748,3,5,0.6,"42:N,1234:Y,2024:Y,3407:N,5678:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,mape,1.4128210758244109,1.7487630286229585,4,5,0.8,"42:N,1234:Y,2024:Y,3407:Y,5678:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,r2,0.17912204487454578,5.032380365788278,3,5,0.6,"42:N,1234:Y,2024:Y,3407:N,5678:Y"
