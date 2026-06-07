@@ -1,0 +1,13 @@
+Experiment: gcn_fed_enhanced_main
+Seeds: 42, 2024
+
+Per-method statistics:
+- FedAvg: MAE=4.7680±0.0616, RMSE=6.3180±0.1017, MAPE=24.2330±0.4126, R2=0.3590±0.0420
+- Independent: MAE=6.1242±0.1178, RMSE=7.6804±0.0811, MAPE=19.7307±3.5909, R2=0.0062±0.0797
+- Proposed: MAE=4.6847±0.0870, RMSE=6.2469±0.0680, MAPE=23.3283±0.0303, R2=0.3776±0.0334
+
+Proposed vs FedAvg:
+- mae: mean improvement=1.75% (std=0.56%), improved on 2/2 seeds
+- rmse: mean improvement=1.12% (std=0.52%), improved on 2/2 seeds
+- mape: mean improvement=3.71% (std=1.51%), improved on 2/2 seeds
+- r2: mean improvement=5.55% (std=3.04%), improved on 2/2 seeds

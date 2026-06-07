@@ -1,0 +1,12 @@
+Experiment: gcn_fed_base_main
+Seeds: 42, 1234, 2024, 3407, 5678
+
+Per-method statistics:
+- FedAvg: MAE=0.0105±0.0005, RMSE=0.0132±0.0006, MAPE=1.0467±0.0496, R2=-0.1114±0.1220
+- Independent: MAE=0.0124±0.0007, RMSE=0.0150±0.0007, MAPE=1.2388±0.0687, R2=-0.4900±0.1660
+
+FedAvg vs Independent:
+- mae: mean improvement=15.26% (std=5.90%), improved on 5/5 seeds
+- rmse: mean improvement=12.01% (std=6.90%), improved on 5/5 seeds
+- mape: mean improvement=15.26% (std=5.90%), improved on 5/5 seeds
+- r2: mean improvement=72.88% (std=34.24%), improved on 5/5 seeds

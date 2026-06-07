@@ -20,6 +20,7 @@ CNN/CCN 基础联邦仿真实验。
 
 import argparse
 import copy
+import math
 import os
 import random
 import sys
@@ -49,6 +50,7 @@ MAPE_EPS = 1.0
 # 基础实验共享超参数（与 gcn_fed_base.py 保持一致）
 # ──────────────────────────────────────────────────────────
 BASE_SEED = 42
+DEFAULT_MULTI_SEEDS = [42, 2024, 2025, 2026, 3407]
 BASE_NUM_CLIENTS = 5
 BASE_NUM_NODES = 8          # K: 交通传感器/观测节点数
 BASE_SEQ_LEN = 24           # T: 时间窗口长度（例如每小时一个点，共一天）
@@ -90,6 +92,194 @@ def save_dataframe(df, output_dir: Path, file_name: str) -> Path:
     df.to_csv(path, index=False, encoding="utf-8")
     print(f"[saved] {path}")
     return path
+
+
+def parse_bool_flag(value) -> bool:
+    """解析命令行中的布尔参数。"""
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y"}:
+        return True
+    if text in {"false", "0", "no", "n"}:
+        return False
+    raise ValueError(f"无法解析布尔参数: {value}")
+
+
+def parse_seed_list(seed_text: str | None) -> list[int]:
+    """将逗号分隔的 seed 字符串解析为整数列表。"""
+    if seed_text is None or not str(seed_text).strip():
+        return list(DEFAULT_MULTI_SEEDS)
+    seeds = [int(part.strip()) for part in str(seed_text).split(",") if part.strip()]
+    if not seeds:
+        raise ValueError("至少需要提供一个随机种子")
+    return seeds
+
+
+def compute_r2_score(preds: np.ndarray, truths: np.ndarray) -> float:
+    """计算 R2。"""
+    preds_arr = np.asarray(preds, dtype=np.float64)
+    truths_arr = np.asarray(truths, dtype=np.float64)
+    ss_res = float(np.sum((preds_arr - truths_arr) ** 2))
+    ss_tot = float(np.sum((truths_arr - truths_arr.mean()) ** 2))
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else 0.0
+    return 1.0 - ss_res / ss_tot
+
+
+def build_metric_summary_table(
+    raw_df: pd.DataFrame,
+    group_cols: list[str],
+    metric_cols: list[str],
+) -> pd.DataFrame:
+    """按实验/方法汇总 mean、std、95% CI、best、worst。"""
+    summary_rows = []
+    for group_values, group_df in raw_df.groupby(group_cols, dropna=False):
+        if not isinstance(group_values, tuple):
+            group_values = (group_values,)
+        base_record = dict(zip(group_cols, group_values))
+        n = len(group_df)
+        for metric in metric_cols:
+            if metric not in group_df.columns:
+                continue
+            values = group_df[metric].dropna().to_numpy(dtype=float)
+            if values.size == 0:
+                continue
+            mean_value = float(np.mean(values))
+            std_value = float(np.std(values, ddof=0))
+            ci95 = 1.96 * std_value / math.sqrt(values.size)
+            record = dict(base_record)
+            record.update({
+                "metric": metric,
+                "mean": mean_value,
+                "std": std_value,
+                "ci95_lower": float(mean_value - ci95),
+                "ci95_upper": float(mean_value + ci95),
+                "best": float(np.min(values)) if metric.lower() != "r2" else float(np.max(values)),
+                "worst": float(np.max(values)) if metric.lower() != "r2" else float(np.min(values)),
+                "n": int(values.size),
+            })
+            summary_rows.append(record)
+    return pd.DataFrame(summary_rows)
+
+
+def build_convergence_summary_table(
+    raw_df: pd.DataFrame,
+    group_cols: list[str],
+    metric_cols: list[str],
+) -> pd.DataFrame:
+    """按方法与轮次汇总多 seed 收敛统计。"""
+    summary_rows = []
+    for group_values, group_df in raw_df.groupby(group_cols, dropna=False):
+        if not isinstance(group_values, tuple):
+            group_values = (group_values,)
+        record = dict(zip(group_cols, group_values))
+        record["n"] = int(group_df["seed"].nunique()) if "seed" in group_df.columns else int(len(group_df))
+        for metric in metric_cols:
+            if metric not in group_df.columns:
+                continue
+            values = group_df[metric].dropna().to_numpy(dtype=float)
+            if values.size == 0:
+                continue
+            mean_value = float(np.mean(values))
+            std_value = float(np.std(values, ddof=0))
+            ci95 = 1.96 * std_value / math.sqrt(values.size)
+            record[f"{metric}_mean"] = mean_value
+            record[f"{metric}_std"] = std_value
+            record[f"{metric}_ci95_lower"] = float(mean_value - ci95)
+            record[f"{metric}_ci95_upper"] = float(mean_value + ci95)
+        summary_rows.append(record)
+    return pd.DataFrame(summary_rows)
+
+
+def build_improvement_rows(
+    raw_df: pd.DataFrame,
+    experiment_name: str,
+    baseline_method: str,
+    enhanced_method: str,
+    metric_cols: list[str],
+) -> pd.DataFrame:
+    """计算增强方法相对基线的多 seed 提升率。"""
+    baseline_df = raw_df[raw_df["method"] == baseline_method].set_index("seed")
+    enhanced_df = raw_df[raw_df["method"] == enhanced_method].set_index("seed")
+    common_seeds = sorted(set(baseline_df.index) & set(enhanced_df.index))
+    rows = []
+    for metric in metric_cols:
+        if metric not in baseline_df.columns or metric not in enhanced_df.columns:
+            continue
+        improvements = []
+        improved_flags = []
+        for seed in common_seeds:
+            baseline_value = float(baseline_df.loc[seed, metric])
+            enhanced_value = float(enhanced_df.loc[seed, metric])
+            if metric.lower() == "r2":
+                improvement = (enhanced_value - baseline_value) / max(abs(baseline_value), 1e-8) * 100.0
+            else:
+                improvement = (baseline_value - enhanced_value) / max(abs(baseline_value), 1e-8) * 100.0
+            improvements.append(improvement)
+            improved_flags.append(improvement > 0.0)
+        if not improvements:
+            continue
+        rows.append({
+            "experiment": experiment_name,
+            "baseline_method": baseline_method,
+            "enhanced_method": enhanced_method,
+            "metric": metric,
+            "mean_improvement_percent": float(np.mean(improvements)),
+            "std_improvement_percent": float(np.std(improvements, ddof=0)),
+            "improved_seed_count": int(np.sum(improved_flags)),
+            "total_seed_count": int(len(improved_flags)),
+            "improved_seed_ratio": float(np.mean(improved_flags)),
+            "per_seed_improved": ",".join(
+                f"{seed}:{'Y' if flag else 'N'}" for seed, flag in zip(common_seeds, improved_flags)
+            ),
+        })
+    return pd.DataFrame(rows)
+
+
+def write_stability_report(
+    output_dir: Path,
+    raw_df: pd.DataFrame,
+    improvement_df: pd.DataFrame,
+    experiment_name: str,
+    baseline_method: str,
+    enhanced_method: str,
+) -> Path:
+    """输出多 seed 文字稳定性报告。"""
+    report_path = ensure_output_dir(output_dir) / "multi_seed_stability_report.txt"
+    lines = [
+        f"Experiment: {experiment_name}",
+        f"Seeds: {', '.join(str(seed) for seed in sorted(raw_df['seed'].unique()))}",
+        "",
+        "Per-method statistics:",
+    ]
+    for method, method_df in raw_df.groupby("method"):
+        lines.append(
+            f"- {method}: "
+            f"MAE={method_df['mae'].mean():.4f}±{method_df['mae'].std(ddof=0):.4f}, "
+            f"RMSE={method_df['rmse'].mean():.4f}±{method_df['rmse'].std(ddof=0):.4f}, "
+            f"MAPE={method_df['mape'].mean():.4f}±{method_df['mape'].std(ddof=0):.4f}, "
+            f"R2={method_df['r2'].mean():.4f}±{method_df['r2'].std(ddof=0):.4f}"
+        )
+    if not improvement_df.empty:
+        lines.extend(["", f"{enhanced_method} vs {baseline_method}:"])
+        for _, row in improvement_df.iterrows():
+            lines.append(
+                f"- {row['metric']}: mean improvement={row['mean_improvement_percent']:.2f}% "
+                f"(std={row['std_improvement_percent']:.2f}%), "
+                f"improved on {int(row['improved_seed_count'])}/{int(row['total_seed_count'])} seeds"
+            )
+        lines.extend([
+            "",
+            (
+                f"{enhanced_method} achieves stable improvement over {baseline_method} across "
+                f"{int(improvement_df['total_seed_count'].max())} random seeds, indicating that the "
+                "observed gain is not caused by a single favorable seed."
+            ),
+        ])
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[saved] {report_path}")
+    return report_path
 
 
 def generate_base_traffic_data(
@@ -399,7 +589,17 @@ class FederatedClient:
         rmse = float(torch.sqrt((diff ** 2).mean()).item())
         mae = float(diff.abs().mean().item())
         mape = float((diff.abs() / torch.clamp(truths.abs(), min=MAPE_EPS)).mean().item()) * 100
-        return {"mse": mse, "rmse": rmse, "mae": mae, "mape": mape}
+        preds_np = preds.detach().cpu().numpy()
+        truths_np = truths.detach().cpu().numpy()
+        return {
+            "mse": mse,
+            "rmse": rmse,
+            "mae": mae,
+            "mape": mape,
+            "r2": compute_r2_score(preds_np, truths_np),
+            "preds": preds_np,
+            "truths": truths_np,
+        }
 
 
 class IndependentClient(FederatedClient):
@@ -541,15 +741,14 @@ def export_base_dataset_artifacts(output_dir: Path) -> None:
 # Workflow: main — Independent / FedAvg 主结果对比
 # ══════════════════════════════════════════════════════════
 
-def run_main_experiment(output_dir: Path) -> None:
-    """运行基础实验主结果：Independent vs FedAvg。"""
+def run_single_seed_main_experiment(seed: int):
+    """运行单个 seed 的基础实验主结果。"""
     print("\n" + "=" * 60)
-    print("[main] Running CNN FedAvg base experiment")
+    print(f"[main] Running CNN FedAvg base experiment | seed={seed}")
     print("=" * 60)
 
-    set_global_seed(BASE_SEED)
-    all_X, all_Y, _ = generate_base_traffic_data()
-    ensure_output_dir(output_dir)
+    set_global_seed(seed)
+    all_X, all_Y, _ = generate_base_traffic_data(seed=seed)
 
     criterion = nn.MSELoss()
     num_clients = BASE_NUM_CLIENTS
@@ -561,7 +760,7 @@ def run_main_experiment(output_dir: Path) -> None:
     train_sizes = []
     for cid in range(num_clients):
         X_train, Y_train, X_val, Y_val, X_test, Y_test = split_train_val_test(
-            all_X[cid], all_Y[cid]
+            all_X[cid], all_Y[cid], seed=seed + cid
         )
         train_sizes.append(len(X_train))
         train_loaders.append(DataLoader(TrafficDataset(X_train, Y_train),
@@ -638,62 +837,125 @@ def run_main_experiment(output_dir: Path) -> None:
     for cid in range(num_clients):
         fm = fed_metrics[cid]
         im = ind_metrics[cid]
-        rows.append({"method": "FedAvg", "client_id": cid,
-                     "mse": fm["mse"], "rmse": fm["rmse"], "mape": fm["mape"], "mae": fm["mae"]})
-        rows.append({"method": "Independent", "client_id": cid,
-                     "mse": im["mse"], "rmse": im["rmse"], "mape": im["mape"], "mae": im["mae"]})
-
-        for client, method_name in (
-            (fed_clients[cid], "FedAvg"),
-            (ind_clients[cid], "Independent"),
-        ):
-            client.model.eval()
-            with torch.no_grad():
-                X_test, Y_test = next(
-                    iter(
-                        DataLoader(
-                            client.test_loader.dataset,
-                            batch_size=len(client.test_loader.dataset),
-                        )
-                    )
-                )
-                X_test = X_test.to(DEVICE).float()
-                Y_test = Y_test.to(DEVICE).float()
-                pred, _ = client.model(X_test)
-                y_pred = pred.view(-1).detach().cpu().numpy()
-                y_true = Y_test.view(-1).detach().cpu().numpy()
-                for sample_id in range(min(200, len(y_true))):
-                    pred_rows.append({
-                        "method": method_name,
-                        "client_id": cid,
-                        "sample_id": sample_id,
-                        "y_true": float(y_true[sample_id]),
-                        "y_pred": float(y_pred[sample_id]),
-                    })
-
-    df_metrics = pd.DataFrame(rows)
-    save_dataframe(df_metrics, output_dir, "main_metrics.csv")
-
-    # 汇总表
-    summary_rows = []
-    for method in ["FedAvg", "Independent"]:
-        sub = df_metrics[df_metrics["method"] == method]
-        summary_rows.append({
-            "method": method,
-            "mse_mean": float(sub["mse"].mean()),
-            "mse_std": float(sub["mse"].std(ddof=0)),
-            "rmse_mean": float(sub["rmse"].mean()),
-            "rmse_std": float(sub["rmse"].std(ddof=0)),
-            "mape_mean": float(sub["mape"].mean()),
-            "mae_mean": float(sub["mae"].mean()),
-            "mape_std": float(sub["mape"].std(ddof=0)),
-            "mae_std": float(sub["mae"].std(ddof=0)),
+        rows.append({
+            "seed": seed,
+            "method": "FedAvg",
+            "client_id": cid,
+            "mse": fm["mse"],
+            "rmse": fm["rmse"],
+            "mape": fm["mape"],
+            "mae": fm["mae"],
+            "r2": fm["r2"],
         })
-    df_summary = pd.DataFrame(summary_rows)
-    save_dataframe(df_summary, output_dir, "main_summary.csv")
+        rows.append({
+            "seed": seed,
+            "method": "Independent",
+            "client_id": cid,
+            "mse": im["mse"],
+            "rmse": im["rmse"],
+            "mape": im["mape"],
+            "mae": im["mae"],
+            "r2": im["r2"],
+        })
 
-    save_dataframe(pd.DataFrame(pred_rows), output_dir, "main_predictions.csv")
+        for metrics, method_name in (
+            (fm, "FedAvg"),
+            (im, "Independent"),
+        ):
+            y_pred = metrics["preds"]
+            y_true = metrics["truths"]
+            for sample_id in range(min(200, len(y_true))):
+                pred_rows.append({
+                    "seed": seed,
+                    "method": method_name,
+                    "client_id": cid,
+                    "sample_id": sample_id,
+                    "y_true": float(y_true[sample_id]),
+                    "y_pred": float(y_pred[sample_id]),
+                })
 
+    client_metrics_df = pd.DataFrame(rows)
+    pred_df = pd.DataFrame(pred_rows)
+    seed_result_rows = []
+    for method in ["FedAvg", "Independent"]:
+        method_df = client_metrics_df[client_metrics_df["method"] == method]
+        seed_result_rows.append({
+            "experiment": "cnn_fed_base_main",
+            "method": method,
+            "seed": seed,
+            "mse": float(method_df["mse"].mean()),
+            "rmse": float(method_df["rmse"].mean()),
+            "mae": float(method_df["mae"].mean()),
+            "mape": float(method_df["mape"].mean()),
+            "r2": float(method_df["r2"].mean()),
+            "final_loss": (
+                float(server.round_losses[-1]) if method == "FedAvg" else float(np.mean([client.train_losses[-1] for client in ind_clients]))
+            ),
+            "best_loss": (
+                float(np.min(server.round_val_losses)) if method == "FedAvg" else float(np.mean([min(client.val_losses) for client in ind_clients]))
+            ),
+            "communication_rounds": int(FED_ROUNDS if method == "FedAvg" else 0),
+            "convergence_round": (
+                int(np.argmin(server.round_val_losses) + 1) if method == "FedAvg" else int(FED_ROUNDS * FED_LOCAL_EPOCHS)
+            ),
+        })
+    return client_metrics_df, pred_df, pd.DataFrame(seed_result_rows)
+
+
+def run_main_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+    """运行基础实验主结果：Independent vs FedAvg。"""
+    ensure_output_dir(output_dir)
+    target_seeds = list(seeds if multi_seed else seeds[:1])
+    metrics_frames = []
+    pred_frames = []
+    raw_frames = []
+    for seed in target_seeds:
+        print(f"[main] Running seed {seed} ...")
+        metric_df, pred_df, raw_df = run_single_seed_main_experiment(seed)
+        metrics_frames.append(metric_df)
+        pred_frames.append(pred_df)
+        raw_frames.append(raw_df)
+
+    df_metrics = pd.concat(metrics_frames, ignore_index=True)
+    df_preds = pd.concat(pred_frames, ignore_index=True)
+    df_raw = pd.concat(raw_frames, ignore_index=True)
+    save_dataframe(df_metrics, output_dir, "main_metrics.csv")
+    summary_df = (
+        df_metrics.groupby("method")[["mse", "rmse", "mae", "mape", "r2"]]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
+    summary_df.columns = [
+        "_".join([str(part) for part in col if part]).rstrip("_")
+        if isinstance(col, tuple) else col
+        for col in summary_df.columns
+    ]
+    save_dataframe(summary_df, output_dir, "main_summary.csv")
+    save_dataframe(df_preds, output_dir, "main_predictions.csv")
+    multi_seed_summary_df = build_metric_summary_table(
+        df_raw,
+        group_cols=["experiment", "method"],
+        metric_cols=["mae", "rmse", "mape", "r2", "final_loss", "best_loss", "communication_rounds", "convergence_round"],
+    )
+    improvement_df = build_improvement_rows(
+        df_raw,
+        experiment_name="cnn_fed_base_main",
+        baseline_method="Independent",
+        enhanced_method="FedAvg",
+        metric_cols=["mae", "rmse", "mape", "r2"],
+    )
+    save_dataframe(df_raw, output_dir, "multi_seed_raw_results.csv")
+    save_dataframe(multi_seed_summary_df, output_dir, "multi_seed_summary.csv")
+    if not improvement_df.empty:
+        save_dataframe(improvement_df, output_dir, "multi_seed_improvement_summary.csv")
+    write_stability_report(
+        output_dir=output_dir,
+        raw_df=df_raw,
+        improvement_df=improvement_df,
+        experiment_name="cnn_fed_base_main",
+        baseline_method="Independent",
+        enhanced_method="FedAvg",
+    )
     print("\n[main] Done.\n")
 
 
@@ -701,27 +963,24 @@ def run_main_experiment(output_dir: Path) -> None:
 # Workflow: convergence — 联邦训练收敛曲线
 # ══════════════════════════════════════════════════════════
 
-def run_convergence_experiment(output_dir: Path) -> None:
+def run_single_seed_convergence_experiment(seed: int, convergence_rounds: int = 15) -> pd.DataFrame:
     """输出基础训练收敛曲线。"""
     print("\n" + "=" * 60)
-    print("[convergence] Running CNN convergence analysis")
+    print(f"[convergence] Running CNN convergence analysis | seed={seed}")
     print("=" * 60)
 
-    set_global_seed(BASE_SEED)
-    all_X, all_Y, _ = generate_base_traffic_data()
-    ensure_output_dir(output_dir)
+    set_global_seed(seed)
+    all_X, all_Y, _ = generate_base_traffic_data(seed=seed)
 
     criterion = nn.MSELoss()
     num_clients = BASE_NUM_CLIENTS
     k = BASE_NUM_NODES
     t = BASE_SEQ_LEN
-    convergence_rounds = 15  # 更多轮次观察收敛
-
     train_loaders, val_loaders, test_loaders = [], [], []
     train_sizes = []
     for cid in range(num_clients):
         X_train, Y_train, X_val, Y_val, X_test, Y_test = split_train_val_test(
-            all_X[cid], all_Y[cid]
+            all_X[cid], all_Y[cid], seed=seed + cid
         )
         train_sizes.append(len(X_train))
         train_loaders.append(DataLoader(TrafficDataset(X_train, Y_train),
@@ -785,6 +1044,7 @@ def run_convergence_experiment(output_dir: Path) -> None:
         server.round_val_losses.append(avg_val_loss)
 
         round_rows.append({
+            "seed": seed,
             "round": rnd + 1,
             "method": "FedAvg",
             "avg_train_loss": float(server.round_losses[-1]),
@@ -798,9 +1058,26 @@ def run_convergence_experiment(output_dir: Path) -> None:
               f"Train Loss: {server.round_losses[-1]:.6f} | "
               f"Val RMSE: {avg_val_rmse:.6f}")
 
-    # 保存收敛 CSV
-    df_conv = pd.DataFrame(round_rows)
+    return pd.DataFrame(round_rows)
+
+
+def run_convergence_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+    """输出基础训练收敛曲线。"""
+    ensure_output_dir(output_dir)
+    target_seeds = list(seeds if multi_seed else seeds[:1])
+    frames = [run_single_seed_convergence_experiment(seed) for seed in target_seeds]
+    df_conv = pd.concat(frames, ignore_index=True)
     save_dataframe(df_conv, output_dir, "convergence_history.csv")
+    save_dataframe(df_conv, output_dir, "multi_seed_convergence_raw.csv")
+    save_dataframe(
+        build_convergence_summary_table(
+            df_conv,
+            group_cols=["method", "round"],
+            metric_cols=["avg_train_loss", "avg_val_loss", "avg_val_rmse"],
+        ),
+        output_dir,
+        "multi_seed_convergence_summary.csv",
+    )
     print("[convergence] Done.\n")
 
 
@@ -808,7 +1085,7 @@ def run_convergence_experiment(output_dir: Path) -> None:
 # 工作流调度
 # ══════════════════════════════════════════════════════════
 
-def run_project(workflow: str, output_dir: Path) -> None:
+def run_project(workflow: str, output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
     """按工作流执行 CNN 基础实验。"""
     ensure_output_dir(output_dir)
     print(f"[cnn_fed_base] workflow={workflow}, output={output_dir}")
@@ -818,10 +1095,10 @@ def run_project(workflow: str, output_dir: Path) -> None:
         export_base_dataset_artifacts(output_dir)
 
     if workflow in ("all", "main"):
-        run_main_experiment(output_dir)
+        run_main_experiment(output_dir, seeds=seeds, multi_seed=multi_seed)
 
     if workflow in ("all", "convergence"):
-        run_convergence_experiment(output_dir)
+        run_convergence_experiment(output_dir, seeds=seeds, multi_seed=multi_seed)
 
     print(f"\n[cnn_fed_base] All done. Results in: {output_dir}")
 
@@ -841,6 +1118,9 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         default=None,
         help="Directory for exported experiment artifacts.",
     )
+    parser.add_argument("--multi_seed", type=str, default="True", help="Whether to run multiple seeds.")
+    parser.add_argument("--seeds", type=str, default="42,2024,2025,2026,3407", help="Comma-separated random seeds.")
+    parser.add_argument("--single_seed", type=int, default=42, help="Single seed used when --multi_seed False.")
     return parser.parse_args(argv)
 
 
@@ -848,7 +1128,9 @@ def main(argv: Optional[Sequence[str]] = None):
     """程序主入口。"""
     args = parse_args(argv)
     output_dir = Path(args.output_dir) if args.output_dir else SIMULATION_RESULTS_ROOT / "cnn_fed_base"
-    run_project(args.workflow, output_dir)
+    multi_seed = parse_bool_flag(args.multi_seed)
+    seeds = parse_seed_list(args.seeds) if multi_seed else [int(args.single_seed)]
+    run_project(args.workflow, output_dir, seeds=seeds, multi_seed=multi_seed)
 
 
 if __name__ == "__main__":

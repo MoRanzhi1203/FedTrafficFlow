@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
@@ -63,6 +64,12 @@ def read_required_csv(path: Path) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def read_optional_csv(path: Path) -> pd.DataFrame | None:
+    if not path.exists():
+        return None
+    return pd.read_csv(path)
+
+
 def _save_fig(fig, output_dir: Path, filename: str):
     out_path = ensure_dir(output_dir) / filename
     fig.savefig(out_path, bbox_inches="tight", dpi=300)
@@ -70,6 +77,15 @@ def _save_fig(fig, output_dir: Path, filename: str):
     fig.savefig(pdf_path, bbox_inches="tight")
     plt.close(fig)
     return out_path, pdf_path
+
+
+def _save_fig_aliases(fig, output_dir: Path, filenames):
+    output_dir = ensure_dir(output_dir)
+    for filename in filenames:
+        out_path = output_dir / filename
+        fig.savefig(out_path, bbox_inches="tight", dpi=300)
+        fig.savefig(out_path.with_suffix(".pdf"), bbox_inches="tight")
+    plt.close(fig)
 
 
 def _style_axis(ax, rotate: int = 0):
@@ -266,6 +282,49 @@ def plot_main_results(input_dir: Path, output_dir: Path):
         axes[idx].tick_params(axis="x", rotation=12)
         axes[idx].set_title(metric_name.upper())
     _save_fig(fig, output_dir, "gcn_enhanced_main_results.png")
+    raw_df = read_optional_csv(input_dir / "multi_seed_raw_results.csv")
+    summary_df = read_optional_csv(input_dir / "multi_seed_summary.csv")
+    if raw_df is not None and summary_df is not None:
+        plot_multi_seed_metric_summary(summary_df, output_dir)
+        plot_multi_seed_metric_boxplot(raw_df, output_dir)
+        plot_multi_seed_seed_pairing(raw_df, output_dir)
+
+
+def plot_multi_seed_metric_summary(summary_df: pd.DataFrame, output_dir: Path):
+    target_df = summary_df[summary_df["metric"].isin(["mae", "rmse", "mape"])].copy()
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.8))
+    for ax, metric_name in zip(axes, ["mae", "rmse", "mape"]):
+        metric_df = target_df[target_df["metric"] == metric_name].sort_values("method")
+        x_pos = np.arange(len(metric_df))
+        ax.bar(
+            x_pos,
+            metric_df["mean"],
+            yerr=metric_df["std"],
+            color=[METHOD_PALETTE.get(m, "#4C72B0") for m in metric_df["method"]],
+            alpha=0.85,
+            capsize=5,
+        )
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(metric_df["method"], rotation=12)
+        ax.set_title(f"Multi-seed Mean ± Std: {metric_name.upper()}")
+    _save_fig(fig, output_dir, "gcn_enhanced_multi_seed_mean_std.png")
+
+
+def plot_multi_seed_metric_boxplot(raw_df: pd.DataFrame, output_dir: Path):
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
+    sns.boxplot(data=raw_df, x="method", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
+    if ax.legend_ is not None:
+        ax.legend_.remove()
+    sns.stripplot(data=raw_df, x="method", y="rmse", color="black", alpha=0.45, ax=ax)
+    ax.set_title("Multi-seed RMSE Distribution")
+    _save_fig(fig, output_dir, "gcn_enhanced_multi_seed_rmse_boxplot.png")
+
+
+def plot_multi_seed_seed_pairing(raw_df: pd.DataFrame, output_dir: Path):
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
+    sns.lineplot(data=raw_df.sort_values("seed"), x="seed", y="rmse", hue="method", style="method", markers=True, dashes=False, palette=METHOD_PALETTE, ax=ax)
+    ax.set_title("Per-seed RMSE Comparison")
+    _save_fig(fig, output_dir, "gcn_enhanced_multi_seed_seed_pairing.png")
 
 
 def plot_aggregation_results(input_dir: Path, output_dir: Path):
@@ -286,13 +345,36 @@ def plot_lambda_sensitivity(input_dir: Path, output_dir: Path):
 
 
 def plot_convergence(input_dir: Path, output_dir: Path):
-    df = read_required_csv(input_dir / "gcn_enhanced_convergence_history.csv")
+    summary_df = read_optional_csv(input_dir / "multi_seed_convergence_summary.csv")
+    raw_df = read_optional_csv(input_dir / "multi_seed_convergence_raw.csv")
+    history_df = read_optional_csv(input_dir / "gcn_enhanced_convergence_history.csv")
+    if summary_df is not None and not summary_df.empty:
+        fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
+        for method, method_df in summary_df.groupby("method"):
+            color = METHOD_PALETTE.get(method, "#4C72B0")
+            axes[0].plot(method_df["round"], method_df["avg_train_loss_mean"], color=color, label=method)
+            axes[0].fill_between(method_df["round"], method_df["avg_train_loss_mean"] - method_df["avg_train_loss_std"], method_df["avg_train_loss_mean"] + method_df["avg_train_loss_std"], color=color, alpha=0.18)
+            axes[1].plot(method_df["round"], method_df["avg_val_rmse_mean"], color=color, label=method)
+            axes[1].fill_between(method_df["round"], method_df["avg_val_rmse_mean"] - method_df["avg_val_rmse_std"], method_df["avg_val_rmse_mean"] + method_df["avg_val_rmse_std"], color=color, alpha=0.18)
+        axes[0].set_title("Multi-seed Convergence Mean ± Std: Train Loss")
+        axes[1].set_title("Multi-seed Convergence Mean ± Std: Validation RMSE")
+        axes[0].legend()
+        axes[1].legend()
+        _save_fig_aliases(fig, output_dir, [
+            "gcn_enhanced_convergence.png",
+            "gcn_enhanced_multi_seed_convergence_curve.png",
+            "convergence_curve.png",
+        ])
+        return
+    df = raw_df if raw_df is not None and not raw_df.empty else history_df
+    if df is None or df.empty:
+        raise FileNotFoundError("No convergence CSV found. Please run gfe_core.py --workflow convergence first.")
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
     sns.lineplot(data=df, x="round", y="avg_train_loss", hue="method", palette=METHOD_PALETTE, marker="o", ax=axes[0])
     axes[0].set_title("Average Training Loss")
     sns.lineplot(data=df, x="round", y="avg_val_rmse", hue="method", palette=METHOD_PALETTE, marker="s", ax=axes[1])
     axes[1].set_title("Average Validation RMSE")
-    _save_fig(fig, output_dir, "gcn_enhanced_convergence.png")
+    _save_fig_aliases(fig, output_dir, ["gcn_enhanced_convergence.png", "convergence_curve.png"])
 
 
 def plot_client_scale(input_dir: Path, output_dir: Path):

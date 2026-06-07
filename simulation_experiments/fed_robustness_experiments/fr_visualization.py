@@ -10,6 +10,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
@@ -17,7 +18,7 @@ plt.ioff()
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
-DEFAULT_INPUT_DIR = PROJECT_ROOT / "results" / "simulation_experiments" / "fed_robustness"
+DEFAULT_INPUT_DIR = PROJECT_ROOT / "results" / "simulation_experiments" / "fed_robustness_experiments"
 DEFAULT_PAPER_READY_DIR = DEFAULT_INPUT_DIR / "paper_ready"
 FEDAVG_COLOR = "#0072B2"
 BAR_COLOR = "#0072B2"
@@ -56,6 +57,12 @@ def read_required_csv(path: Path) -> pd.DataFrame:
             f"Required data file not found: {path}. "
             f"Please run the corresponding *_core.py workflow first."
         )
+    return pd.read_csv(path)
+
+
+def read_optional_csv(path: Path) -> pd.DataFrame | None:
+    if not path.exists():
+        return None
     return pd.read_csv(path)
 
 
@@ -123,6 +130,94 @@ def plot_fed_robustness_gradient_noise(input_dir: Path, output_dir: Path):
     ax.set_ylabel("RMSE Mean")
     ax.set_title("Gradient Noise Robustness")
     _save_fig(fig, output_dir, "fed_robustness_gradient_noise.png")
+
+
+def plot_multi_seed_robustness_mean_std_metrics(input_dir: Path, output_dir: Path):
+    summary_df = read_required_csv(input_dir / "multi_seed_summary.csv")
+    target_df = summary_df[summary_df["metric"].isin(["rmse", "mae", "mape"])].copy()
+    metrics = ["rmse", "mae", "mape"]
+    fig, axes = plt.subplots(1, 3, figsize=(18, 5.2), sharex=False)
+    scenarios = sorted(target_df["scenario"].unique())
+    for ax, metric_name in zip(axes, metrics):
+        metric_df = target_df[target_df["metric"] == metric_name].copy()
+        x_pos = np.arange(len(scenarios))
+        width = 0.38
+        for idx, method in enumerate(sorted(metric_df["method"].unique())):
+            method_df = metric_df[metric_df["method"] == method].set_index("scenario").reindex(scenarios).reset_index()
+            ax.bar(
+                x_pos + (idx - 0.5) * width,
+                method_df["mean"],
+                width=width,
+                yerr=method_df["std"],
+                color=METHOD_PALETTE.get(method, "#4C72B0"),
+                alpha=0.85,
+                capsize=4,
+                label=method,
+            )
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(scenarios, rotation=30, ha="right")
+        ax.set_title(f"Multi-seed Mean ± Std: {metric_name.upper()}")
+        ax.set_xlabel("Scenario")
+    axes[0].set_ylabel("Metric Value")
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        axes[0].legend(handles[:2], labels[:2], loc="best")
+    fig.tight_layout()
+    _save_fig(fig, output_dir, "multi_seed_robustness_mean_std_metrics.png")
+
+
+def plot_multi_seed_robustness_rmse_boxplot(input_dir: Path, output_dir: Path):
+    raw_df = read_required_csv(input_dir / "multi_seed_raw_results.csv")
+    fig, ax = plt.subplots(figsize=(12, 5.2))
+    sns.boxplot(data=raw_df, x="scenario", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax)
+    ax.set_title("Multi-seed Robustness RMSE Distribution")
+    ax.tick_params(axis="x", rotation=30)
+    _save_fig(fig, output_dir, "multi_seed_robustness_rmse_boxplot.png")
+
+
+def plot_multi_seed_robustness_seed_pairing(input_dir: Path, output_dir: Path):
+    raw_df = read_required_csv(input_dir / "multi_seed_raw_results.csv")
+    scenario_types = list(raw_df["scenario_type"].dropna().unique())
+    fig, axes = plt.subplots(len(scenario_types), 1, figsize=(10, 4.0 * len(scenario_types)), sharex=True)
+    if len(scenario_types) == 1:
+        axes = [axes]
+    for ax, scenario_type in zip(axes, scenario_types):
+        scenario_df = raw_df[raw_df["scenario_type"] == scenario_type].copy()
+        scenario_df["method_scenario"] = scenario_df["method"] + " | " + scenario_df["scenario"]
+        sns.lineplot(
+            data=scenario_df.sort_values("seed"),
+            x="seed",
+            y="rmse",
+            hue="method_scenario",
+            style="method",
+            markers=True,
+            dashes=False,
+            ax=ax,
+        )
+        ax.set_title(f"Per-seed RMSE Pairing: {scenario_type}")
+        ax.set_ylabel("RMSE")
+    axes[-1].set_xlabel("Seed")
+    fig.tight_layout()
+    _save_fig(fig, output_dir, "multi_seed_robustness_seed_pairing.png")
+
+
+def plot_multi_seed_robustness_improvement_heatmap(input_dir: Path, output_dir: Path):
+    improvement_df = read_required_csv(input_dir / "multi_seed_improvement_summary.csv")
+    matrix = improvement_df.pivot(index="scenario", columns="metric", values="mean_improvement_percent").sort_index()
+    fig, ax = plt.subplots(figsize=(8.5, 5.2))
+    sns.heatmap(matrix, annot=True, fmt=".2f", cmap="RdYlGn", center=0, ax=ax)
+    ax.set_title("Robustness Mean Improvement Heatmap (%)")
+    _save_fig(fig, output_dir, "multi_seed_robustness_improvement_heatmap.png")
+
+
+def plot_multi_seed_robustness_suite(input_dir: Path, output_dir: Path):
+    if read_optional_csv(input_dir / "multi_seed_raw_results.csv") is None:
+        return
+    plot_multi_seed_robustness_mean_std_metrics(input_dir, output_dir)
+    plot_multi_seed_robustness_rmse_boxplot(input_dir, output_dir)
+    plot_multi_seed_robustness_seed_pairing(input_dir, output_dir)
+    if read_optional_csv(input_dir / "multi_seed_improvement_summary.csv") is not None:
+        plot_multi_seed_robustness_improvement_heatmap(input_dir, output_dir)
 
 
 def _fedavg_summary(input_dir: Path, filename: str) -> pd.DataFrame:
@@ -221,6 +316,7 @@ def run_viz_project(workflow: str, input_dir: Path, output_dir: Path):
     configure_plot_style()
     ensure_dir(output_dir)
     funcs = {
+        "main": plot_multi_seed_robustness_suite,
         "communication_cost": plot_fed_robustness_communication_cost,
         "client_dropout": plot_fed_robustness_client_dropout,
         "communication_delay": plot_fed_robustness_communication_delay,
@@ -235,7 +331,7 @@ def main():
     parser = argparse.ArgumentParser(description="Federated Robustness Visualization")
     parser.add_argument(
         "--workflow",
-        choices=["all", "communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
+        choices=["all", "main", "communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
         default="all",
     )
     parser.add_argument(

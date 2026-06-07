@@ -6,6 +6,7 @@ GCN 基础联邦仿真实验核心逻辑。
 
 import argparse
 import copy
+import math
 import os
 import random
 from collections import OrderedDict
@@ -28,6 +29,7 @@ TRAFFIC_MIN_VALUE = 0.0
 MAPE_EPS = 1.0
 
 BASE_SEED = 42
+DEFAULT_MULTI_SEEDS = [42, 2024, 2025, 2026, 3407]
 BASE_NUM_CLIENTS = 5
 BASE_NUM_NODES = 8
 BASE_SEQ_LEN = 24
@@ -62,6 +64,154 @@ def save_dataframe(df: pd.DataFrame, output_dir: Path, file_name: str) -> Path:
     df.to_csv(path, index=False, encoding="utf-8")
     print(f"[saved] {path}")
     return path
+
+
+def parse_bool_flag(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y"}:
+        return True
+    if text in {"false", "0", "no", "n"}:
+        return False
+    raise ValueError(f"无法解析布尔参数: {value}")
+
+
+def parse_seed_list(seed_text: str | None) -> list[int]:
+    if seed_text is None or not str(seed_text).strip():
+        return list(DEFAULT_MULTI_SEEDS)
+    seeds = [int(part.strip()) for part in str(seed_text).split(",") if part.strip()]
+    if not seeds:
+        raise ValueError("至少需要提供一个随机种子")
+    return seeds
+
+
+def compute_r2_score(preds: np.ndarray, truths: np.ndarray) -> float:
+    preds_arr = np.asarray(preds, dtype=np.float64)
+    truths_arr = np.asarray(truths, dtype=np.float64)
+    ss_res = float(np.sum((preds_arr - truths_arr) ** 2))
+    ss_tot = float(np.sum((truths_arr - truths_arr.mean()) ** 2))
+    if ss_tot == 0.0:
+        return 1.0 if ss_res == 0.0 else 0.0
+    return 1.0 - ss_res / ss_tot
+
+
+def build_metric_summary_table(raw_df: pd.DataFrame, group_cols: list[str], metric_cols: list[str]) -> pd.DataFrame:
+    summary_rows = []
+    for group_values, group_df in raw_df.groupby(group_cols, dropna=False):
+        if not isinstance(group_values, tuple):
+            group_values = (group_values,)
+        base_record = dict(zip(group_cols, group_values))
+        for metric in metric_cols:
+            if metric not in group_df.columns:
+                continue
+            values = group_df[metric].dropna().to_numpy(dtype=float)
+            if values.size == 0:
+                continue
+            mean_value = float(np.mean(values))
+            std_value = float(np.std(values, ddof=0))
+            ci95 = 1.96 * std_value / math.sqrt(values.size)
+            record = dict(base_record)
+            record.update({
+                "metric": metric,
+                "mean": mean_value,
+                "std": std_value,
+                "ci95_lower": float(mean_value - ci95),
+                "ci95_upper": float(mean_value + ci95),
+                "best": float(np.min(values)) if metric.lower() != "r2" else float(np.max(values)),
+                "worst": float(np.max(values)) if metric.lower() != "r2" else float(np.min(values)),
+                "n": int(values.size),
+            })
+            summary_rows.append(record)
+    return pd.DataFrame(summary_rows)
+
+
+def build_convergence_summary_table(raw_df: pd.DataFrame, group_cols: list[str], metric_cols: list[str]) -> pd.DataFrame:
+    summary_rows = []
+    for group_values, group_df in raw_df.groupby(group_cols, dropna=False):
+        if not isinstance(group_values, tuple):
+            group_values = (group_values,)
+        record = dict(zip(group_cols, group_values))
+        record["n"] = int(group_df["seed"].nunique()) if "seed" in group_df.columns else int(len(group_df))
+        for metric in metric_cols:
+            if metric not in group_df.columns:
+                continue
+            values = group_df[metric].dropna().to_numpy(dtype=float)
+            if values.size == 0:
+                continue
+            mean_value = float(np.mean(values))
+            std_value = float(np.std(values, ddof=0))
+            ci95 = 1.96 * std_value / math.sqrt(values.size)
+            record[f"{metric}_mean"] = mean_value
+            record[f"{metric}_std"] = std_value
+            record[f"{metric}_ci95_lower"] = float(mean_value - ci95)
+            record[f"{metric}_ci95_upper"] = float(mean_value + ci95)
+        summary_rows.append(record)
+    return pd.DataFrame(summary_rows)
+
+
+def build_improvement_rows(raw_df: pd.DataFrame, experiment_name: str, baseline_method: str, enhanced_method: str, metric_cols: list[str]) -> pd.DataFrame:
+    baseline_df = raw_df[raw_df["method"] == baseline_method].set_index("seed")
+    enhanced_df = raw_df[raw_df["method"] == enhanced_method].set_index("seed")
+    common_seeds = sorted(set(baseline_df.index) & set(enhanced_df.index))
+    rows = []
+    for metric in metric_cols:
+        if metric not in baseline_df.columns or metric not in enhanced_df.columns:
+            continue
+        improvements = []
+        flags = []
+        for seed in common_seeds:
+            baseline_value = float(baseline_df.loc[seed, metric])
+            enhanced_value = float(enhanced_df.loc[seed, metric])
+            if metric.lower() == "r2":
+                improvement = (enhanced_value - baseline_value) / max(abs(baseline_value), 1e-8) * 100.0
+            else:
+                improvement = (baseline_value - enhanced_value) / max(abs(baseline_value), 1e-8) * 100.0
+            improvements.append(improvement)
+            flags.append(improvement > 0.0)
+        if improvements:
+            rows.append({
+                "experiment": experiment_name,
+                "baseline_method": baseline_method,
+                "enhanced_method": enhanced_method,
+                "metric": metric,
+                "mean_improvement_percent": float(np.mean(improvements)),
+                "std_improvement_percent": float(np.std(improvements, ddof=0)),
+                "improved_seed_count": int(np.sum(flags)),
+                "total_seed_count": int(len(flags)),
+                "improved_seed_ratio": float(np.mean(flags)),
+                "per_seed_improved": ",".join(f"{seed}:{'Y' if flag else 'N'}" for seed, flag in zip(common_seeds, flags)),
+            })
+    return pd.DataFrame(rows)
+
+
+def write_stability_report(output_dir: Path, raw_df: pd.DataFrame, improvement_df: pd.DataFrame, experiment_name: str, baseline_method: str, enhanced_method: str) -> Path:
+    report_path = ensure_output_dir(output_dir) / "multi_seed_stability_report.txt"
+    lines = [
+        f"Experiment: {experiment_name}",
+        f"Seeds: {', '.join(str(seed) for seed in sorted(raw_df['seed'].unique()))}",
+        "",
+        "Per-method statistics:",
+    ]
+    for method, method_df in raw_df.groupby("method"):
+        lines.append(
+            f"- {method}: "
+            f"MAE={method_df['mae'].mean():.4f}±{method_df['mae'].std(ddof=0):.4f}, "
+            f"RMSE={method_df['rmse'].mean():.4f}±{method_df['rmse'].std(ddof=0):.4f}, "
+            f"MAPE={method_df['mape'].mean():.4f}±{method_df['mape'].std(ddof=0):.4f}, "
+            f"R2={method_df['r2'].mean():.4f}±{method_df['r2'].std(ddof=0):.4f}"
+        )
+    if not improvement_df.empty:
+        lines.extend(["", f"{enhanced_method} vs {baseline_method}:"])
+        for _, row in improvement_df.iterrows():
+            lines.append(
+                f"- {row['metric']}: mean improvement={row['mean_improvement_percent']:.2f}% "
+                f"(std={row['std_improvement_percent']:.2f}%), "
+                f"improved on {int(row['improved_seed_count'])}/{int(row['total_seed_count'])} seeds"
+            )
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[saved] {report_path}")
+    return report_path
 
 
 def compute_metrics(preds: np.ndarray, truths: np.ndarray):
@@ -302,6 +452,7 @@ class FederatedClient:
             "rmse": rmse,
             "mae": mae,
             "mape": mape,
+            "r2": compute_r2_score(preds_arr, truths_arr),
             "preds": preds_arr,
             "truths": truths_arr,
         }
@@ -479,15 +630,18 @@ def run_federated_training(seed: int, record_convergence: bool = False):
         client.model.load_state_dict(server.global_model.state_dict())
         metrics = client.evaluate()
         metric_rows.append({
+            "seed": seed,
             "method": "FedAvg",
             "client_id": split["client_id"],
             "mse": metrics["mse"],
             "rmse": metrics["rmse"],
             "mae": metrics["mae"],
             "mape": metrics["mape"],
+            "r2": metrics["r2"],
         })
         for sample_id in range(min(200, len(metrics["preds"]))):
             pred_rows.append({
+                "seed": seed,
                 "method": "FedAvg",
                 "client_id": split["client_id"],
                 "sample_id": sample_id,
@@ -528,15 +682,18 @@ def run_independent_training(seed: int):
         truths_arr = np.concatenate(truths)
         mse, rmse, mae, mape = compute_metrics(preds_arr, truths_arr)
         metric_rows.append({
+            "seed": seed,
             "method": "Independent",
             "client_id": client["client_id"],
             "mse": mse,
             "rmse": rmse,
             "mae": mae,
             "mape": mape,
+            "r2": compute_r2_score(preds_arr, truths_arr),
         })
         for sample_id in range(min(200, len(preds_arr))):
             pred_rows.append({
+                "seed": seed,
                 "method": "Independent",
                 "client_id": client["client_id"],
                 "sample_id": sample_id,
@@ -546,42 +703,119 @@ def run_independent_training(seed: int):
     return pd.DataFrame(metric_rows), pd.DataFrame(pred_rows)
 
 
-def run_main_experiment(output_dir: Path) -> None:
-    fed_metrics, fed_preds, _ = run_federated_training(BASE_SEED, record_convergence=False)
-    independent_metrics, independent_preds = run_independent_training(BASE_SEED)
+def run_single_seed_main_experiment(seed: int):
+    fed_metrics, fed_preds, fed_conv = run_federated_training(seed, record_convergence=False)
+    independent_metrics, independent_preds = run_independent_training(seed)
     metrics_df = pd.concat([independent_metrics, fed_metrics], ignore_index=True)
     preds_df = pd.concat([independent_preds, fed_preds], ignore_index=True)
+    raw_rows = []
+    for method in metrics_df["method"].unique():
+        method_df = metrics_df[metrics_df["method"] == method]
+        raw_rows.append({
+            "experiment": "gcn_fed_base_main",
+            "method": method,
+            "seed": seed,
+            "mse": float(method_df["mse"].mean()),
+            "rmse": float(method_df["rmse"].mean()),
+            "mae": float(method_df["mae"].mean()),
+            "mape": float(method_df["mape"].mean()),
+            "r2": float(method_df["r2"].mean()),
+            "final_loss": float(fed_conv["avg_train_loss"].iloc[-1]) if method == "FedAvg" and not fed_conv.empty else np.nan,
+            "best_loss": float(fed_conv["avg_val_loss"].min()) if method == "FedAvg" and not fed_conv.empty else np.nan,
+            "communication_rounds": int(FED_ROUNDS if method == "FedAvg" else 0),
+            "convergence_round": int(fed_conv["avg_val_rmse"].idxmin() + 1) if method == "FedAvg" and not fed_conv.empty else int(FED_ROUNDS * FED_LOCAL_EPOCHS),
+        })
+    return metrics_df, preds_df, pd.DataFrame(raw_rows)
+
+
+def run_main_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+    target_seeds = list(seeds if multi_seed else seeds[:1])
+    metrics_frames = []
+    pred_frames = []
+    raw_frames = []
+    for seed in target_seeds:
+        metrics_df, preds_df, raw_df = run_single_seed_main_experiment(seed)
+        metrics_frames.append(metrics_df)
+        pred_frames.append(preds_df)
+        raw_frames.append(raw_df)
+    metrics_df = pd.concat(metrics_frames, ignore_index=True)
+    preds_df = pd.concat(pred_frames, ignore_index=True)
+    raw_df = pd.concat(raw_frames, ignore_index=True)
     save_dataframe(metrics_df, output_dir, "main_metrics.csv")
     save_dataframe(build_summary(metrics_df), output_dir, "main_summary.csv")
     save_dataframe(preds_df, output_dir, "main_predictions.csv")
+    multi_seed_summary_df = build_metric_summary_table(
+        raw_df,
+        group_cols=["experiment", "method"],
+        metric_cols=["mae", "rmse", "mape", "r2", "final_loss", "best_loss", "communication_rounds", "convergence_round"],
+    )
+    improvement_df = build_improvement_rows(
+        raw_df,
+        experiment_name="gcn_fed_base_main",
+        baseline_method="Independent",
+        enhanced_method="FedAvg",
+        metric_cols=["mae", "rmse", "mape", "r2"],
+    )
+    save_dataframe(raw_df, output_dir, "multi_seed_raw_results.csv")
+    save_dataframe(multi_seed_summary_df, output_dir, "multi_seed_summary.csv")
+    if not improvement_df.empty:
+        save_dataframe(improvement_df, output_dir, "multi_seed_improvement_summary.csv")
+    write_stability_report(
+        output_dir=output_dir,
+        raw_df=raw_df,
+        improvement_df=improvement_df,
+        experiment_name="gcn_fed_base_main",
+        baseline_method="Independent",
+        enhanced_method="FedAvg",
+    )
 
 
-def run_convergence_experiment(output_dir: Path) -> None:
-    _, _, convergence_df = run_federated_training(BASE_SEED, record_convergence=True)
+def run_convergence_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+    target_seeds = list(seeds if multi_seed else seeds[:1])
+    frames = []
+    for seed in target_seeds:
+        _, _, convergence_df = run_federated_training(seed, record_convergence=True)
+        frames.append(convergence_df.assign(seed=seed))
+    convergence_df = pd.concat(frames, ignore_index=True)
     save_dataframe(convergence_df, output_dir, "convergence_history.csv")
+    save_dataframe(convergence_df, output_dir, "multi_seed_convergence_raw.csv")
+    save_dataframe(
+        build_convergence_summary_table(
+            convergence_df,
+            group_cols=["method", "round"],
+            metric_cols=["avg_train_loss", "avg_val_loss", "avg_val_rmse"],
+        ),
+        output_dir,
+        "multi_seed_convergence_summary.csv",
+    )
 
 
-def run_project(workflow: str, output_dir: Path) -> None:
+def run_project(workflow: str, output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
     ensure_output_dir(output_dir)
     if workflow in ("all", "data_viz"):
         export_base_dataset_artifacts(output_dir)
     if workflow in ("all", "main"):
-        run_main_experiment(output_dir)
+        run_main_experiment(output_dir, seeds=seeds, multi_seed=multi_seed)
     if workflow in ("all", "convergence"):
-        run_convergence_experiment(output_dir)
+        run_convergence_experiment(output_dir, seeds=seeds, multi_seed=multi_seed)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
     parser = argparse.ArgumentParser(description="GCN Base Federated Simulation Core")
     parser.add_argument("--workflow", choices=["all", "data_viz", "main", "convergence"], default="all")
     parser.add_argument("--output_dir", type=str, default=None, help="Directory for exported experiment artifacts.")
+    parser.add_argument("--multi_seed", type=str, default="True", help="Whether to run multiple seeds.")
+    parser.add_argument("--seeds", type=str, default="42,2024,2025,2026,3407", help="Comma-separated random seeds.")
+    parser.add_argument("--single_seed", type=int, default=42, help="Single seed used when --multi_seed False.")
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None):
     args = parse_args(argv)
     output_dir = Path(args.output_dir) if args.output_dir else SIMULATION_RESULTS_ROOT / "gcn_fed_base"
-    run_project(args.workflow, output_dir)
+    multi_seed = parse_bool_flag(args.multi_seed)
+    seeds = parse_seed_list(args.seeds) if multi_seed else [int(args.single_seed)]
+    run_project(args.workflow, output_dir, seeds=seeds, multi_seed=multi_seed)
 
 
 if __name__ == "__main__":

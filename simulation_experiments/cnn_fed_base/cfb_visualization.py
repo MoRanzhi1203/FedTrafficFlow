@@ -47,6 +47,22 @@ def load_csv(input_dir: Path, filename: str) -> pd.DataFrame:
         )
     return pd.read_csv(path)
 
+
+def load_optional_csv(input_dir: Path, filename: str) -> pd.DataFrame | None:
+    path = input_dir / filename
+    if not path.exists():
+        return None
+    return pd.read_csv(path)
+
+
+def _save_fig(fig, output_dir: Path, filename: str) -> Path:
+    out_path = ensure_dir(output_dir) / filename
+    fig.savefig(out_path, bbox_inches="tight")
+    fig.savefig(out_path.with_suffix(".pdf"), bbox_inches="tight")
+    plt.close(fig)
+    print(f"[viz] Saved: {out_path}")
+    return out_path
+
 # ──────────────────────────────────────────────────────────
 # Plotting Functions
 # ──────────────────────────────────────────────────────────
@@ -186,13 +202,7 @@ def plot_main_metrics(input_dir: Path, output_dir: Path) -> Path:
         axes[i].set_title(f"Method Comparison: {m.upper()}")
         axes[i].tick_params(axis='x', rotation=15)
         
-    out_path = ensure_dir(output_dir) / "main_metrics_comparison.png"
-    fig.savefig(out_path, bbox_inches="tight")
-
-    pdf_path = out_path.with_suffix(".pdf")
-
-    fig.savefig(pdf_path, bbox_inches="tight")
-    plt.close(fig)
+    out_path = _save_fig(fig, output_dir, "main_metrics_comparison.png")
     
     # 额外画预测对比图
     df_pred = load_csv(input_dir, "main_predictions.csv")
@@ -214,38 +224,98 @@ def plot_main_metrics(input_dir: Path, output_dir: Path) -> Path:
     ax2.set_ylabel("Traffic Flow")
     ax2.legend()
     
-    out_path2 = output_dir / "main_predictions_comparison.png"
-    fig2.savefig(out_path2, bbox_inches="tight")
-    plt.close(fig2)
-    print(f"[viz] Saved: {out_path}, {out_path2}")
+    out_path2 = _save_fig(fig2, output_dir, "main_predictions_comparison.png")
+    multi_seed_raw_df = load_optional_csv(input_dir, "multi_seed_raw_results.csv")
+    multi_seed_summary_df = load_optional_csv(input_dir, "multi_seed_summary.csv")
+    if multi_seed_raw_df is not None and multi_seed_summary_df is not None:
+        plot_multi_seed_metric_summary(multi_seed_summary_df, output_dir)
+        plot_multi_seed_metric_boxplot(multi_seed_raw_df, output_dir)
+        plot_multi_seed_seed_pairing(multi_seed_raw_df, output_dir)
     return out_path
+
+
+def plot_multi_seed_metric_summary(summary_df: pd.DataFrame, output_dir: Path) -> Path:
+    target_df = summary_df[summary_df["metric"].isin(["mae", "rmse", "mape"])].copy()
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
+    for ax, metric_name in zip(axes, ["mae", "rmse", "mape"]):
+        metric_df = target_df[target_df["metric"] == metric_name].sort_values("method")
+        x_pos = np.arange(len(metric_df))
+        ax.bar(x_pos, metric_df["mean"], yerr=metric_df["std"], color=[METHOD_PALETTE.get(m, "#4C72B0") for m in metric_df["method"]], alpha=0.85, capsize=5)
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(metric_df["method"], rotation=15)
+        ax.set_title(f"Multi-seed Mean ± Std: {metric_name.upper()}")
+    fig.tight_layout()
+    return _save_fig(fig, output_dir, "multi_seed_mean_std_metrics.png")
+
+
+def plot_multi_seed_metric_boxplot(raw_df: pd.DataFrame, output_dir: Path) -> Path:
+    fig, ax = plt.subplots(figsize=(7.4, 4.8))
+    sns.boxplot(data=raw_df, x="method", y="rmse", hue="method", palette=METHOD_PALETTE, ax=ax, legend=False)
+    sns.stripplot(data=raw_df, x="method", y="rmse", hue="method", palette=METHOD_PALETTE, dodge=False, alpha=0.55, ax=ax, legend=False)
+    ax.set_title("Multi-seed RMSE Distribution")
+    return _save_fig(fig, output_dir, "multi_seed_rmse_boxplot.png")
+
+
+def plot_multi_seed_seed_pairing(raw_df: pd.DataFrame, output_dir: Path) -> Path:
+    fig, ax = plt.subplots(figsize=(7.4, 4.8))
+    sns.lineplot(data=raw_df.sort_values("seed"), x="seed", y="rmse", hue="method", style="method", markers=True, dashes=False, palette=METHOD_PALETTE, ax=ax)
+    ax.set_title("Per-seed RMSE Comparison")
+    return _save_fig(fig, output_dir, "multi_seed_rmse_seed_pairing.png")
 
 def plot_convergence(input_dir: Path, output_dir: Path) -> Path:
     df = load_csv(input_dir, "convergence_history.csv")
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+    if "seed" in df.columns:
+        summary_df = (
+            df.groupby(["method", "round"])[["avg_train_loss", "avg_val_rmse"]]
+            .agg(["mean", "std"])
+            .reset_index()
+        )
+        summary_df.columns = [
+            "_".join([str(part) for part in col if part]).rstrip("_")
+            if isinstance(col, tuple) else col
+            for col in summary_df.columns
+        ]
+        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        for method, method_df in summary_df.groupby("method"):
+            axes[0].plot(method_df["round"], method_df["avg_train_loss_mean"], label=method, color=METHOD_PALETTE.get(method))
+            axes[0].fill_between(
+                method_df["round"],
+                method_df["avg_train_loss_mean"] - method_df["avg_train_loss_std"],
+                method_df["avg_train_loss_mean"] + method_df["avg_train_loss_std"],
+                color=METHOD_PALETTE.get(method),
+                alpha=0.18,
+            )
+            axes[1].plot(method_df["round"], method_df["avg_val_rmse_mean"], label=method, color=METHOD_PALETTE.get(method))
+            axes[1].fill_between(
+                method_df["round"],
+                method_df["avg_val_rmse_mean"] - method_df["avg_val_rmse_std"],
+                method_df["avg_val_rmse_mean"] + method_df["avg_val_rmse_std"],
+                color=METHOD_PALETTE.get(method),
+                alpha=0.18,
+            )
+        axes[0].set_title("Convergence Mean ± Std: Train Loss")
+        axes[1].set_title("Convergence Mean ± Std: Validation RMSE")
+        for ax in axes:
+            ax.set_xlabel("Round")
+            ax.legend()
+        axes[0].set_ylabel("Train Loss")
+        axes[1].set_ylabel("Validation RMSE")
+        fig.tight_layout()
+        return _save_fig(fig, output_dir, "convergence_curve.png")
 
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     ax = axes[0]
     sns.lineplot(data=df, x="round", y="avg_train_loss", hue="method", marker="o", ax=ax, palette=METHOD_PALETTE)
     ax.set_xlabel("Round")
     ax.set_ylabel("Train Loss")
     ax.set_title("Average Training Loss")
-
     ax = axes[1]
     sns.lineplot(data=df, x="round", y="avg_val_rmse", hue="method", marker="s", ax=ax, palette=METHOD_PALETTE)
     ax.set_xlabel("Round")
     ax.set_ylabel("Validation RMSE")
     ax.set_title("Average Validation RMSE")
-    
     fig.tight_layout()
-    out_path = ensure_dir(output_dir) / "convergence_curve.png"
-    fig.savefig(out_path, bbox_inches="tight")
-
-    pdf_path = out_path.with_suffix(".pdf")
-
-    fig.savefig(pdf_path, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[viz] Saved: {out_path}")
-    return out_path
+    return _save_fig(fig, output_dir, "convergence_curve.png")
 
 # ──────────────────────────────────────────────────────────
 # CLI & Main

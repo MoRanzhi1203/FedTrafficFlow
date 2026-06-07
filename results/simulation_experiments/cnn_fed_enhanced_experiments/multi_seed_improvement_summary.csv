@@ -1,0 +1,5 @@
+experiment,baseline_method,enhanced_method,metric,mean_improvement_percent,std_improvement_percent,improved_seed_count,total_seed_count,improved_seed_ratio,per_seed_improved
+cnn_fed_enhanced_main,FedAvg,Proposed,mae,-0.7265797218738745,2.001965385233643,1,2,0.5,"42:N,2024:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,rmse,-1.0966064501379142,1.4818958907667212,1,2,0.5,"42:N,2024:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,mape,0.01029093460649233,0.9916823919293041,1,2,0.5,"42:N,2024:Y"
+cnn_fed_enhanced_main,FedAvg,Proposed,r2,-3.3363353106488183,5.0584780627586685,1,2,0.5,"42:N,2024:Y"

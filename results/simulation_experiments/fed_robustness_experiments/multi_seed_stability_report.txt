@@ -1,0 +1,76 @@
+Experiment: fed_robustness
+Seeds: 42, 1234, 2024, 3407, 5678
+
+Per-scenario statistics:
+- Scenario client_dropout@0.0:
+  FedAvg: MAE=6.0880±0.6071, RMSE=7.7210±0.4694, MAPE=50.4387±33.8852, R2=0.1867±0.0923
+  Proposed: MAE=6.0071±0.5967, RMSE=7.6456±0.4812, MAPE=49.2468±32.5924, R2=0.2101±0.0777
+- Scenario client_dropout@0.2:
+  FedAvg: MAE=5.9475±0.5709, RMSE=7.5768±0.5060, MAPE=48.3667±31.5024, R2=0.2212±0.0756
+  Proposed: MAE=5.8611±0.5873, RMSE=7.5002±0.5371, MAPE=46.7878±29.7201, R2=0.2451±0.0708
+- Scenario client_dropout@0.4:
+  FedAvg: MAE=5.9534±0.5764, RMSE=7.5882±0.5381, MAPE=46.4964±31.6569, R2=0.2289±0.0721
+  Proposed: MAE=5.9003±0.5573, RMSE=7.5489±0.5203, MAPE=45.1604±29.7363, R2=0.2395±0.0778
+- Scenario communication_delay@0:
+  FedAvg: MAE=6.0880±0.6071, RMSE=7.7210±0.4694, MAPE=50.4387±33.8852, R2=0.1867±0.0923
+  Proposed: MAE=6.0071±0.5967, RMSE=7.6456±0.4812, MAPE=49.2468±32.5924, R2=0.2101±0.0777
+- Scenario communication_delay@1:
+  FedAvg: MAE=6.3644±0.7326, RMSE=7.9783±0.5793, MAPE=54.3768±39.2385, R2=0.1315±0.1059
+  Proposed: MAE=6.3036±0.7677, RMSE=7.9319±0.6144, MAPE=53.3184±38.1323, R2=0.1487±0.1150
+- Scenario communication_delay@2:
+  FedAvg: MAE=6.2225±0.6427, RMSE=7.8319±0.5282, MAPE=53.1185±38.4140, R2=0.1647±0.0612
+  Proposed: MAE=6.1338±0.6677, RMSE=7.7493±0.5521, MAPE=52.0780±37.6536, R2=0.1904±0.0605
+- Scenario gradient_noise@0.0:
+  FedAvg: MAE=6.0880±0.6071, RMSE=7.7210±0.4694, MAPE=50.4387±33.8852, R2=0.1867±0.0923
+  Proposed: MAE=6.0071±0.5967, RMSE=7.6456±0.4812, MAPE=49.2468±32.5924, R2=0.2101±0.0777
+- Scenario gradient_noise@0.02:
+  FedAvg: MAE=6.0837±0.4399, RMSE=7.7203±0.3707, MAPE=46.5238±27.8278, R2=0.2097±0.1132
+  Proposed: MAE=6.0483±0.4122, RMSE=7.6957±0.3557, MAPE=45.6355±26.8045, R2=0.2194±0.1000
+- Scenario gradient_noise@0.05:
+  FedAvg: MAE=6.3916±0.4338, RMSE=8.0273±0.3277, MAPE=50.9977±33.5397, R2=0.1222±0.1043
+  Proposed: MAE=6.3628±0.3840, RMSE=8.0106±0.2896, MAPE=50.2245±32.5061, R2=0.1288±0.0891
+
+Improvement summary (Proposed vs FedAvg):
+- client_dropout@0.0 | mae: mean improvement=1.31% (std=1.00%), improved on 5/5 seeds
+- client_dropout@0.0 | rmse: mean improvement=0.99% (std=0.81%), improved on 5/5 seeds
+- client_dropout@0.0 | mape: mean improvement=1.87% (std=0.89%), improved on 5/5 seeds
+- client_dropout@0.0 | r2: mean improvement=35.88% (std=57.21%), improved on 5/5 seeds
+- client_dropout@0.2 | mae: mean improvement=1.49% (std=0.45%), improved on 5/5 seeds
+- client_dropout@0.2 | rmse: mean improvement=1.04% (std=0.49%), improved on 5/5 seeds
+- client_dropout@0.2 | mape: mean improvement=2.39% (std=1.45%), improved on 5/5 seeds
+- client_dropout@0.2 | r2: mean improvement=14.18% (std=10.65%), improved on 5/5 seeds
+- client_dropout@0.4 | mae: mean improvement=0.87% (std=0.81%), improved on 4/5 seeds
+- client_dropout@0.4 | rmse: mean improvement=0.50% (std=0.60%), improved on 4/5 seeds
+- client_dropout@0.4 | mape: mean improvement=1.59% (std=2.00%), improved on 3/5 seeds
+- client_dropout@0.4 | r2: mean improvement=4.33% (std=7.79%), improved on 4/5 seeds
+- communication_delay@0 | mae: mean improvement=1.31% (std=1.00%), improved on 5/5 seeds
+- communication_delay@0 | rmse: mean improvement=0.99% (std=0.81%), improved on 5/5 seeds
+- communication_delay@0 | mape: mean improvement=1.87% (std=0.89%), improved on 5/5 seeds
+- communication_delay@0 | r2: mean improvement=35.88% (std=57.21%), improved on 5/5 seeds
+- communication_delay@1 | mae: mean improvement=1.03% (std=1.18%), improved on 4/5 seeds
+- communication_delay@1 | rmse: mean improvement=0.61% (std=0.97%), improved on 4/5 seeds
+- communication_delay@1 | mape: mean improvement=1.52% (std=1.14%), improved on 4/5 seeds
+- communication_delay@1 | r2: mean improvement=7.24% (std=25.33%), improved on 4/5 seeds
+- communication_delay@2 | mae: mean improvement=1.48% (std=0.66%), improved on 5/5 seeds
+- communication_delay@2 | rmse: mean improvement=1.08% (std=0.50%), improved on 5/5 seeds
+- communication_delay@2 | mape: mean improvement=1.87% (std=0.57%), improved on 5/5 seeds
+- communication_delay@2 | r2: mean improvement=17.69% (std=9.08%), improved on 5/5 seeds
+- gradient_noise@0.0 | mae: mean improvement=1.31% (std=1.00%), improved on 5/5 seeds
+- gradient_noise@0.0 | rmse: mean improvement=0.99% (std=0.81%), improved on 5/5 seeds
+- gradient_noise@0.0 | mape: mean improvement=1.87% (std=0.89%), improved on 5/5 seeds
+- gradient_noise@0.0 | r2: mean improvement=35.88% (std=57.21%), improved on 5/5 seeds
+- gradient_noise@0.02 | mae: mean improvement=0.55% (std=0.77%), improved on 4/5 seeds
+- gradient_noise@0.02 | rmse: mean improvement=0.31% (std=0.50%), improved on 3/5 seeds
+- gradient_noise@0.02 | mape: mean improvement=1.36% (std=1.34%), improved on 5/5 seeds
+- gradient_noise@0.02 | r2: mean improvement=131.57% (std=260.65%), improved on 3/5 seeds
+- gradient_noise@0.05 | mae: mean improvement=0.39% (std=1.50%), improved on 3/5 seeds
+- gradient_noise@0.05 | rmse: mean improvement=0.18% (std=1.05%), improved on 2/5 seeds
+- gradient_noise@0.05 | mape: mean improvement=1.02% (std=1.77%), improved on 3/5 seeds
+- gradient_noise@0.05 | r2: mean improvement=9.06% (std=27.34%), improved on 2/5 seeds
+
+Potential anomalies:
+- No identical-across-seed anomaly detected in the inspected metrics.
+
+Conclusion:
+- Robustness results are reported across multiple random seeds rather than a single run.
+- The comparison between Proposed and FedAvg is evaluated under the same robustness scenario and seed, supporting the claim that gains are not caused by a single favorable seed.
