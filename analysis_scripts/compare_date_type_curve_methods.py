@@ -460,6 +460,267 @@ def collect_m3_profiles(base_lf: pl.LazyFrame) -> pl.DataFrame:
     return corrected_lf.collect()
 
 
+def build_plot_day_slots() -> np.ndarray:
+    """返回闭合展示使用的 0-96 日周期横轴。"""
+    return np.arange(SLOTS_PER_DAY + 1, dtype=np.int64)
+
+
+def infer_terminal_slot96_value(values: np.ndarray, fill_last: str = "linear") -> float:
+    """为无法取得次日 00:00 的末日曲线推断 day_slot=96。"""
+    clean_values = np.asarray(values, dtype=np.float64)
+    if clean_values.size == 0:
+        return 0.0
+    if fill_last == "copy_last" or clean_values.size == 1:
+        return float(clean_values[-1])
+    if fill_last == "periodic":
+        return float(clean_values[0])
+    if fill_last == "linear":
+        return float(clean_values[-1] + (clean_values[-1] - clean_values[-2]))
+    raise ValueError(f"未知 fill_last 选项: {fill_last}")
+
+
+def extend_curve_for_plot(
+    day_slots: np.ndarray,
+    values: np.ndarray,
+    terminal_value: float | None = None,
+    fill_last: str = "periodic",
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    将 0-95 曲线扩展为 0-96 闭合展示曲线。
+
+    对聚合曲线、中心曲线或平均曲线，day_slot=96 表示周期意义下的次日 00:00。
+    若未显式提供 terminal_value，则按 fill_last 规则补全。
+    """
+    slot_array = np.asarray(day_slots, dtype=np.int64)
+    value_array = np.asarray(values, dtype=np.float64)
+    if slot_array.size != value_array.size:
+        raise ValueError("day_slots 与 values 长度不一致，无法扩展 day_slot=96")
+    if slot_array.size == 0:
+        return build_plot_day_slots(), np.zeros(SLOTS_PER_DAY + 1, dtype=np.float64)
+    if len(slot_array) == SLOTS_PER_DAY + 1 and slot_array[-1] == SLOTS_PER_DAY:
+        return slot_array, value_array
+    if not ensure_complete_curve(slot_array):
+        raise ValueError("仅支持对完整 0-95 曲线扩展 day_slot=96")
+    if terminal_value is None:
+        terminal_value = infer_terminal_slot96_value(value_array, fill_last=fill_last)
+    plot_slots = np.concatenate([slot_array, np.array([SLOTS_PER_DAY], dtype=np.int64)])
+    plot_values = np.concatenate([value_array, np.array([float(terminal_value)], dtype=np.float64)])
+    return plot_slots, plot_values
+
+
+def add_day_slot_96_from_next_day_for_plot(
+    df: pl.DataFrame,
+    date_col: str = "date",
+    slot_col: str = "day_slot",
+    value_cols: Sequence[str] | None = None,
+    group_cols: Sequence[str] | None = None,
+    fill_last: str = "linear",
+) -> pl.DataFrame:
+    """
+    为 15 分钟粒度日周期曲线补充 day_slot=96。
+
+    day_slot=96 表示下一天 day_slot=0，即 24:00。
+    对第 d 天:
+        d 日 slot 96 = d+1 日 slot 0
+
+    仅用于日周期曲线闭合展示或需要完整 0-24h 周期的函数曲线构造。
+    不应无条件覆盖原始建模数据。
+    """
+    if df.is_empty():
+        return df
+
+    normalized_group_cols = list(group_cols or [])
+    protected_cols = set(normalized_group_cols + [date_col, slot_col])
+    inferred_value_cols = [
+        column for column in df.columns if column not in protected_cols
+    ]
+    normalized_value_cols = list(value_cols or inferred_value_cols)
+    if not normalized_value_cols:
+        raise ValueError("未找到可用于补充 day_slot=96 的 value_cols")
+
+    sort_cols = normalized_group_cols + [date_col, slot_col]
+    base_df = df.sort(sort_cols)
+    partition_keys = normalized_group_cols or None
+    group_frames = (
+        base_df.partition_by(partition_keys, maintain_order=True)
+        if partition_keys is not None
+        else [base_df]
+    )
+    added_records: List[Dict[str, object]] = []
+
+    for group_df in group_frames:
+        date_frames = {
+            group_date: frame.sort(slot_col)
+            for group_date, frame in (
+                (frame.item(0, date_col), frame)
+                for frame in group_df.partition_by(date_col, maintain_order=True)
+            )
+        }
+        ordered_dates = sorted(date_frames.keys())
+        for idx, current_date in enumerate(ordered_dates):
+            current_df = date_frames[current_date]
+            current_slots = current_df.get_column(slot_col).to_numpy().astype(np.int64)
+            if not ensure_complete_curve(current_slots):
+                continue
+            template_record = current_df.sort(slot_col).tail(1).to_dicts()[0]
+            slot96_record = dict(template_record)
+            slot96_record[slot_col] = SLOTS_PER_DAY
+
+            if idx < len(ordered_dates) - 1:
+                next_date = ordered_dates[idx + 1]
+                next_df = date_frames[next_date]
+                next_slot0_df = next_df.filter(pl.col(slot_col) == 0)
+                if next_slot0_df.is_empty():
+                    terminal_by_col = {
+                        col: infer_terminal_slot96_value(
+                            current_df.get_column(col).to_numpy().astype(np.float64),
+                            fill_last=fill_last,
+                        )
+                        for col in normalized_value_cols
+                    }
+                else:
+                    next_slot0_record = next_slot0_df.to_dicts()[0]
+                    terminal_by_col = {
+                        col: next_slot0_record[col] for col in normalized_value_cols
+                    }
+            else:
+                terminal_by_col = {
+                    col: infer_terminal_slot96_value(
+                        current_df.get_column(col).to_numpy().astype(np.float64),
+                        fill_last=fill_last,
+                    )
+                    for col in normalized_value_cols
+                }
+
+            slot96_record.update(terminal_by_col)
+            added_records.append(slot96_record)
+
+    if not added_records:
+        return base_df
+    added_df = pl.DataFrame(added_records).select(base_df.columns)
+    return pl.concat([base_df, added_df], how="vertical").sort(sort_cols)
+
+
+def add_periodic_day_slot_96_for_plot(
+    df: pl.DataFrame,
+    slot_col: str = DAY_SLOT_COL,
+    value_cols: Sequence[str] | None = None,
+    group_cols: Sequence[str] | None = None,
+    fill_last: str = "periodic",
+) -> pl.DataFrame:
+    """为聚合后的周期曲线补充 day_slot=96，用于闭合展示。"""
+    if df.is_empty():
+        return df
+
+    normalized_group_cols = list(group_cols or [])
+    protected_cols = set(normalized_group_cols + [slot_col])
+    inferred_value_cols = [
+        column for column in df.columns if column not in protected_cols
+    ]
+    normalized_value_cols = list(value_cols or inferred_value_cols)
+    if not normalized_value_cols:
+        raise ValueError("未找到可用于周期闭合的 value_cols")
+
+    base_df = df.sort(normalized_group_cols + [slot_col])
+    partition_keys = normalized_group_cols or None
+    curve_frames = (
+        base_df.partition_by(partition_keys, maintain_order=True)
+        if partition_keys is not None
+        else [base_df]
+    )
+    added_records: List[Dict[str, object]] = []
+
+    for curve_df in curve_frames:
+        day_slots = curve_df.get_column(slot_col).to_numpy().astype(np.int64)
+        if not ensure_complete_curve(day_slots):
+            continue
+        slot0_record = curve_df.filter(pl.col(slot_col) == 0).to_dicts()[0]
+        template_record = curve_df.sort(slot_col).tail(1).to_dicts()[0]
+        slot96_record = dict(template_record)
+        slot96_record[slot_col] = SLOTS_PER_DAY
+        for col in normalized_value_cols:
+            if fill_last == "periodic":
+                slot96_record[col] = slot0_record[col]
+            else:
+                slot96_record[col] = infer_terminal_slot96_value(
+                    curve_df.get_column(col).to_numpy().astype(np.float64),
+                    fill_last=fill_last,
+                )
+        added_records.append(slot96_record)
+
+    if not added_records:
+        return base_df
+    added_df = pl.DataFrame(added_records).select(base_df.columns)
+    return pl.concat([base_df, added_df], how="vertical").sort(normalized_group_cols + [slot_col])
+
+
+def build_plot_ready_fitted_curve_df(
+    fitted_df: pl.DataFrame,
+    coeff_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """基于 0-95 拟合参数生成仅用于展示的 0-96 拟合曲线。"""
+    if fitted_df.is_empty():
+        return fitted_df
+
+    coeff_group_cols = [NODE_COL]
+    if DATE_TYPE_COL in fitted_df.columns and DATE_TYPE_COL in coeff_df.columns:
+        coeff_group_cols.append(DATE_TYPE_COL)
+
+    coeff_map: Dict[Tuple[object, ...], Dict[str, float]] = {}
+    for row in coeff_df.to_dicts():
+        coeff_map[tuple(row[col] for col in coeff_group_cols)] = row
+
+    plot_slots = build_plot_day_slots()
+    design_matrix = build_fourier_design_matrix(plot_slots, FOURIER_HARMONICS)
+    fitted_plot_frames: List[pl.DataFrame] = []
+
+    for curve_df in fitted_df.sort(coeff_group_cols + [DAY_SLOT_COL]).partition_by(
+        coeff_group_cols,
+        maintain_order=True,
+    ):
+        day_slots = curve_df.get_column(DAY_SLOT_COL).to_numpy().astype(np.int64)
+        if not ensure_complete_curve(day_slots):
+            continue
+        coeff_key = tuple(curve_df.item(0, col) for col in coeff_group_cols)
+        coeff_record = coeff_map.get(coeff_key)
+        if coeff_record is None:
+            continue
+        coefficient_values = [float(coeff_record["a0"])]
+        for harmonic in range(1, FOURIER_HARMONICS + 1):
+            coefficient_values.append(float(coeff_record[f"a{harmonic}"]))
+            coefficient_values.append(float(coeff_record[f"b{harmonic}"]))
+        coefficients = np.asarray(coefficient_values, dtype=np.float64)
+        observed = curve_df.get_column(OBSERVED_FLOW_COL).to_numpy().astype(np.float64)
+        _, observed_plot = extend_curve_for_plot(
+            day_slots,
+            observed,
+            terminal_value=float(observed[0]),
+            fill_last="periodic",
+        )
+        fitted_plot = np.clip(design_matrix @ coefficients, a_min=0.0, a_max=None)
+        residual_plot = observed_plot - fitted_plot
+
+        plot_records: Dict[str, object] = {
+            DAY_SLOT_COL: plot_slots,
+            OBSERVED_FLOW_COL: observed_plot,
+            FITTED_FLOW_COL: fitted_plot,
+            RESIDUAL_COL: residual_plot,
+        }
+        plot_df = pl.DataFrame(plot_records)
+        literal_columns = [
+            pl.lit(curve_df.item(0, column)).alias(column)
+            for column in curve_df.columns
+            if column not in plot_records
+        ]
+        fitted_plot_frames.append(
+            plot_df.with_columns(literal_columns).select(curve_df.columns)
+        )
+
+    if not fitted_plot_frames:
+        return fitted_df
+    return pl.concat(fitted_plot_frames, how="vertical").sort(coeff_group_cols + [DAY_SLOT_COL])
+
+
 def ensure_complete_curve(day_slots: np.ndarray) -> bool:
     """检查曲线是否完整覆盖 96 个日内时间段。"""
     expected_slots = np.arange(SLOTS_PER_DAY, dtype=np.int64)
@@ -1069,22 +1330,28 @@ def build_cluster_outputs(
 def save_method_outputs(
     method_dir: Path,
     profile_df: pl.DataFrame,
+    profile_plot_df: pl.DataFrame,
     fitted_df: pl.DataFrame,
+    fitted_plot_df: pl.DataFrame,
     coeff_df: pl.DataFrame,
     cluster_metric_df: pl.DataFrame,
     cluster_label_df: pl.DataFrame,
     cluster_summary_df: pl.DataFrame,
     cluster_center_df: pl.DataFrame,
+    cluster_center_plot_df: pl.DataFrame,
 ) -> None:
     """保存单个方法的所有 parquet 输出。"""
     method_dir.mkdir(parents=True, exist_ok=True)
     profile_df.write_parquet(method_dir / "daily_profiles.parquet", compression="snappy")
+    profile_plot_df.write_parquet(method_dir / "daily_profiles_plot.parquet", compression="snappy")
     fitted_df.write_parquet(method_dir / "fitted_curves.parquet", compression="snappy")
+    fitted_plot_df.write_parquet(method_dir / "fitted_curves_plot.parquet", compression="snappy")
     coeff_df.write_parquet(method_dir / "curve_coefficients.parquet", compression="snappy")
     cluster_metric_df.write_parquet(method_dir / "cluster_metrics.parquet", compression="snappy")
     cluster_label_df.write_parquet(method_dir / "cluster_labels.parquet", compression="snappy")
     cluster_summary_df.write_parquet(method_dir / "cluster_summary.parquet", compression="snappy")
     cluster_center_df.write_parquet(method_dir / "cluster_centers.parquet", compression="snappy")
+    cluster_center_plot_df.write_parquet(method_dir / "cluster_centers_plot.parquet", compression="snappy")
 
 
 def build_fit_method_summary(method_name: str, node_metadata_df: pl.DataFrame) -> pl.DataFrame:
@@ -1185,15 +1452,20 @@ def plot_method_center_curve_comparison(
         method_center_df = artifact.center_df.sort([CLUSTER_COL, DAY_SLOT_COL])
         for cluster_df in method_center_df.partition_by(CLUSTER_COL, maintain_order=True):
             cluster_id = int(cluster_df.item(0, CLUSTER_COL))
+            plot_slots, plot_values = extend_curve_for_plot(
+                cluster_df.get_column(DAY_SLOT_COL).to_numpy().astype(np.int64),
+                cluster_df.get_column("类平均归一化流量").to_numpy().astype(np.float64),
+                fill_last="periodic",
+            )
             ax.plot(
-                cluster_df.get_column(DAY_SLOT_COL).to_numpy(),
-                cluster_df.get_column("类平均归一化流量").to_numpy(),
+                plot_slots,
+                plot_values,
                 linewidth=2.0,
                 label=f"Cluster {cluster_id}",
             )
         ax.set_title(f"{artifact.method_name} (k={artifact.best_k})")
         ax.grid(True, linestyle="--", alpha=0.35)
-        ax.set_xlim(0, SLOTS_PER_DAY - 1)
+        ax.set_xlim(0, SLOTS_PER_DAY)
         ax.set_xticks(np.arange(0, SLOTS_PER_DAY + 1, 12))
         ax.legend(fontsize=8)
 
@@ -1448,16 +1720,34 @@ def run_method_pipeline(
         output_columns.append(DATE_TYPE_COL)
     output_columns.extend([DAY_SLOT_COL, observed_col, SAMPLE_COUNT_COL])
     profile_output_df = profile_output_df.select(output_columns).sort(output_columns[:-2] + [DAY_SLOT_COL])
+    profile_plot_df = add_periodic_day_slot_96_for_plot(
+        profile_output_df,
+        slot_col=DAY_SLOT_COL,
+        value_cols=[observed_col, SAMPLE_COUNT_COL],
+        group_cols=output_columns[:-2],
+        fill_last="periodic",
+    )
+    fitted_plot_df = build_plot_ready_fitted_curve_df(fitted_df=fitted_df, coeff_df=coeff_df)
+    center_plot_df = add_periodic_day_slot_96_for_plot(
+        center_df,
+        slot_col=DAY_SLOT_COL,
+        value_cols=["类平均归一化流量", "类平均原始流量"],
+        group_cols=[METHOD_COL, CLUSTER_COL],
+        fill_last="periodic",
+    )
 
     save_method_outputs(
         method_dir=method_dir,
         profile_df=profile_output_df,
+        profile_plot_df=profile_plot_df,
         fitted_df=fitted_df,
+        fitted_plot_df=fitted_plot_df,
         coeff_df=coeff_df,
         cluster_metric_df=all_k_metric_df,
         cluster_label_df=cluster_label_df,
         cluster_summary_df=cluster_summary_df,
         cluster_center_df=center_df,
+        cluster_center_plot_df=center_plot_df,
     )
     mapping_df = pl.DataFrame({
         "old_cluster_id": list(cluster_label_mapping.keys()),

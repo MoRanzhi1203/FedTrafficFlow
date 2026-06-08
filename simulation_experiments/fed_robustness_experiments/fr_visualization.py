@@ -166,6 +166,60 @@ def plot_multi_seed_robustness_mean_std_metrics(input_dir: Path, output_dir: Pat
     _save_fig(fig, output_dir, "multi_seed_robustness_mean_std_metrics.png")
 
 
+def plot_fedavg_robustness_rmse_mean_std(input_dir: Path, output_dir: Path):
+    summary_df = read_required_csv(input_dir / "multi_seed_summary.csv")
+    plot_df = summary_df[
+        (summary_df["method"] == "FedAvg")
+        & (summary_df["metric"].str.lower() == "rmse")
+    ].copy()
+    if plot_df.empty:
+        raise ValueError("No FedAvg RMSE rows found in multi_seed_summary.csv.")
+
+    scenario_order = [
+        "client_dropout@0.0",
+        "client_dropout@0.2",
+        "client_dropout@0.4",
+        "communication_delay@0",
+        "communication_delay@1",
+        "communication_delay@2",
+        "gradient_noise@0.0",
+        "gradient_noise@0.02",
+        "gradient_noise@0.05",
+    ]
+    label_map = {
+        "client_dropout@0.0": "Dropout 0.0",
+        "client_dropout@0.2": "Dropout 0.2",
+        "client_dropout@0.4": "Dropout 0.4",
+        "communication_delay@0": "Delay 0",
+        "communication_delay@1": "Delay 1",
+        "communication_delay@2": "Delay 2",
+        "gradient_noise@0.0": "Noise 0.00",
+        "gradient_noise@0.02": "Noise 0.02",
+        "gradient_noise@0.05": "Noise 0.05",
+    }
+    plot_df["scenario"] = pd.Categorical(plot_df["scenario"], categories=scenario_order, ordered=True)
+    plot_df = plot_df.sort_values("scenario")
+
+    fig, ax = plt.subplots(figsize=(10, 4.8))
+    x_pos = np.arange(len(plot_df))
+    ax.bar(
+        x_pos,
+        plot_df["mean"],
+        yerr=plot_df["std"],
+        color=BAR_COLOR,
+        alpha=0.88,
+        capsize=4,
+    )
+    ax.set_xticks(x_pos)
+    ax.set_xticklabels([label_map.get(name, name) for name in plot_df["scenario"].astype(str)], rotation=30, ha="right")
+    ax.set_ylabel("RMSE")
+    ax.set_xlabel("Federated perturbation scenario")
+    ax.set_title("FedAvg Robustness under Federated Perturbations")
+    _style_axis(ax)
+    fig.tight_layout()
+    _save_fig(fig, output_dir, "fedavg_robustness_rmse_mean_std.png")
+
+
 def plot_multi_seed_robustness_rmse_boxplot(input_dir: Path, output_dir: Path):
     raw_df = read_required_csv(input_dir / "multi_seed_raw_results.csv")
     fig, ax = plt.subplots(figsize=(12, 5.2))
@@ -213,6 +267,7 @@ def plot_multi_seed_robustness_improvement_heatmap(input_dir: Path, output_dir: 
 def plot_multi_seed_robustness_suite(input_dir: Path, output_dir: Path):
     if read_optional_csv(input_dir / "multi_seed_raw_results.csv") is None:
         return
+    plot_fedavg_robustness_rmse_mean_std(input_dir, output_dir)
     plot_multi_seed_robustness_mean_std_metrics(input_dir, output_dir)
     plot_multi_seed_robustness_rmse_boxplot(input_dir, output_dir)
     plot_multi_seed_robustness_seed_pairing(input_dir, output_dir)
@@ -317,6 +372,7 @@ def run_viz_project(workflow: str, input_dir: Path, output_dir: Path):
     ensure_dir(output_dir)
     funcs = {
         "main": plot_multi_seed_robustness_suite,
+        "fedavg_rmse": plot_fedavg_robustness_rmse_mean_std,
         "communication_cost": plot_fed_robustness_communication_cost,
         "client_dropout": plot_fed_robustness_client_dropout,
         "communication_delay": plot_fed_robustness_communication_delay,
@@ -331,7 +387,7 @@ def main():
     parser = argparse.ArgumentParser(description="Federated Robustness Visualization")
     parser.add_argument(
         "--workflow",
-        choices=["all", "main", "communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
+        choices=["all", "main", "fedavg_rmse", "communication_cost", "client_dropout", "communication_delay", "gradient_noise"],
         default="all",
     )
     parser.add_argument(

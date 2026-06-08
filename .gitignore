@@ -226,3 +226,11 @@ data/analysis/node_flow_curve_fit/
 data/analysis/date_type_curve_method_comparison/
 data/analysis/speed_class_overall_stats.csv
 data/analysis/speed_class_daily_period_stats.csv
+
+# Allow uploading only the manuscript sections under paper_revision
+paper_revision/*
+!paper_revision/manuscript_sections_zh/
+!paper_revision/manuscript_sections_zh/**
+
+# Do not upload local experiment notebooks under test
+test/

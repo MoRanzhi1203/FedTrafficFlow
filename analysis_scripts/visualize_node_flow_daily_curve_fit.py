@@ -1,6 +1,7 @@
 """可视化路口节点日内平均车流量曲线及其傅里叶拟合结果。"""
 
 from pathlib import Path
+import sys
 from typing import Iterable, List, Sequence
 
 import matplotlib
@@ -11,8 +12,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 
-
 ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from analysis_scripts.fit_node_flow_daily_curve import build_fourier_design_matrix
+
 FIT_DIR = ROOT_DIR / "data" / "analysis" / "node_flow_curve_fit"
 
 FITTED_CURVE_PATH = FIT_DIR / "node_flow_fitted_daily_curves.parquet"
@@ -30,6 +35,43 @@ RESIDUAL_COL = "残差"
 TOP_N_NODES = 12
 FIG_DPI = 200
 SLOTS_PER_DAY = 96
+
+
+def build_plot_day_slots() -> np.ndarray:
+    """返回闭合展示使用的 0-96 横轴。"""
+    return np.arange(SLOTS_PER_DAY + 1, dtype=np.int64)
+
+
+def infer_harmonics_from_coeff_df(coeff_df: pl.DataFrame) -> int:
+    """根据系数字段自动识别傅里叶阶数。"""
+    harmonic_indices = [
+        int(column[1:])
+        for column in coeff_df.columns
+        if column.startswith("a") and column[1:].isdigit()
+    ]
+    if not harmonic_indices:
+        raise ValueError("系数结果中未找到任何傅里叶系数字段")
+    return max(harmonic_indices)
+
+
+def extend_periodic_curve(values: np.ndarray) -> np.ndarray:
+    """将聚合日曲线补到 day_slot=96，用于 24:00 闭合展示。"""
+    clean_values = np.asarray(values, dtype=np.float64)
+    if clean_values.size == 0:
+        return np.zeros(SLOTS_PER_DAY + 1, dtype=np.float64)
+    return np.concatenate([clean_values, np.array([clean_values[0]], dtype=np.float64)])
+
+
+def evaluate_fitted_curve_for_plot(coeff_row: dict, harmonics: int) -> np.ndarray:
+    """用原始 0-95 拟合参数在 0-96 上重算展示曲线。"""
+    coefficient_values = [float(coeff_row["a0"])]
+    for harmonic in range(1, harmonics + 1):
+        coefficient_values.append(float(coeff_row[f"a{harmonic}"]))
+        coefficient_values.append(float(coeff_row[f"b{harmonic}"]))
+    coefficients = np.asarray(coefficient_values, dtype=np.float64)
+    plot_slots = build_plot_day_slots()
+    design_matrix = build_fourier_design_matrix(plot_slots, harmonics)
+    return np.clip(design_matrix @ coefficients, a_min=0.0, a_max=None)
 
 
 def configure_fonts() -> None:
@@ -173,6 +215,11 @@ def plot_sample_node_curves(
         int(row[NODE_COL]): row
         for row in coeff_df.select([NODE_COL, "RMSE", "MAE", "R2", "平均流量"]).to_dicts()
     }
+    coeff_eval_map = {
+        int(row[NODE_COL]): row
+        for row in coeff_df.to_dicts()
+    }
+    harmonics = infer_harmonics_from_coeff_df(coeff_df)
 
     node_frames = list(iter_node_curve_frames(fitted_df, node_ids))
     if not node_frames:
@@ -191,25 +238,25 @@ def plot_sample_node_curves(
     else:
         axes_flat = np.array([axes])
 
-    x_ticks = np.arange(0, SLOTS_PER_DAY + 1, 12)
+    x_ticks = build_plot_day_slots()[::12]
+    plot_slots = build_plot_day_slots()
 
     for ax, node_df in zip(axes_flat, node_frames):
         node_id = int(node_df.item(0, NODE_COL))
-        day_slot = node_df.get_column(DAY_SLOT_COL).to_numpy()
-        avg_flow = node_df.get_column(AVG_FLOW_COL).to_numpy()
-        fitted_flow = node_df.get_column(FITTED_FLOW_COL).to_numpy()
-        residual = node_df.get_column(RESIDUAL_COL).to_numpy()
+        avg_flow = extend_periodic_curve(node_df.get_column(AVG_FLOW_COL).to_numpy())
+        fitted_flow = evaluate_fitted_curve_for_plot(coeff_eval_map[node_id], harmonics)
+        residual = avg_flow - fitted_flow
         meta = coeff_map[node_id]
 
-        ax.plot(day_slot, avg_flow, color="#4C78A8", linewidth=1.8, label="平均流量")
-        ax.plot(day_slot, fitted_flow, color="#E45756", linewidth=1.6, linestyle="--", label="拟合流量")
-        ax.fill_between(day_slot, residual, 0, color="#72B7B2", alpha=0.20, label="残差")
+        ax.plot(plot_slots, avg_flow, color="#4C78A8", linewidth=1.8, label="平均流量")
+        ax.plot(plot_slots, fitted_flow, color="#E45756", linewidth=1.6, linestyle="--", label="拟合流量")
+        ax.fill_between(plot_slots, residual, 0, color="#72B7B2", alpha=0.20, label="残差")
 
         ax.set_title(
             f"节点 {node_id}\nR2={meta['R2']:.4f}, RMSE={meta['RMSE']:.2f}, 平均流量={meta['平均流量']:.2f}",
             fontsize=10,
         )
-        ax.set_xlim(0, SLOTS_PER_DAY - 1)
+        ax.set_xlim(0, SLOTS_PER_DAY)
         ax.set_xticks(x_ticks)
         ax.set_xlabel("日内时间段")
         ax.set_ylabel("车流量")

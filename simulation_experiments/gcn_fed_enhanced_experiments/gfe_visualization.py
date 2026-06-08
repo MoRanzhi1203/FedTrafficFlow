@@ -415,8 +415,6 @@ def plot_paper_ready_fixed_vs_dynamic(input_dir: Path, output_dir: Path):
     df = df[df["method"] == "FedAvg"].copy()
     if df.empty:
         raise ValueError("No FedAvg rows found in gcn_enhanced_fixed_vs_dynamic_summary.csv.")
-    print("Single-seed preliminary result; interpret as trend evidence only.")
-    print("单种子初步结果，仅作为趋势性证据。")
     graph_order = ["Fixed", "Dynamic-Morning", "Dynamic-Evening", "Dynamic-Offpeak"]
     fig, ax = plt.subplots(figsize=(8.4, 4.8))
     sns.barplot(
@@ -431,17 +429,7 @@ def plot_paper_ready_fixed_vs_dynamic(input_dir: Path, output_dir: Path):
     ax.set_xlabel("Graph Setting")
     ax.set_ylabel("MSE")
     _style_axis(ax, rotate=12)
-    fig.subplots_adjust(top=0.82)
     _annotate_bar_values(ax, fmt="{:.2f}", offset_ratio=0.003)
-    fig.text(
-        0.5,
-        0.87,
-        "Single-seed preliminary result; interpret as trend evidence only.",
-        ha="center",
-        va="center",
-        fontsize=8.5,
-        color="#444444",
-    )
     _save_fig(fig, output_dir, "gcn_fixed_vs_dynamic_fedavg_only.png")
 
 

@@ -31,6 +31,8 @@ from analysis_scripts.compare_date_type_curve_methods import (  # noqa: E402
     OBSERVED_FLOW_COL,
     OUTPUT_ROOT,
     RESIDUAL_COL,
+    add_periodic_day_slot_96_for_plot,
+    build_plot_ready_fitted_curve_df,
 )
 from analysis_scripts.fit_node_flow_daily_curve import SLOTS_PER_DAY  # noqa: E402
 
@@ -55,6 +57,10 @@ REQUIRED_FILES = [
     "cluster_centers.parquet",
     "curve_coefficients.parquet",
 ]
+OPTIONAL_PLOT_FILES = {
+    "fitted": "fitted_curves_plot.parquet",
+    "center": "cluster_centers_plot.parquet",
+}
 CLUSTER_NAME_MAP = {
     0: "全天平稳型",
     1: "日间活跃型",
@@ -217,8 +223,14 @@ def prepare_curve_with_label_df(
     norm_df = (
         curve_with_label_df.group_by(NODE_COL)
         .agg([
-            pl.col(FITTED_FLOW_COL).mean().alias("_fitted_mean"),
-            pl.col(OBSERVED_FLOW_COL).mean().alias("_observed_mean"),
+            pl.col(FITTED_FLOW_COL)
+            .filter(pl.col(DAY_SLOT_COL) < SLOTS_PER_DAY)
+            .mean()
+            .alias("_fitted_mean"),
+            pl.col(OBSERVED_FLOW_COL)
+            .filter(pl.col(DAY_SLOT_COL) < SLOTS_PER_DAY)
+            .mean()
+            .alias("_observed_mean"),
         ])
         .with_columns([
             pl.when(pl.col("_fitted_mean").abs() <= EPSILON)
@@ -858,7 +870,13 @@ def plot_representative_fitted_functions(
                     f"d={record['distance']:.3f}"
                 ),
             )
-        x = np.arange(SLOTS_PER_DAY, dtype=np.int64)
+        x = (
+            cluster_curve_df.select(DAY_SLOT_COL)
+            .unique()
+            .sort(DAY_SLOT_COL)
+            .get_column(DAY_SLOT_COL)
+            .to_numpy()
+        )
         ax.plot(
             x,
             median_curve,
@@ -993,8 +1011,9 @@ def build_function_cluster_summary(
 
     for cluster_df in cluster_curve_df.partition_by(CLUSTER_COL, maintain_order=True):
         cluster_id = int(cluster_df.item(0, CLUSTER_COL))
-        slots = cluster_df.get_column(DAY_SLOT_COL).to_numpy().astype(np.int64)
-        values = cluster_df.get_column("cluster_mean_fitted").to_numpy().astype(np.float64)
+        core_cluster_df = cluster_df.filter(pl.col(DAY_SLOT_COL) < SLOTS_PER_DAY)
+        slots = core_cluster_df.get_column(DAY_SLOT_COL).to_numpy().astype(np.int64)
+        values = core_cluster_df.get_column("cluster_mean_fitted").to_numpy().astype(np.float64)
         peak_idx = int(np.argmax(values))
         valley_idx = int(np.argmin(values))
         peak_slot = int(slots[peak_idx])
@@ -1087,6 +1106,23 @@ def main() -> None:
     coeff_df = pl.read_parquet(method_dir / "curve_coefficients.parquet")
     if coeff_df.is_empty():
         raise ValueError(f"`{method_dir / 'curve_coefficients.parquet'}` 为空，无法继续生成函数聚类可视化。")
+
+    fitted_plot_path = method_dir / OPTIONAL_PLOT_FILES["fitted"]
+    center_plot_path = method_dir / OPTIONAL_PLOT_FILES["center"]
+    if fitted_plot_path.exists():
+        fitted_df = pl.read_parquet(fitted_plot_path)
+    else:
+        fitted_df = build_plot_ready_fitted_curve_df(fitted_df=fitted_df, coeff_df=coeff_df)
+    if center_plot_path.exists():
+        center_df = pl.read_parquet(center_plot_path)
+    else:
+        center_df = add_periodic_day_slot_96_for_plot(
+            center_df,
+            slot_col=DAY_SLOT_COL,
+            value_cols=["类平均归一化流量", "类平均原始流量"],
+            group_cols=[METHOD_COL, CLUSTER_COL],
+            fill_last="periodic",
+        )
 
     curve_with_label_df = prepare_curve_with_label_df(fitted_df=fitted_df, label_df=label_df)
 
