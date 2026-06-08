@@ -1,4 +1,4 @@
 split,num_samples,ratio
-train,700,0.7
+train,699,0.699
 val,100,0.1
-test,200,0.2
+test,201,0.201

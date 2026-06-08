@@ -1,5 +1,5 @@
 experiment,baseline_method,enhanced_method,metric,mean_improvement_percent,std_improvement_percent,improved_seed_count,total_seed_count,improved_seed_ratio,per_seed_improved
-gcn_fed_base_main,Independent,FedAvg,mae,36.36288957669255,8.03973281018458,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
-gcn_fed_base_main,Independent,FedAvg,rmse,35.020378013744576,5.585411550085428,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
-gcn_fed_base_main,Independent,FedAvg,mape,36.36406843939054,8.039355276656442,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
-gcn_fed_base_main,Independent,FedAvg,r2,19.583883410049783,7.56573615249622,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
+gcn_fed_base_main,Independent,FedAvg,mae,39.92380226036744,11.379840289844974,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
+gcn_fed_base_main,Independent,FedAvg,rmse,39.67045860582136,11.134196316772659,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
+gcn_fed_base_main,Independent,FedAvg,mape,39.92380226036744,11.379840289844973,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"
+gcn_fed_base_main,Independent,FedAvg,r2,21.857493383522126,9.507093620760223,5,5,1.0,"42:Y,1234:Y,2024:Y,3407:Y,5678:Y"

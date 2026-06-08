@@ -2,11 +2,11 @@ Experiment: gcn_fed_base_main
 Seeds: 42, 1234, 2024, 3407, 5678
 
 Per-method statistics:
-- FedAvg: MAE=0.0474±0.0027, RMSE=0.0589±0.0030, MAPE=4.7352±0.2699, R2=0.8902±0.0193
-- Independent: MAE=0.0753±0.0069, RMSE=0.0912±0.0079, MAPE=7.5264±0.6941, R2=0.7474±0.0500
+- FedAvg: MAE=0.0438±0.0038, RMSE=0.0533±0.0043, MAPE=4.3783±0.3758, R2=0.9087±0.0185
+- Independent: MAE=0.0746±0.0092, RMSE=0.0901±0.0103, MAPE=7.4552±0.9197, R2=0.7494±0.0475
 
 FedAvg vs Independent:
-- mae: mean improvement=36.36% (std=8.04%), improved on 5/5 seeds
-- rmse: mean improvement=35.02% (std=5.59%), improved on 5/5 seeds
-- mape: mean improvement=36.36% (std=8.04%), improved on 5/5 seeds
-- r2: mean improvement=19.58% (std=7.57%), improved on 5/5 seeds
+- mae: mean improvement=39.92% (std=11.38%), improved on 5/5 seeds
+- rmse: mean improvement=39.67% (std=11.13%), improved on 5/5 seeds
+- mape: mean improvement=39.92% (std=11.38%), improved on 5/5 seeds
+- r2: mean improvement=21.86% (std=9.51%), improved on 5/5 seeds

@@ -13,10 +13,10 @@
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
 - Main figures exist: `main_metrics_comparison.png`, `main_predictions_comparison.png`, `multi_seed_mean_std_metrics.png`, `multi_seed_rmse_boxplot.png`, `multi_seed_rmse_seed_pairing.png`, `convergence_curve.png`.
 - CSV audit: `FedAvg` and `Independent` both cover all `5` seeds in main results; `FedAvg` covers all `5` seeds in convergence results.
-- Base data update: the original nearly homogeneous setting has been replaced by a `balanced but moderately weak heterogeneous` setting. All `5` clients still keep `200` samples, `8` nodes, and the same `24 -> 1` input-output setup, while controlled differences in flow level, peak amplitude, phase shift, noise level, and local trend are introduced.
-- Weak-heterogeneity audit: `target_mean CV=0.094936`, `target_std CV=0.082151`, `balanced weak heterogeneity=YES`.
-- FedAvg main metrics: `RMSE=0.070911 +- 0.005389`, `MAE=0.056805 +- 0.004936`, `MAPE=5.680205 +- 0.493599`, `R2=0.844617 +- 0.024160`.
-- FedAvg convergence at final round: `Val RMSE=0.074594 +- 0.007916`, `Val Loss=0.006354 +- 0.001324`.
+- Base data update: the base CNN workflow now uses a `mild sample-size imbalance + controlled weak heterogeneity` setting. The `5` clients keep the same `8` nodes and `24 -> 1` input-output setup, while client sample sizes are `180, 190, 200, 210, 220` and controlled differences in flow level, peak amplitude, phase shift, noise level, and local trend are introduced.
+- Weak-heterogeneity audit: `sample_size CV=0.070711`, `target_mean CV=0.084077`, `target_std CV=0.084359`, `controlled weak heterogeneity=YES`.
+- FedAvg main metrics: `RMSE=0.060461 +- 0.005202`, `MAE=0.049328 +- 0.005192`, `MAPE=4.932813 +- 0.519231`, `R2=0.885399 +- 0.022960`.
+- FedAvg convergence at final round: `Val RMSE=0.062667 +- 0.007372`, `Val Loss=0.004545 +- 0.001345`.
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
 ### `gcn_fed_base`
@@ -24,10 +24,10 @@
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
 - Main figures exist: `main_metrics_comparison.png`, `main_predictions_comparison.png`, `multi_seed_mean_std_metrics.png`, `multi_seed_rmse_boxplot.png`, `multi_seed_rmse_seed_pairing.png`, `convergence_curve.png`.
 - CSV audit: `FedAvg` and `Independent` both cover all `5` seeds in main results; `FedAvg` covers all `5` seeds in convergence results.
-- Base data update: the GCN base workflow now reuses the same `balanced but moderately weak heterogeneous` synthetic dataset as the CNN base workflow, preserving equal sample size and graph/input-output settings while avoiding fully identical client data.
-- Weak-heterogeneity audit: `target_mean CV=0.094936`, `target_std CV=0.082151`, `balanced weak heterogeneity=YES`.
-- FedAvg main metrics: `RMSE=0.058872 +- 0.003001`, `MAE=0.047355 +- 0.002702`, `MAPE=4.735208 +- 0.269947`, `R2=0.890190 +- 0.019319`.
-- FedAvg convergence at final round: `Val RMSE=0.058899 +- 0.003191`, `Val Loss=0.004557 +- 0.000948`.
+- Base data update: the GCN base workflow reuses the same `mild sample-size imbalance + controlled weak heterogeneity` synthetic dataset as the CNN base workflow, preserving graph/input-output settings while using client sample sizes `180, 190, 200, 210, 220`.
+- Weak-heterogeneity audit: `sample_size CV=0.070711`, `target_mean CV=0.084077`, `target_std CV=0.084359`, `controlled weak heterogeneity=YES`.
+- FedAvg main metrics: `RMSE=0.053268 +- 0.004269`, `MAE=0.043783 +- 0.003758`, `MAPE=4.378334 +- 0.375795`, `R2=0.908741 +- 0.018486`.
+- FedAvg convergence at final round: `Val RMSE=0.053636 +- 0.003576`, `Val Loss=0.002961 +- 0.000321`.
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
 ### `cnn_fed_enhanced_experiments`
@@ -75,7 +75,7 @@
 
 ## Cross-directory Findings
 - `cnn_fed_base`, `gcn_fed_base`, `cnn_fed_enhanced_experiments`, `gcn_fed_enhanced_experiments`, and `fed_robustness_experiments` completed their target `5-seed` outputs for this round.
-- The base CNN and base GCN data-generation logic has been updated from a fully homogeneous or near-homogeneous setup to a `balanced but moderately weak heterogeneous` scenario. All clients still share the same sample size, node scale, and input-output window, while controlled differences in flow level, peak amplitude, phase shift, and noise are introduced.
+- The base CNN and base GCN data-generation logic has been updated to a `mild sample-size imbalance + controlled weak heterogeneity` scenario. The five client sample sizes are `180, 190, 200, 210, 220`, while controlled differences in flow level, peak amplitude, phase shift, and noise are introduced under the same node scale and input-output window.
 - `cnn_fed_enhanced_experiments` and `gcn_fed_enhanced_experiments` now contain complete `5-seed` main results and `5-seed` convergence results.
 - Across all targeted `5-seed` outputs, the seed set is exactly `42, 2024, 3407, 1234, 5678`.
 - No targeted CSV is empty.

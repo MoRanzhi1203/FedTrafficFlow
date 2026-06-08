@@ -108,7 +108,7 @@ def _prepare_enhanced_data() -> dict[str, object]:
         mean_series = data.mean(axis=1)
         hours = np.arange(len(mean_series), dtype=float) * 24.0 / len(mean_series)
         resampled = np.interp(common_hours, hours, mean_series)
-        kernel = np.array([1.0, 2.0, 3.0, 2.0, 1.0], dtype=float)
+        kernel = np.array([1.0, 2.0, 3.0, 3.0, 3.0, 2.0, 1.0], dtype=float)
         kernel /= kernel.sum()
         resampled = np.convolve(resampled, kernel, mode="same")
 
@@ -132,8 +132,8 @@ def _prepare_enhanced_data() -> dict[str, object]:
 
 def _draw_base_graph(ax, raw_adj: np.ndarray) -> None:
     num_nodes = raw_adj.shape[0]
-    angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False)
-    coords = np.column_stack([np.cos(angles), np.sin(angles)])
+    angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False) + np.pi / 8.0
+    coords = 0.82 * np.column_stack([np.cos(angles), np.sin(angles)])
     for src in range(num_nodes):
         for dst in range(src + 1, num_nodes):
             weight = float(raw_adj[src, dst])
@@ -143,14 +143,16 @@ def _draw_base_graph(ax, raw_adj: np.ndarray) -> None:
                 [coords[src, 0], coords[dst, 0]],
                 [coords[src, 1], coords[dst, 1]],
                 color="#7F7F7F",
-                lw=1.0 + 1.4 * weight,
-                alpha=0.75,
+                lw=0.8 + 0.9 * weight,
+                alpha=0.70,
                 zorder=1,
             )
-    ax.scatter(coords[:, 0], coords[:, 1], s=320, color="#4C78A8", edgecolor="white", linewidth=1.2, zorder=2)
+    ax.scatter(coords[:, 0], coords[:, 1], s=300, color="#4C78A8", edgecolor="white", linewidth=1.0, zorder=2)
     for node_id, (x_pos, y_pos) in enumerate(coords, start=1):
         ax.text(x_pos, y_pos, str(node_id), ha="center", va="center", color="white", fontsize=9, fontweight="bold")
     ax.set_aspect("equal")
+    ax.set_xlim(-1.02, 1.02)
+    ax.set_ylim(-0.98, 0.98)
     ax.axis("off")
 
 
@@ -165,7 +167,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     clients = [f"Client {idx}" for idx in range(1, meta["num_clients"] + 1)]
     sample_sizes = list(meta["samples_per_client"])
     bars = axes[0, 0].bar(clients, sample_sizes, color=COLORS[0], width=0.65, edgecolor="white")
-    axes[0, 0].set_title("(a) Balanced Client Sample Sizes", loc="left", fontweight="bold")
+    axes[0, 0].set_title("(a) Mild Client Sample-size Imbalance", loc="left", fontweight="bold")
     axes[0, 0].set_ylabel("Samples")
     axes[0, 0].set_ylim(0, max(sample_sizes) * 1.25)
     axes[0, 0].grid(axis="y", alpha=0.7)
@@ -197,7 +199,6 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     axes[1, 0].set_xticks(range(1, len(target_data) + 1))
     axes[1, 0].set_xticklabels([f"Client {idx}" for idx in range(1, len(target_data) + 1)])
     axes[1, 0].grid(alpha=0.7)
-    axes[1, 0].text(0.02, 0.03, "24-step input, 1-step forecast, 70/10/20 split", transform=axes[1, 0].transAxes, ha="left", va="bottom", fontsize=9, color=TEXT_COLOR)
 
     _draw_base_graph(axes[1, 1], base_data["raw_adj"])
     axes[1, 1].set_title("(d) Base 8-node Graph Structure", loc="left", fontweight="bold")
@@ -208,7 +209,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
         transform=axes[1, 1].transAxes,
         ha="left",
         va="top",
-        fontsize=9,
+        fontsize=8,
         color=TEXT_COLOR,
     )
 
@@ -253,6 +254,10 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     axes[0, 1].set_xticks(range(1, 6))
     axes[0, 1].set_xticklabels(clients)
     axes[0, 1].grid(alpha=0.7)
+    all_targets = np.concatenate([np.asarray(targets, dtype=float) for targets in enhanced_data["target_distributions"]])
+    y_low = np.percentile(all_targets, 1.0)
+    y_high = np.percentile(all_targets, 99.0)
+    axes[0, 1].set_ylim(max(0.0, y_low - 0.05 * (y_high - y_low)), y_high + 0.08 * (y_high - y_low))
 
     for cid, series in enumerate(enhanced_data["resampled_series"]):
         axes[1, 0].plot(enhanced_data["hours"], series, lw=1.8, color=COLORS[cid], label=f"Client {cid + 1}")
@@ -280,11 +285,13 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     axes[1, 1].set_xticks(np.arange(len(clients)))
     axes[1, 1].set_xticklabels(clients)
     axes[1, 1].set_yticks(np.arange(4))
-    axes[1, 1].set_yticklabels(["sample size", "noise std", "peak amplitude", "incident probability"])
+    axes[1, 1].set_yticklabels(["sample size", "noise level", "peak amplitude", "event probability"])
     for row_idx in range(normalized.shape[0]):
         for col_idx in range(normalized.shape[1]):
-            axes[1, 1].text(col_idx, row_idx, f"{normalized[row_idx, col_idx]:.2f}", ha="center", va="center", fontsize=8, color="#17324D")
-    fig.colorbar(im, ax=axes[1, 1], fraction=0.046, pad=0.04, label="Normalized driver strength")
+            axes[1, 1].text(col_idx, row_idx, f"{normalized[row_idx, col_idx]:.2f}", ha="center", va="center", fontsize=7, color="#17324D")
+    cbar = fig.colorbar(im, ax=axes[1, 1], fraction=0.046, pad=0.04)
+    cbar.set_label("Normalized strength", fontsize=8)
+    cbar.ax.tick_params(labelsize=8)
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(output_dir / ENHANCED_PNG, dpi=300, bbox_inches="tight")
@@ -316,7 +323,7 @@ def write_readme(output_dir: Path) -> None:
 - 本脚本仅用于生成数据说明图，不触发模型训练，不修改已有实验 CSV
 
 说明：
-- 基础图强调受控、均衡的客户端设置与基础路网结构
+- 基础图强调轻度样本量不平衡、受控弱异质性与基础路网结构
 - 增强图强调样本量不平衡、目标值分布差异、峰型差异以及噪声/事件扰动共同构成的 Non-IID 来源
 - 图中不涉及 Proposed、Loss-weighted 或 Data-loss weighted
 """

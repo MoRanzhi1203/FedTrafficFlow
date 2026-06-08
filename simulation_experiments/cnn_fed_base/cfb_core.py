@@ -55,18 +55,19 @@ BASE_NUM_CLIENTS = 5
 BASE_NUM_NODES = 8          # K: 交通传感器/观测节点数
 BASE_SEQ_LEN = 24           # T: 时间窗口长度（例如每小时一个点，共一天）
 BASE_PRED_LEN = 1           # 预测步长
-BASE_SAMPLES_PER_CLIENT = [200, 200, 200, 200, 200]  # 平衡样本
+BASE_SAMPLES_PER_CLIENT = [180, 190, 200, 210, 220]
 BASE_NOISE = 0.05           # 观测噪声标准差
 BASE_TRAIN_RATIO = 0.70
 BASE_VAL_RATIO = 0.10
 BASE_TEST_RATIO = 0.20
 BASE_CLIENT_CONFIGS = [
-    {"scale": 0.91, "offset": -0.028, "peak_amp": 0.89, "phase_shift": -1, "noise_std": 0.040, "local_trend": -0.008},
-    {"scale": 0.96, "offset": -0.012, "peak_amp": 0.96, "phase_shift": -1, "noise_std": 0.048, "local_trend": -0.004},
-    {"scale": 1.02, "offset": 0.000, "peak_amp": 1.03, "phase_shift": 0, "noise_std": 0.055, "local_trend": 0.000},
-    {"scale": 1.08, "offset": 0.018, "peak_amp": 1.09, "phase_shift": 1, "noise_std": 0.064, "local_trend": 0.004},
-    {"scale": 1.12, "offset": 0.032, "peak_amp": 1.13, "phase_shift": 2, "noise_std": 0.075, "local_trend": 0.008},
+    {"num_samples": 180, "scale": 0.92, "offset": -0.030, "peak_amp": 0.90, "phase_shift": -2, "noise_std": 0.045, "local_trend": -0.008},
+    {"num_samples": 190, "scale": 0.97, "offset": -0.015, "peak_amp": 0.97, "phase_shift": -1, "noise_std": 0.050, "local_trend": -0.004},
+    {"num_samples": 200, "scale": 1.01, "offset": 0.000, "peak_amp": 1.03, "phase_shift": 0, "noise_std": 0.055, "local_trend": 0.000},
+    {"num_samples": 210, "scale": 1.06, "offset": 0.018, "peak_amp": 1.10, "phase_shift": 1, "noise_std": 0.062, "local_trend": 0.004},
+    {"num_samples": 220, "scale": 1.10, "offset": 0.030, "peak_amp": 1.14, "phase_shift": 2, "noise_std": 0.070, "local_trend": 0.008},
 ]
+WEAK_HET_SAMPLE_SIZE_CV_RANGE = (0.05, 0.12)
 WEAK_HET_TARGET_MEAN_CV_RANGE = (0.08, 0.20)
 WEAK_HET_TARGET_STD_CV_RANGE = (0.08, 0.25)
 # 联邦训练超参数
@@ -143,6 +144,11 @@ def get_base_client_configs(num_clients: int = BASE_NUM_CLIENTS) -> list[dict[st
     return [dict(cfg) for cfg in BASE_CLIENT_CONFIGS]
 
 
+def get_base_samples_per_client(num_clients: int = BASE_NUM_CLIENTS) -> list[int]:
+    """从固定客户端配置中提取样本量。"""
+    return [int(cfg["num_samples"]) for cfg in get_base_client_configs(num_clients)]
+
+
 def coefficient_of_variation(values: np.ndarray | list[float]) -> float:
     arr = np.asarray(values, dtype=float)
     return float(np.std(arr, ddof=0) / max(abs(np.mean(arr)), 1e-8))
@@ -179,22 +185,25 @@ def build_base_dataset_client_summary(
 
 def build_base_weak_heterogeneity_report(summary_df: pd.DataFrame) -> tuple[str, dict[str, float | bool]]:
     """生成基础弱异质性审查报告。"""
-    balanced_samples = bool(summary_df["num_samples"].nunique() == 1)
+    sample_sizes = summary_df["num_samples"].to_numpy(dtype=float)
+    sample_size_cv = coefficient_of_variation(sample_sizes)
     target_mean_cv = coefficient_of_variation(summary_df["target_mean"].to_numpy())
     target_std_cv = coefficient_of_variation(summary_df["target_std"].to_numpy())
+    sample_ok = WEAK_HET_SAMPLE_SIZE_CV_RANGE[0] <= sample_size_cv <= WEAK_HET_SAMPLE_SIZE_CV_RANGE[1]
     mean_ok = WEAK_HET_TARGET_MEAN_CV_RANGE[0] <= target_mean_cv <= WEAK_HET_TARGET_MEAN_CV_RANGE[1]
     std_ok = WEAK_HET_TARGET_STD_CV_RANGE[0] <= target_std_cv <= WEAK_HET_TARGET_STD_CV_RANGE[1]
-    balanced_weak_het = balanced_samples and mean_ok and std_ok
+    controlled_weak_het = sample_ok and mean_ok and std_ok
 
     lines = [
         "Base dataset weak-heterogeneity audit",
         "=" * 48,
-        f"Balanced sample sizes: {'YES' if balanced_samples else 'NO'}",
+        f"Client sample sizes: {', '.join(str(int(v)) for v in sample_sizes)}",
+        f"Sample-size CV: {sample_size_cv:.4f} (target range: {WEAK_HET_SAMPLE_SIZE_CV_RANGE[0]:.2f} - {WEAK_HET_SAMPLE_SIZE_CV_RANGE[1]:.2f})",
         f"Target-mean CV: {target_mean_cv:.4f} (target range: {WEAK_HET_TARGET_MEAN_CV_RANGE[0]:.2f} - {WEAK_HET_TARGET_MEAN_CV_RANGE[1]:.2f})",
         f"Target-std CV: {target_std_cv:.4f} (target range: {WEAK_HET_TARGET_STD_CV_RANGE[0]:.2f} - {WEAK_HET_TARGET_STD_CV_RANGE[1]:.2f})",
-        f"Balanced but moderately weak heterogeneous: {'YES' if balanced_weak_het else 'NO'}",
+        f"Controlled weak heterogeneity: {'YES' if controlled_weak_het else 'NO'}",
         "Clearly weaker than enhanced strong Non-IID: YES",
-        "Reason: client sample sizes remain equal, graph/input-output settings remain fixed, and there is no distribution-family shift or incident-driven strong heterogeneity.",
+        "Reason: client sample sizes are only mildly imbalanced, graph/input-output settings remain fixed, and there is no distribution-family shift or incident-driven strong heterogeneity.",
         "",
         "Per-client configuration:",
     ]
@@ -206,10 +215,10 @@ def build_base_weak_heterogeneity_report(summary_df: pd.DataFrame) -> tuple[str,
             f"target_mean={row['target_mean']:.4f}, target_std={row['target_std']:.4f}"
         )
     return "\n".join(lines), {
-        "balanced_samples": balanced_samples,
+        "sample_size_cv": sample_size_cv,
         "target_mean_cv": target_mean_cv,
         "target_std_cv": target_std_cv,
-        "balanced_weak_het": balanced_weak_het,
+        "controlled_weak_het": controlled_weak_het,
     }
 
 
@@ -403,10 +412,15 @@ def generate_base_traffic_data(
         metadata: dict, 包含数据集的汇总信息
     """
     if samples_per_client is None:
-        samples_per_client = BASE_SAMPLES_PER_CLIENT
+        samples_per_client = get_base_samples_per_client(num_clients)
 
     rng = np.random.RandomState(seed)
     client_configs = get_base_client_configs(num_clients)
+    config_sample_sizes = [int(cfg["num_samples"]) for cfg in client_configs]
+    if list(samples_per_client) != config_sample_sizes:
+        raise ValueError(
+            f"samples_per_client={list(samples_per_client)} does not match configured client sample sizes={config_sample_sizes}"
+        )
     max_samples = max(int(n_samples) for n_samples in samples_per_client)
     total_steps = max_samples + seq_len + pred_len - 1
     global_time = np.arange(total_steps, dtype=float)
@@ -445,8 +459,9 @@ def generate_base_traffic_data(
         client_backbone = np.roll(backbone_pattern, phase_shift)
         client_peaks = np.roll(peak_pattern, phase_shift)
         baseline_level = 0.12 + offset
-        slow_drift = 0.02 * np.sin(2 * np.pi * global_time / max(total_steps, 1) + cid * 0.35)
-        micro_cycle = (0.005 + 0.90 * noise_std) * np.sin(6 * np.pi * global_time / seq_len + cid * 0.45)
+        slow_drift = 0.018 * np.sin(2 * np.pi * global_time / max(total_steps, 1) + cid * 0.35)
+        micro_cycle = (0.008 + 0.85 * noise_std) * np.sin(6 * np.pi * global_time / seq_len + cid * 0.45)
+        shoulder_wave = 0.012 * peak_amp * np.sin(2 * np.pi * global_time / (seq_len * 2.0) + cid * 0.55)
         client_pattern = (
             baseline_level
             + scale * client_backbone
@@ -454,24 +469,27 @@ def generate_base_traffic_data(
             + local_trend * slow_axis
             + slow_drift
             + micro_cycle
+            + shoulder_wave
         )
         client_pattern = np.clip(client_pattern, 0.03, None)
 
         # 节点之间共享空间结构，但保留轻微响应差异。
-        node_sensitivity = 0.94 + 0.08 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.18)
+        node_sensitivity = 0.93 + 0.09 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.22)
         node_offsets = np.linspace(-0.015, 0.015, num_nodes) * (0.7 + 0.05 * cid)
 
         node_series = np.zeros((num_nodes, total_steps), dtype=np.float32)
-        shared_noise = rng.randn(total_steps) * (noise_std * 0.45)
+        shared_noise = rng.randn(total_steps) * (noise_std * 0.40)
         for node in range(num_nodes):
             node_trend = local_trend * (node - (num_nodes - 1) / 2.0) / num_nodes * slow_axis * 0.5
             node_noise = rng.randn(total_steps) * noise_std
+            node_phase = 0.006 * np.sin(2 * np.pi * global_time / seq_len + node * 0.35 + cid * 0.20)
             node_flow = (
                 node_sensitivity[node] * client_pattern
                 + node_offsets[node]
                 + node_trend
                 + shared_noise
                 + node_noise
+                + node_phase
             )
             node_series[node, :] = np.clip(node_flow, TRAFFIC_MIN_VALUE, None)
 
