@@ -37,11 +37,12 @@ def _configure_style() -> None:
     plt.rcParams.update(
         {
             "font.size": 10,
-            "axes.titlesize": 11,
+            "axes.titlesize": 12,
             "axes.labelsize": 10,
-            "figure.titlesize": 14,
+            "figure.titlesize": 16,
             "xtick.labelsize": 9,
             "ytick.labelsize": 9,
+            "legend.fontsize": 9,
             "axes.edgecolor": "#BBBBBB",
             "axes.linewidth": 0.8,
             "grid.color": GRID_COLOR,
@@ -78,10 +79,34 @@ def _add_bar_labels(ax, bars, values: list[float]) -> None:
         )
 
 
+def _smooth_curve(values: np.ndarray, window: int = 3) -> np.ndarray:
+    if window <= 1:
+        return values.copy()
+    pad = window // 2
+    padded = np.pad(values, (pad, pad), mode="edge")
+    kernel = np.ones(window, dtype=float) / float(window)
+    return np.convolve(padded, kernel, mode="valid")
+
+
+def _configure_line_panel(ax, legend_items: int) -> None:
+    ax.grid(alpha=0.25)
+    ax.set_axisbelow(True)
+    ncol = 3 if legend_items <= 6 else 4
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, 1.05),
+        ncol=ncol,
+        frameon=False,
+        fontsize=9,
+        handlelength=2.4,
+        columnspacing=1.2,
+    )
+
+
 def _prepare_base_data() -> dict[str, object]:
     all_x, all_y, meta = cfb_core.generate_base_traffic_data(seed=cfb_core.BASE_SEED)
     _, raw_adj, graph_meta = gfb_core.generate_adjacency_matrix(seed=gfb_core.BASE_SEED)
-    mean_series = [client_x.mean(axis=(0, 1)) for client_x in all_x]
+    mean_series = [_smooth_curve(client_x.mean(axis=(0, 1)), window=3) for client_x in all_x]
     return {
         "meta": meta,
         "mean_series": mean_series,
@@ -108,11 +133,12 @@ def _prepare_enhanced_data() -> dict[str, object]:
         mean_series = data.mean(axis=1)
         hours = np.arange(len(mean_series), dtype=float) * 24.0 / len(mean_series)
         resampled = np.interp(common_hours, hours, mean_series)
-        kernel = np.array([1.0, 2.0, 3.0, 3.0, 3.0, 2.0, 1.0], dtype=float)
+        kernel = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 5.0, 4.0, 3.0, 2.0, 1.0], dtype=float)
         kernel /= kernel.sum()
         resampled = np.convolve(resampled, kernel, mode="same")
+        resampled = _smooth_curve(resampled, window=7)
 
-        target_distributions.append(targets)
+        target_distributions.append(np.clip(targets, 0.0, None))
         resampled_series.append(resampled)
         sample_sizes.append(int(cfg["n_samples"]))
         noises.append(float(cfg["noise"]))
@@ -160,7 +186,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     base_data = _prepare_base_data()
     meta = base_data["meta"]
 
-    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.4))
     fig.patch.set_facecolor("white")
     fig.suptitle("Base Synthetic Traffic Dataset", y=0.97, fontweight="bold")
 
@@ -170,19 +196,38 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     axes[0, 0].set_title("(a) Mild Client Sample-size Imbalance", loc="left", fontweight="bold")
     axes[0, 0].set_ylabel("Samples")
     axes[0, 0].set_ylim(0, max(sample_sizes) * 1.25)
-    axes[0, 0].grid(axis="y", alpha=0.7)
+    axes[0, 0].grid(axis="y", alpha=0.25)
     axes[0, 0].set_axisbelow(True)
     _add_bar_labels(axes[0, 0], bars, sample_sizes)
 
+    time_axis = np.arange(len(base_data["mean_series"][0]))
     for cid, series in enumerate(base_data["mean_series"]):
-        axes[0, 1].plot(np.arange(len(series)), series, label=f"Client {cid + 1}", lw=1.8, color=COLORS[cid])
+        axes[0, 1].plot(
+            time_axis,
+            series,
+            label=f"Client {cid + 1}",
+            lw=1.9,
+            alpha=0.95,
+            color=COLORS[cid],
+        )
     overall_mean = np.mean(np.vstack(base_data["mean_series"]), axis=0)
-    axes[0, 1].plot(np.arange(len(overall_mean)), overall_mean, color="#333333", lw=1.4, ls="--", label="Overall mean")
+    axes[0, 1].plot(
+        time_axis,
+        overall_mean,
+        color="#222222",
+        lw=1.8,
+        ls="--",
+        alpha=0.75,
+        label="Overall mean",
+    )
     axes[0, 1].set_title("(b) Mean Traffic Trajectories", loc="left", fontweight="bold")
     axes[0, 1].set_xlabel("Time Step")
     axes[0, 1].set_ylabel("Average Flow")
-    axes[0, 1].grid(alpha=0.7)
-    axes[0, 1].legend(ncol=2, fontsize=8, loc="upper left")
+    y_min = min(float(np.min(series)) for series in base_data["mean_series"])
+    y_max = max(float(np.max(series)) for series in base_data["mean_series"])
+    pad = max((y_max - y_min) * 0.16, 0.06)
+    axes[0, 1].set_ylim(max(0.0, y_min - pad), y_max + pad)
+    _configure_line_panel(axes[0, 1], legend_items=len(base_data["mean_series"]) + 1)
 
     target_data = [np.asarray(targets, dtype=float) for targets in base_data["targets"]]
     box = axes[1, 0].boxplot(target_data, patch_artist=True, widths=0.6, showfliers=False)
@@ -198,7 +243,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     axes[1, 0].set_ylabel("Target Flow")
     axes[1, 0].set_xticks(range(1, len(target_data) + 1))
     axes[1, 0].set_xticklabels([f"Client {idx}" for idx in range(1, len(target_data) + 1)])
-    axes[1, 0].grid(alpha=0.7)
+    axes[1, 0].grid(alpha=0.25)
 
     _draw_base_graph(axes[1, 1], base_data["raw_adj"])
     axes[1, 1].set_title("(d) Base 8-node Graph Structure", loc="left", fontweight="bold")
@@ -222,7 +267,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
 def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     enhanced_data = _prepare_enhanced_data()
 
-    fig, axes = plt.subplots(2, 2, figsize=(11, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(11.5, 8.4))
     fig.patch.set_facecolor("white")
     fig.suptitle("Enhanced Synthetic Dataset Non-IID Overview", y=0.97, fontweight="bold")
 
@@ -231,11 +276,31 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     axes[0, 0].set_title("(a) Imbalanced Client Sample Sizes", loc="left", fontweight="bold")
     axes[0, 0].set_ylabel("Samples")
     axes[0, 0].set_ylim(0, max(enhanced_data["sample_sizes"]) * 1.25)
-    axes[0, 0].grid(axis="y", alpha=0.7)
+    axes[0, 0].grid(axis="y", alpha=0.25)
     axes[0, 0].set_axisbelow(True)
     _add_bar_labels(axes[0, 0], bars, enhanced_data["sample_sizes"])
 
-    box = axes[0, 1].boxplot(
+    for cid, series in enumerate(enhanced_data["resampled_series"]):
+        axes[0, 1].plot(
+            enhanced_data["hours"],
+            series,
+            lw=1.9,
+            alpha=0.95,
+            color=COLORS[cid],
+            label=f"Client {cid + 1}",
+        )
+    axes[0, 1].set_title("(b) Mean Daily Traffic Patterns", loc="left", fontweight="bold")
+    axes[0, 1].set_xlabel("Hour of Day")
+    axes[0, 1].set_ylabel("Average Flow")
+    axes[0, 1].set_xlim(0, 24)
+    axes[0, 1].set_xticks([0, 6, 12, 18, 24])
+    enhanced_y_min = min(float(np.min(series)) for series in enhanced_data["resampled_series"])
+    enhanced_y_max = max(float(np.max(series)) for series in enhanced_data["resampled_series"])
+    enhanced_pad = max((enhanced_y_max - enhanced_y_min) * 0.14, 0.25)
+    axes[0, 1].set_ylim(max(0.0, enhanced_y_min - enhanced_pad), enhanced_y_max + enhanced_pad)
+    _configure_line_panel(axes[0, 1], legend_items=len(enhanced_data["resampled_series"]))
+
+    box = axes[1, 0].boxplot(
         [np.asarray(targets, dtype=float) for targets in enhanced_data["target_distributions"]],
         patch_artist=True,
         widths=0.6,
@@ -248,26 +313,16 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     for median in box["medians"]:
         median.set_color("#333333")
         median.set_linewidth(1.4)
-    axes[0, 1].set_title("(b) Target-flow Distribution Shift", loc="left", fontweight="bold")
-    axes[0, 1].set_xlabel("Client")
-    axes[0, 1].set_ylabel("Target Flow")
-    axes[0, 1].set_xticks(range(1, 6))
-    axes[0, 1].set_xticklabels(clients)
-    axes[0, 1].grid(alpha=0.7)
+    axes[1, 0].set_title("(c) Target-flow Distribution Shift", loc="left", fontweight="bold")
+    axes[1, 0].set_xlabel("Client")
+    axes[1, 0].set_ylabel("Target Flow")
+    axes[1, 0].set_xticks(range(1, 6))
+    axes[1, 0].set_xticklabels(clients)
+    axes[1, 0].grid(alpha=0.25)
     all_targets = np.concatenate([np.asarray(targets, dtype=float) for targets in enhanced_data["target_distributions"]])
     y_low = np.percentile(all_targets, 1.0)
     y_high = np.percentile(all_targets, 99.0)
-    axes[0, 1].set_ylim(max(0.0, y_low - 0.05 * (y_high - y_low)), y_high + 0.08 * (y_high - y_low))
-
-    for cid, series in enumerate(enhanced_data["resampled_series"]):
-        axes[1, 0].plot(enhanced_data["hours"], series, lw=1.8, color=COLORS[cid], label=f"Client {cid + 1}")
-    axes[1, 0].set_title("(c) Mean Daily Traffic Patterns", loc="left", fontweight="bold")
-    axes[1, 0].set_xlabel("Hour of Day")
-    axes[1, 0].set_ylabel("Average Flow")
-    axes[1, 0].set_xlim(0, 24)
-    axes[1, 0].set_xticks([0, 6, 12, 18, 24])
-    axes[1, 0].grid(alpha=0.7)
-    axes[1, 0].legend(ncol=2, fontsize=8, loc="upper left")
+    axes[1, 0].set_ylim(max(0.0, y_low - 0.05 * (y_high - y_low)), y_high + 0.08 * (y_high - y_low))
 
     driver_matrix = np.vstack(
         [
