@@ -20,6 +20,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
+from simulation_experiments.cnn_fed_base import cfb_core as base_cnn_core
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
 RESULTS_ROOT = PROJECT_ROOT / "results"
@@ -29,7 +31,7 @@ TRAFFIC_MIN_VALUE = 0.0
 MAPE_EPS = 1.0
 
 BASE_SEED = 42
-DEFAULT_MULTI_SEEDS = [42, 2024, 2025, 2026, 3407]
+DEFAULT_MULTI_SEEDS = [42, 2024, 3407, 1234, 5678]
 BASE_NUM_CLIENTS = 5
 BASE_NUM_NODES = 8
 BASE_SEQ_LEN = 24
@@ -224,43 +226,15 @@ def compute_metrics(preds: np.ndarray, truths: np.ndarray):
 
 
 def generate_base_traffic_data(seed: int = BASE_SEED):
-    rng = np.random.RandomState(seed)
-    t_axis = np.arange(BASE_SEQ_LEN)
-    base_pattern = (
-        0.3 * np.sin(2 * np.pi * t_axis / BASE_SEQ_LEN)
-        + 0.5 * np.exp(-0.5 * ((t_axis - 8) / 2) ** 2)
-        + 0.6 * np.exp(-0.5 * ((t_axis - 17) / 2) ** 2)
-        + 0.2 * np.sin(4 * np.pi * t_axis / BASE_SEQ_LEN + 1.0)
+    return base_cnn_core.generate_base_traffic_data(
+        seed=seed,
+        num_clients=BASE_NUM_CLIENTS,
+        num_nodes=BASE_NUM_NODES,
+        seq_len=BASE_SEQ_LEN,
+        pred_len=BASE_PRED_LEN,
+        samples_per_client=list(BASE_SAMPLES_PER_CLIENT),
+        noise=BASE_NOISE,
     )
-    all_X, all_Y = [], []
-    metadata = {
-        "num_clients": BASE_NUM_CLIENTS,
-        "num_nodes": BASE_NUM_NODES,
-        "seq_len": BASE_SEQ_LEN,
-        "pred_len": BASE_PRED_LEN,
-        "samples_per_client": BASE_SAMPLES_PER_CLIENT,
-    }
-    for cid in range(BASE_NUM_CLIENTS):
-        n_samples = BASE_SAMPLES_PER_CLIENT[cid]
-        amp_scale = 1.0 + 0.08 * (cid - BASE_NUM_CLIENTS // 2)
-        node_sensitivity = 0.7 + 0.3 * np.sin(np.linspace(0, np.pi, BASE_NUM_NODES) + cid * 0.3)
-        x_client = np.zeros((n_samples, BASE_NUM_NODES, BASE_SEQ_LEN), dtype=np.float32)
-        y_client = np.zeros(n_samples, dtype=np.float32)
-        for sample_idx in range(n_samples):
-            sample_noise = rng.randn(BASE_NUM_NODES, BASE_SEQ_LEN) * BASE_NOISE
-            for node_idx in range(BASE_NUM_NODES):
-                node_flow = (
-                    node_sensitivity[node_idx]
-                    * amp_scale
-                    * (base_pattern + 0.02 * rng.randn(BASE_SEQ_LEN))
-                    + sample_noise[node_idx]
-                )
-                x_client[sample_idx, node_idx, :] = node_flow
-            x_client[sample_idx] = np.clip(x_client[sample_idx], TRAFFIC_MIN_VALUE, None)
-            y_client[sample_idx] = x_client[sample_idx, :, -BASE_PRED_LEN:].mean()
-        all_X.append(x_client)
-        all_Y.append(y_client)
-    return all_X, all_Y, metadata
 
 
 def generate_adjacency_matrix(num_nodes: int = BASE_NUM_NODES, seed: int = BASE_SEED):
@@ -524,6 +498,7 @@ def build_summary(df: pd.DataFrame) -> pd.DataFrame:
 
 def export_base_dataset_artifacts(output_dir: Path) -> None:
     client_splits, metadata, split_overview, all_x = build_client_splits(BASE_SEED)
+    _, all_y, _ = generate_base_traffic_data(BASE_SEED)
     _, raw_adj, graph_meta = generate_adjacency_matrix()
     sequence_rows = []
     grid_rows = []
@@ -575,6 +550,10 @@ def export_base_dataset_artifacts(output_dir: Path) -> None:
     save_dataframe(pd.DataFrame(summary_rows), output_dir, "base_dataset_summary.csv")
     save_dataframe(pd.DataFrame(raw_adj), output_dir, "base_graph_adjacency_matrix.csv")
     save_dataframe(pd.DataFrame([graph_meta]), output_dir, "base_graph_summary.csv")
+    base_cnn_core.save_base_dataset_audit(
+        output_dir,
+        base_cnn_core.build_base_dataset_client_summary(all_x, all_y, metadata["client_configs"]),
+    )
 
 
 def run_federated_training(seed: int, record_convergence: bool = False):
@@ -805,7 +784,7 @@ def parse_args(argv: Optional[Sequence[str]] = None):
     parser.add_argument("--workflow", choices=["all", "data_viz", "main", "convergence"], default="all")
     parser.add_argument("--output_dir", type=str, default=None, help="Directory for exported experiment artifacts.")
     parser.add_argument("--multi_seed", type=str, default="True", help="Whether to run multiple seeds.")
-    parser.add_argument("--seeds", type=str, default="42,2024,2025,2026,3407", help="Comma-separated random seeds.")
+    parser.add_argument("--seeds", type=str, default="42,2024,3407,1234,5678", help="Comma-separated random seeds.")
     parser.add_argument("--single_seed", type=int, default=42, help="Single seed used when --multi_seed False.")
     return parser.parse_args(argv)
 

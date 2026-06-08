@@ -82,13 +82,10 @@ def _prepare_base_data() -> dict[str, object]:
     all_x, all_y, meta = cfb_core.generate_base_traffic_data(seed=cfb_core.BASE_SEED)
     _, raw_adj, graph_meta = gfb_core.generate_adjacency_matrix(seed=gfb_core.BASE_SEED)
     mean_series = [client_x.mean(axis=(0, 1)) for client_x in all_x]
-    sample_history = all_x[0][0].mean(axis=0)
-    sample_target = float(all_y[0][0])
     return {
         "meta": meta,
         "mean_series": mean_series,
-        "sample_history": sample_history,
-        "sample_target": sample_target,
+        "targets": all_y,
         "raw_adj": raw_adj,
         "graph_meta": graph_meta,
     }
@@ -111,6 +108,9 @@ def _prepare_enhanced_data() -> dict[str, object]:
         mean_series = data.mean(axis=1)
         hours = np.arange(len(mean_series), dtype=float) * 24.0 / len(mean_series)
         resampled = np.interp(common_hours, hours, mean_series)
+        kernel = np.array([1.0, 2.0, 3.0, 2.0, 1.0], dtype=float)
+        kernel /= kernel.sum()
+        resampled = np.convolve(resampled, kernel, mode="same")
 
         target_distributions.append(targets)
         resampled_series.append(resampled)
@@ -128,6 +128,30 @@ def _prepare_enhanced_data() -> dict[str, object]:
         "peak_amplitudes": peak_amplitudes,
         "incident_probs": incident_probs,
     }
+
+
+def _draw_base_graph(ax, raw_adj: np.ndarray) -> None:
+    num_nodes = raw_adj.shape[0]
+    angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False)
+    coords = np.column_stack([np.cos(angles), np.sin(angles)])
+    for src in range(num_nodes):
+        for dst in range(src + 1, num_nodes):
+            weight = float(raw_adj[src, dst])
+            if weight <= 0:
+                continue
+            ax.plot(
+                [coords[src, 0], coords[dst, 0]],
+                [coords[src, 1], coords[dst, 1]],
+                color="#7F7F7F",
+                lw=1.0 + 1.4 * weight,
+                alpha=0.75,
+                zorder=1,
+            )
+    ax.scatter(coords[:, 0], coords[:, 1], s=320, color="#4C78A8", edgecolor="white", linewidth=1.2, zorder=2)
+    for node_id, (x_pos, y_pos) in enumerate(coords, start=1):
+        ax.text(x_pos, y_pos, str(node_id), ha="center", va="center", color="white", fontsize=9, fontweight="bold")
+    ax.set_aspect("equal")
+    ax.axis("off")
 
 
 def generate_base_dataset_overview(output_dir: Path) -> None:
@@ -150,47 +174,36 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
 
     for cid, series in enumerate(base_data["mean_series"]):
         axes[0, 1].plot(np.arange(len(series)), series, label=f"Client {cid + 1}", lw=1.8, color=COLORS[cid])
+    overall_mean = np.mean(np.vstack(base_data["mean_series"]), axis=0)
+    axes[0, 1].plot(np.arange(len(overall_mean)), overall_mean, color="#333333", lw=1.4, ls="--", label="Overall mean")
     axes[0, 1].set_title("(b) Mean Traffic Trajectories", loc="left", fontweight="bold")
     axes[0, 1].set_xlabel("Time Step")
     axes[0, 1].set_ylabel("Average Flow")
     axes[0, 1].grid(alpha=0.7)
     axes[0, 1].legend(ncol=2, fontsize=8, loc="upper left")
 
-    history = np.asarray(base_data["sample_history"], dtype=float)
-    history_steps = np.arange(len(history))
-    forecast_step = len(history)
-    axes[1, 0].plot(history_steps, history, color=COLORS[0], lw=2.0, label="Input window")
-    axes[1, 0].scatter([forecast_step], [base_data["sample_target"]], color=COLORS[1], s=60, zorder=3, label="Prediction target")
-    axes[1, 0].plot([history_steps[-1], forecast_step], [history[-1], base_data["sample_target"]], ls="--", lw=1.2, color=COLORS[1])
-    axes[1, 0].axvspan(-0.5, len(history) - 0.5, color=COLORS[0], alpha=0.08)
-    axes[1, 0].axvspan(len(history) - 0.5, forecast_step + 0.5, color=COLORS[1], alpha=0.08)
-    axes[1, 0].set_title("(c) Input Window and Forecast Horizon", loc="left", fontweight="bold")
-    axes[1, 0].set_xlabel("Time Step")
-    axes[1, 0].set_ylabel("Mean Node Flow")
+    target_data = [np.asarray(targets, dtype=float) for targets in base_data["targets"]]
+    box = axes[1, 0].boxplot(target_data, patch_artist=True, widths=0.6, showfliers=False)
+    for patch, color in zip(box["boxes"], COLORS):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.40)
+        patch.set_edgecolor(color)
+    for median in box["medians"]:
+        median.set_color("#333333")
+        median.set_linewidth(1.4)
+    axes[1, 0].set_title("(c) Target-flow Distributions", loc="left", fontweight="bold")
+    axes[1, 0].set_xlabel("Client")
+    axes[1, 0].set_ylabel("Target Flow")
+    axes[1, 0].set_xticks(range(1, len(target_data) + 1))
+    axes[1, 0].set_xticklabels([f"Client {idx}" for idx in range(1, len(target_data) + 1)])
     axes[1, 0].grid(alpha=0.7)
-    axes[1, 0].legend(loc="upper left", fontsize=8)
-    axes[1, 0].text(
-        0.02,
-        0.05,
-        "24-step input -> 1-step forecast\n8 traffic nodes, 70/10/20 split",
-        transform=axes[1, 0].transAxes,
-        ha="left",
-        va="bottom",
-        fontsize=9,
-        color=TEXT_COLOR,
-    )
+    axes[1, 0].text(0.02, 0.03, "24-step input, 1-step forecast, 70/10/20 split", transform=axes[1, 0].transAxes, ha="left", va="bottom", fontsize=9, color=TEXT_COLOR)
 
-    im = axes[1, 1].imshow(base_data["raw_adj"], cmap="Blues", aspect="auto")
-    axes[1, 1].set_title("(d) Base 8-node Adjacency Structure", loc="left", fontweight="bold")
-    axes[1, 1].set_xlabel("Target Node")
-    axes[1, 1].set_ylabel("Source Node")
-    axes[1, 1].set_xticks(range(meta["num_nodes"]))
-    axes[1, 1].set_xticklabels(range(1, meta["num_nodes"] + 1))
-    axes[1, 1].set_yticks(range(meta["num_nodes"]))
-    axes[1, 1].set_yticklabels(range(1, meta["num_nodes"] + 1))
+    _draw_base_graph(axes[1, 1], base_data["raw_adj"])
+    axes[1, 1].set_title("(d) Base 8-node Graph Structure", loc="left", fontweight="bold")
     axes[1, 1].text(
         0.02,
-        -0.18,
+        -0.10,
         f"Edges={base_data['graph_meta']['num_edges']}, density={base_data['graph_meta']['density']:.3f}",
         transform=axes[1, 1].transAxes,
         ha="left",
@@ -198,22 +211,11 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
         fontsize=9,
         color=TEXT_COLOR,
     )
-    fig.colorbar(im, ax=axes[1, 1], fraction=0.046, pad=0.04)
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(output_dir / BASE_PNG, dpi=300, bbox_inches="tight")
     fig.savefig(output_dir / BASE_PDF, bbox_inches="tight")
     plt.close(fig)
-
-
-def _plot_distribution_lines(ax, target_distributions: list[np.ndarray]) -> None:
-    all_targets = np.concatenate(target_distributions)
-    bins = np.linspace(float(np.min(all_targets)), float(np.max(all_targets)), 45)
-    for cid, targets in enumerate(target_distributions):
-        hist, edges = np.histogram(targets, bins=bins, density=True)
-        centers = 0.5 * (edges[:-1] + edges[1:])
-        ax.plot(centers, hist, lw=1.8, color=COLORS[cid], label=f"Client {cid + 1}")
-        ax.fill_between(centers, hist, alpha=0.10, color=COLORS[cid])
 
 
 def generate_enhanced_noniid_overview(output_dir: Path) -> None:
@@ -232,12 +234,25 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     axes[0, 0].set_axisbelow(True)
     _add_bar_labels(axes[0, 0], bars, enhanced_data["sample_sizes"])
 
-    _plot_distribution_lines(axes[0, 1], enhanced_data["target_distributions"])
+    box = axes[0, 1].boxplot(
+        [np.asarray(targets, dtype=float) for targets in enhanced_data["target_distributions"]],
+        patch_artist=True,
+        widths=0.6,
+        showfliers=False,
+    )
+    for patch, color in zip(box["boxes"], COLORS):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.40)
+        patch.set_edgecolor(color)
+    for median in box["medians"]:
+        median.set_color("#333333")
+        median.set_linewidth(1.4)
     axes[0, 1].set_title("(b) Target-flow Distribution Shift", loc="left", fontweight="bold")
-    axes[0, 1].set_xlabel("Target Flow")
-    axes[0, 1].set_ylabel("Density")
+    axes[0, 1].set_xlabel("Client")
+    axes[0, 1].set_ylabel("Target Flow")
+    axes[0, 1].set_xticks(range(1, 6))
+    axes[0, 1].set_xticklabels(clients)
     axes[0, 1].grid(alpha=0.7)
-    axes[0, 1].legend(ncol=2, fontsize=8, loc="upper right")
 
     for cid, series in enumerate(enhanced_data["resampled_series"]):
         axes[1, 0].plot(enhanced_data["hours"], series, lw=1.8, color=COLORS[cid], label=f"Client {cid + 1}")
@@ -249,34 +264,27 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     axes[1, 0].grid(alpha=0.7)
     axes[1, 0].legend(ncol=2, fontsize=8, loc="upper left")
 
-    x = np.arange(len(clients))
-    width = 0.34
-    peak_scaled = np.asarray(enhanced_data["peak_amplitudes"], dtype=float) / 10.0
-    noise_bars = axes[1, 1].bar(x - width / 2, enhanced_data["noises"], width, color="#72B7B2", label="Noise std")
-    peak_bars = axes[1, 1].bar(x + width / 2, peak_scaled, width, color="#FF9DA6", label="Peak amplitude / 10")
+    driver_matrix = np.vstack(
+        [
+            np.asarray(enhanced_data["sample_sizes"], dtype=float),
+            np.asarray(enhanced_data["noises"], dtype=float),
+            np.asarray(enhanced_data["peak_amplitudes"], dtype=float),
+            np.asarray(enhanced_data["incident_probs"], dtype=float),
+        ]
+    )
+    row_min = driver_matrix.min(axis=1, keepdims=True)
+    row_max = driver_matrix.max(axis=1, keepdims=True)
+    normalized = (driver_matrix - row_min) / np.maximum(row_max - row_min, 1e-8)
+    im = axes[1, 1].imshow(normalized, cmap="YlGnBu", aspect="auto", vmin=0.0, vmax=1.0)
     axes[1, 1].set_title("(d) Joint Non-IID Drivers", loc="left", fontweight="bold")
-    axes[1, 1].set_xticks(x)
+    axes[1, 1].set_xticks(np.arange(len(clients)))
     axes[1, 1].set_xticklabels(clients)
-    axes[1, 1].set_ylabel("Noise / scaled peak amplitude")
-    axes[1, 1].grid(axis="y", alpha=0.7)
-    axes[1, 1].set_axisbelow(True)
-    ax2 = axes[1, 1].twinx()
-    incident_line = ax2.plot(x, enhanced_data["incident_probs"], color="#333333", marker="o", lw=1.6, label="Incident probability (%)")
-    ax2.set_ylabel("Incident probability (%)")
-    for bar_set, values in [(noise_bars, enhanced_data["noises"]), (peak_bars, peak_scaled)]:
-        for bar, value in zip(bar_set, values):
-            axes[1, 1].text(
-                bar.get_x() + bar.get_width() / 2,
-                bar.get_height() + axes[1, 1].get_ylim()[1] * 0.02,
-                f"{value:.1f}",
-                ha="center",
-                va="bottom",
-                fontsize=8,
-                color=TEXT_COLOR,
-            )
-    handles1, labels1 = axes[1, 1].get_legend_handles_labels()
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    axes[1, 1].legend(handles1 + incident_line, labels1 + labels2, loc="upper left", fontsize=8)
+    axes[1, 1].set_yticks(np.arange(4))
+    axes[1, 1].set_yticklabels(["sample size", "noise std", "peak amplitude", "incident probability"])
+    for row_idx in range(normalized.shape[0]):
+        for col_idx in range(normalized.shape[1]):
+            axes[1, 1].text(col_idx, row_idx, f"{normalized[row_idx, col_idx]:.2f}", ha="center", va="center", fontsize=8, color="#17324D")
+    fig.colorbar(im, ax=axes[1, 1], fraction=0.046, pad=0.04, label="Normalized driver strength")
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(output_dir / ENHANCED_PNG, dpi=300, bbox_inches="tight")

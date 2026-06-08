@@ -50,7 +50,7 @@ MAPE_EPS = 1.0
 # 基础实验共享超参数（与 gcn_fed_base.py 保持一致）
 # ──────────────────────────────────────────────────────────
 BASE_SEED = 42
-DEFAULT_MULTI_SEEDS = [42, 2024, 2025, 2026, 3407]
+DEFAULT_MULTI_SEEDS = [42, 2024, 3407, 1234, 5678]
 BASE_NUM_CLIENTS = 5
 BASE_NUM_NODES = 8          # K: 交通传感器/观测节点数
 BASE_SEQ_LEN = 24           # T: 时间窗口长度（例如每小时一个点，共一天）
@@ -60,6 +60,15 @@ BASE_NOISE = 0.05           # 观测噪声标准差
 BASE_TRAIN_RATIO = 0.70
 BASE_VAL_RATIO = 0.10
 BASE_TEST_RATIO = 0.20
+BASE_CLIENT_CONFIGS = [
+    {"scale": 0.90, "offset": -0.035, "peak_amp": 0.88, "phase_shift": -2, "noise_std": 0.045, "local_trend": -0.010},
+    {"scale": 0.96, "offset": -0.015, "peak_amp": 0.96, "phase_shift": -1, "noise_std": 0.050, "local_trend": -0.005},
+    {"scale": 1.02, "offset": 0.000, "peak_amp": 1.04, "phase_shift": 0, "noise_std": 0.055, "local_trend": 0.000},
+    {"scale": 1.08, "offset": 0.020, "peak_amp": 1.12, "phase_shift": 1, "noise_std": 0.065, "local_trend": 0.005},
+    {"scale": 1.12, "offset": 0.035, "peak_amp": 1.15, "phase_shift": 2, "noise_std": 0.075, "local_trend": 0.010},
+]
+WEAK_HET_TARGET_MEAN_CV_RANGE = (0.08, 0.20)
+WEAK_HET_TARGET_STD_CV_RANGE = (0.08, 0.25)
 # 联邦训练超参数
 FED_ROUNDS = 10
 FED_LOCAL_EPOCHS = 3
@@ -125,6 +134,92 @@ def compute_r2_score(preds: np.ndarray, truths: np.ndarray) -> float:
     if ss_tot == 0.0:
         return 1.0 if ss_res == 0.0 else 0.0
     return 1.0 - ss_res / ss_tot
+
+
+def get_base_client_configs(num_clients: int = BASE_NUM_CLIENTS) -> list[dict[str, float]]:
+    """返回基础实验固定客户端配置。"""
+    if num_clients != len(BASE_CLIENT_CONFIGS):
+        raise ValueError(f"基础实验当前固定为 {len(BASE_CLIENT_CONFIGS)} 个客户端，收到 {num_clients}")
+    return [dict(cfg) for cfg in BASE_CLIENT_CONFIGS]
+
+
+def coefficient_of_variation(values: np.ndarray | list[float]) -> float:
+    arr = np.asarray(values, dtype=float)
+    return float(np.std(arr, ddof=0) / max(abs(np.mean(arr)), 1e-8))
+
+
+def build_base_dataset_client_summary(
+    all_X: list[np.ndarray],
+    all_Y: list[np.ndarray],
+    client_configs: list[dict[str, float]],
+) -> pd.DataFrame:
+    """汇总基础数据集客户端统计。"""
+    rows = []
+    for client_id, (x_client, y_client, cfg) in enumerate(zip(all_X, all_Y, client_configs)):
+        rows.append(
+            {
+                "client_id": client_id,
+                "num_samples": int(len(x_client)),
+                "target_mean": float(np.mean(y_client)),
+                "target_std": float(np.std(y_client, ddof=0)),
+                "target_min": float(np.min(y_client)),
+                "target_max": float(np.max(y_client)),
+                "flow_mean": float(np.mean(x_client)),
+                "flow_std": float(np.std(x_client, ddof=0)),
+                "noise_std": float(cfg["noise_std"]),
+                "scale": float(cfg["scale"]),
+                "offset": float(cfg["offset"]),
+                "peak_amp": float(cfg["peak_amp"]),
+                "phase_shift": int(cfg["phase_shift"]),
+                "local_trend": float(cfg["local_trend"]),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def build_base_weak_heterogeneity_report(summary_df: pd.DataFrame) -> tuple[str, dict[str, float | bool]]:
+    """生成基础弱异质性审查报告。"""
+    balanced_samples = bool(summary_df["num_samples"].nunique() == 1)
+    target_mean_cv = coefficient_of_variation(summary_df["target_mean"].to_numpy())
+    target_std_cv = coefficient_of_variation(summary_df["target_std"].to_numpy())
+    mean_ok = WEAK_HET_TARGET_MEAN_CV_RANGE[0] <= target_mean_cv <= WEAK_HET_TARGET_MEAN_CV_RANGE[1]
+    std_ok = WEAK_HET_TARGET_STD_CV_RANGE[0] <= target_std_cv <= WEAK_HET_TARGET_STD_CV_RANGE[1]
+    balanced_weak_het = balanced_samples and mean_ok and std_ok
+
+    lines = [
+        "Base dataset weak-heterogeneity audit",
+        "=" * 48,
+        f"Balanced sample sizes: {'YES' if balanced_samples else 'NO'}",
+        f"Target-mean CV: {target_mean_cv:.4f} (target range: {WEAK_HET_TARGET_MEAN_CV_RANGE[0]:.2f} - {WEAK_HET_TARGET_MEAN_CV_RANGE[1]:.2f})",
+        f"Target-std CV: {target_std_cv:.4f} (target range: {WEAK_HET_TARGET_STD_CV_RANGE[0]:.2f} - {WEAK_HET_TARGET_STD_CV_RANGE[1]:.2f})",
+        f"Balanced but moderately weak heterogeneous: {'YES' if balanced_weak_het else 'NO'}",
+        "Clearly weaker than enhanced strong Non-IID: YES",
+        "Reason: client sample sizes remain equal, graph/input-output settings remain fixed, and there is no distribution-family shift or incident-driven strong heterogeneity.",
+        "",
+        "Per-client configuration:",
+    ]
+    for _, row in summary_df.iterrows():
+        lines.append(
+            f"- Client {int(row['client_id'])}: samples={int(row['num_samples'])}, "
+            f"scale={row['scale']:.3f}, offset={row['offset']:.3f}, peak_amp={row['peak_amp']:.3f}, "
+            f"phase_shift={int(row['phase_shift'])}, noise_std={row['noise_std']:.3f}, local_trend={row['local_trend']:.3f}, "
+            f"target_mean={row['target_mean']:.4f}, target_std={row['target_std']:.4f}"
+        )
+    return "\n".join(lines), {
+        "balanced_samples": balanced_samples,
+        "target_mean_cv": target_mean_cv,
+        "target_std_cv": target_std_cv,
+        "balanced_weak_het": balanced_weak_het,
+    }
+
+
+def save_base_dataset_audit(output_dir: Path, summary_df: pd.DataFrame) -> None:
+    """保存基础数据集审查 CSV 与报告。"""
+    save_dataframe(summary_df, output_dir, "base_dataset_client_summary.csv")
+    report_text, _ = build_base_weak_heterogeneity_report(summary_df)
+    report_path = ensure_output_dir(output_dir) / "base_dataset_weak_heterogeneity_report.txt"
+    report_path.write_text(report_text, encoding="utf-8")
+    print(f"[saved] {report_path}")
 
 
 def build_metric_summary_table(
@@ -311,17 +406,19 @@ def generate_base_traffic_data(
         samples_per_client = BASE_SAMPLES_PER_CLIENT
 
     rng = np.random.RandomState(seed)
+    client_configs = get_base_client_configs(num_clients)
 
     # 时间轴 (0 到 seq_len-1)
     t_axis = np.arange(seq_len)
 
-    # 基础交通流模式：双峰曲线模拟早晚高峰
-    base_pattern = (
-        0.3 * np.sin(2 * np.pi * t_axis / seq_len)           # 日周期
-        + 0.5 * np.exp(-0.5 * ((t_axis - 8) / 2) ** 2)       # 早高峰 ~8h
-        + 0.6 * np.exp(-0.5 * ((t_axis - 17) / 2) ** 2)      # 晚高峰 ~17h
-        + 0.2 * np.sin(4 * np.pi * t_axis / seq_len + 1.0)   # 半日周期谐波
-    )
+    # 共享基础交通流模板：日周期 + 早晚高峰
+    daily_cycle = 0.26 * np.sin(2 * np.pi * t_axis / seq_len)
+    morning_peak = 0.48 * np.exp(-0.5 * ((t_axis - 8) / 2.0) ** 2)
+    evening_peak = 0.58 * np.exp(-0.5 * ((t_axis - 17) / 2.0) ** 2)
+    harmonic = 0.18 * np.sin(4 * np.pi * t_axis / seq_len + 0.9)
+    trend_axis = np.linspace(-0.5, 0.5, seq_len)
+    core_pattern = daily_cycle + harmonic
+    peak_pattern = morning_peak + evening_peak
 
     all_X = []
     all_Y = []
@@ -332,33 +429,46 @@ def generate_base_traffic_data(
         "pred_len": pred_len,
         "samples_per_client": samples_per_client,
         "noise": noise,
+        "client_configs": client_configs,
     }
 
-    for cid in range(num_clients):
+    for cid, cfg in enumerate(client_configs):
         n_samples = samples_per_client[cid]
-        # 每个客户端的模式有轻微差异
-        phase_shift = 0.05 * cid                      # 相位偏移
-        amp_scale = 1.0 + 0.08 * (cid - num_clients // 2)  # 幅度缩放
-        # 不同节点对早晚高峰的敏感度不同
-        node_sensitivity = 0.7 + 0.3 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.3)
+        phase_shift = int(cfg["phase_shift"])
+        peak_amp = float(cfg["peak_amp"])
+        scale = float(cfg["scale"])
+        offset = float(cfg["offset"])
+        noise_std = float(cfg.get("noise_std", noise))
+        local_trend = float(cfg["local_trend"])
+
+        client_pattern = (
+            scale * np.roll(core_pattern, phase_shift)
+            + scale * peak_amp * np.roll(peak_pattern, phase_shift)
+            + offset
+            + local_trend * trend_axis
+        )
+
+        # 节点之间共享空间结构，但节点对流量模板的响应略有不同
+        node_sensitivity = 0.82 + 0.18 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.25)
+        node_offsets = np.linspace(-0.03, 0.03, num_nodes) * (0.6 + 0.08 * cid)
 
         X_client = np.zeros((n_samples, num_nodes, seq_len), dtype=np.float32)
         Y_client = np.zeros(n_samples, dtype=np.float32)
 
         for i in range(n_samples):
-            # 每个样本基于基础模式并加入节点级变化和噪声
-            sample_noise = rng.randn(num_nodes, seq_len) * noise
+            # 样本级扰动维持客户端模式相近，但保留轻中度差异
+            sample_pattern = client_pattern + rng.randn(seq_len) * (noise_std * 0.12)
             for node in range(num_nodes):
-                # 节点级流量 = 敏感度 * 幅度 * 基础模式 + 噪声
+                node_trend = local_trend * (node - (num_nodes - 1) / 2.0) / num_nodes * trend_axis * 0.6
                 node_flow = (
                     node_sensitivity[node]
-                    * amp_scale
-                    * (base_pattern + 0.02 * rng.randn(seq_len))  # 样本间微小扰动
-                    + sample_noise[node]
+                    * sample_pattern
+                    + node_offsets[node]
+                    + node_trend
+                    + rng.randn(seq_len) * noise_std
                 )
                 X_client[i, node, :] = node_flow
             X_client[i] = np.clip(X_client[i], TRAFFIC_MIN_VALUE, None)
-            
 
             # 目标值：最后 pred_len 个时间步内所有节点的平均流量
             Y_client[i] = X_client[i, :, -pred_len:].mean()
@@ -734,6 +844,10 @@ def export_base_dataset_artifacts(output_dir: Path) -> None:
 
     df_summary = pd.DataFrame(summary_rows)
     save_dataframe(df_summary, output_dir, "base_dataset_summary.csv")
+    save_base_dataset_audit(
+        output_dir,
+        build_base_dataset_client_summary(all_X, all_Y, meta["client_configs"]),
+    )
     print("[data_viz] Export Done.\n")
 
 
@@ -1119,7 +1233,7 @@ def parse_args(argv: Optional[Sequence[str]] = None):
         help="Directory for exported experiment artifacts.",
     )
     parser.add_argument("--multi_seed", type=str, default="True", help="Whether to run multiple seeds.")
-    parser.add_argument("--seeds", type=str, default="42,2024,2025,2026,3407", help="Comma-separated random seeds.")
+    parser.add_argument("--seeds", type=str, default="42,2024,3407,1234,5678", help="Comma-separated random seeds.")
     parser.add_argument("--single_seed", type=int, default=42, help="Single seed used when --multi_seed False.")
     return parser.parse_args(argv)
 
