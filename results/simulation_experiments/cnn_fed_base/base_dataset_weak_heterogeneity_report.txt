@@ -1,0 +1,15 @@
+Base dataset weak-heterogeneity audit
+================================================
+Balanced sample sizes: YES
+Target-mean CV: 0.0949 (target range: 0.08 - 0.20)
+Target-std CV: 0.0822 (target range: 0.08 - 0.25)
+Balanced but moderately weak heterogeneous: YES
+Clearly weaker than enhanced strong Non-IID: YES
+Reason: client sample sizes remain equal, graph/input-output settings remain fixed, and there is no distribution-family shift or incident-driven strong heterogeneity.
+
+Per-client configuration:
+- Client 0: samples=200, scale=0.910, offset=-0.028, peak_amp=0.890, phase_shift=-1, noise_std=0.040, local_trend=-0.008, target_mean=0.3852, target_std=0.1656
+- Client 1: samples=200, scale=0.960, offset=-0.012, peak_amp=0.960, phase_shift=-1, noise_std=0.048, local_trend=-0.004, target_mean=0.4144, target_std=0.1786
+- Client 2: samples=200, scale=1.020, offset=0.000, peak_amp=1.030, phase_shift=0, noise_std=0.055, local_trend=0.000, target_mean=0.4436, target_std=0.1895
+- Client 3: samples=200, scale=1.080, offset=0.018, peak_amp=1.090, phase_shift=1, noise_std=0.064, local_trend=0.004, target_mean=0.4787, target_std=0.2011
+- Client 4: samples=200, scale=1.120, offset=0.032, peak_amp=1.130, phase_shift=2, noise_std=0.075, local_trend=0.008, target_mean=0.5022, target_std=0.2090

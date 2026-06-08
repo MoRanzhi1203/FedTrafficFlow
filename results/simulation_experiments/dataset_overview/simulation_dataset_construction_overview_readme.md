@@ -16,7 +16,7 @@
 - `enhanced_simulation_noniid_overview.png` 用于同一小节中的增强仿真数据集 Non-IID 说明图
 
 数据来源说明：
-- 基础仿真图基于 `simulation_experiments/cnn_fed_base/cfb_core.py` 中的 `generate_base_traffic_data()` 生成，并结合 `simulation_experiments/gcn_fed_base/gfb_core.py` 中的基础邻接矩阵
+- 基础仿真图基于 `simulation_experiments/cnn_fed_base/cfb_core.py` 中的 `generate_base_traffic_data()` 生成，并结合 `simulation_experiments/gcn_fed_base/gfb_core.py` 中的基础图结构拓扑
 - 增强仿真图基于 `simulation_experiments/cnn_fed_enhanced_experiments/cfe_core.py` 中的 `CLIENT_CONFIGS_BASE`、`generate_traffic_flow()` 与 `build_sequences()` 生成
 - 本脚本仅用于生成数据说明图，不触发模型训练，不修改已有实验 CSV
 

@@ -61,11 +61,11 @@ BASE_TRAIN_RATIO = 0.70
 BASE_VAL_RATIO = 0.10
 BASE_TEST_RATIO = 0.20
 BASE_CLIENT_CONFIGS = [
-    {"scale": 0.90, "offset": -0.035, "peak_amp": 0.88, "phase_shift": -2, "noise_std": 0.045, "local_trend": -0.010},
-    {"scale": 0.96, "offset": -0.015, "peak_amp": 0.96, "phase_shift": -1, "noise_std": 0.050, "local_trend": -0.005},
-    {"scale": 1.02, "offset": 0.000, "peak_amp": 1.04, "phase_shift": 0, "noise_std": 0.055, "local_trend": 0.000},
-    {"scale": 1.08, "offset": 0.020, "peak_amp": 1.12, "phase_shift": 1, "noise_std": 0.065, "local_trend": 0.005},
-    {"scale": 1.12, "offset": 0.035, "peak_amp": 1.15, "phase_shift": 2, "noise_std": 0.075, "local_trend": 0.010},
+    {"scale": 0.91, "offset": -0.028, "peak_amp": 0.89, "phase_shift": -1, "noise_std": 0.040, "local_trend": -0.008},
+    {"scale": 0.96, "offset": -0.012, "peak_amp": 0.96, "phase_shift": -1, "noise_std": 0.048, "local_trend": -0.004},
+    {"scale": 1.02, "offset": 0.000, "peak_amp": 1.03, "phase_shift": 0, "noise_std": 0.055, "local_trend": 0.000},
+    {"scale": 1.08, "offset": 0.018, "peak_amp": 1.09, "phase_shift": 1, "noise_std": 0.064, "local_trend": 0.004},
+    {"scale": 1.12, "offset": 0.032, "peak_amp": 1.13, "phase_shift": 2, "noise_std": 0.075, "local_trend": 0.008},
 ]
 WEAK_HET_TARGET_MEAN_CV_RANGE = (0.08, 0.20)
 WEAK_HET_TARGET_STD_CV_RANGE = (0.08, 0.25)
@@ -407,17 +407,18 @@ def generate_base_traffic_data(
 
     rng = np.random.RandomState(seed)
     client_configs = get_base_client_configs(num_clients)
+    max_samples = max(int(n_samples) for n_samples in samples_per_client)
+    total_steps = max_samples + seq_len + pred_len - 1
+    global_time = np.arange(total_steps, dtype=float)
+    hour_axis = np.mod(global_time, seq_len)
+    slow_axis = np.linspace(-0.5, 0.5, total_steps)
 
-    # 时间轴 (0 到 seq_len-1)
-    t_axis = np.arange(seq_len)
-
-    # 共享基础交通流模板：日周期 + 早晚高峰
-    daily_cycle = 0.26 * np.sin(2 * np.pi * t_axis / seq_len)
-    morning_peak = 0.48 * np.exp(-0.5 * ((t_axis - 8) / 2.0) ** 2)
-    evening_peak = 0.58 * np.exp(-0.5 * ((t_axis - 17) / 2.0) ** 2)
-    harmonic = 0.18 * np.sin(4 * np.pi * t_axis / seq_len + 0.9)
-    trend_axis = np.linspace(-0.5, 0.5, seq_len)
-    core_pattern = daily_cycle + harmonic
+    # 基础长时序模板：共享双峰结构，仅通过客户端参数产生受控差异。
+    daily_cycle = 0.22 + 0.18 * np.sin(2 * np.pi * (hour_axis - 6.0) / seq_len)
+    morning_peak = 0.20 * np.exp(-0.5 * ((hour_axis - 8.0) / 2.4) ** 2)
+    evening_peak = 0.24 * np.exp(-0.5 * ((hour_axis - 17.0) / 2.6) ** 2)
+    harmonic = 0.06 * np.sin(4 * np.pi * hour_axis / seq_len + 0.6)
+    backbone_pattern = daily_cycle + harmonic
     peak_pattern = morning_peak + evening_peak
 
     all_X = []
@@ -441,37 +442,44 @@ def generate_base_traffic_data(
         noise_std = float(cfg.get("noise_std", noise))
         local_trend = float(cfg["local_trend"])
 
+        client_backbone = np.roll(backbone_pattern, phase_shift)
+        client_peaks = np.roll(peak_pattern, phase_shift)
+        baseline_level = 0.12 + offset
+        slow_drift = 0.02 * np.sin(2 * np.pi * global_time / max(total_steps, 1) + cid * 0.35)
+        micro_cycle = (0.005 + 0.90 * noise_std) * np.sin(6 * np.pi * global_time / seq_len + cid * 0.45)
         client_pattern = (
-            scale * np.roll(core_pattern, phase_shift)
-            + scale * peak_amp * np.roll(peak_pattern, phase_shift)
-            + offset
-            + local_trend * trend_axis
+            baseline_level
+            + scale * client_backbone
+            + peak_amp * client_peaks
+            + local_trend * slow_axis
+            + slow_drift
+            + micro_cycle
         )
+        client_pattern = np.clip(client_pattern, 0.03, None)
 
-        # 节点之间共享空间结构，但节点对流量模板的响应略有不同
-        node_sensitivity = 0.82 + 0.18 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.25)
-        node_offsets = np.linspace(-0.03, 0.03, num_nodes) * (0.6 + 0.08 * cid)
+        # 节点之间共享空间结构，但保留轻微响应差异。
+        node_sensitivity = 0.94 + 0.08 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.18)
+        node_offsets = np.linspace(-0.015, 0.015, num_nodes) * (0.7 + 0.05 * cid)
+
+        node_series = np.zeros((num_nodes, total_steps), dtype=np.float32)
+        shared_noise = rng.randn(total_steps) * (noise_std * 0.45)
+        for node in range(num_nodes):
+            node_trend = local_trend * (node - (num_nodes - 1) / 2.0) / num_nodes * slow_axis * 0.5
+            node_noise = rng.randn(total_steps) * noise_std
+            node_flow = (
+                node_sensitivity[node] * client_pattern
+                + node_offsets[node]
+                + node_trend
+                + shared_noise
+                + node_noise
+            )
+            node_series[node, :] = np.clip(node_flow, TRAFFIC_MIN_VALUE, None)
 
         X_client = np.zeros((n_samples, num_nodes, seq_len), dtype=np.float32)
         Y_client = np.zeros(n_samples, dtype=np.float32)
-
         for i in range(n_samples):
-            # 样本级扰动维持客户端模式相近，但保留轻中度差异
-            sample_pattern = client_pattern + rng.randn(seq_len) * (noise_std * 0.12)
-            for node in range(num_nodes):
-                node_trend = local_trend * (node - (num_nodes - 1) / 2.0) / num_nodes * trend_axis * 0.6
-                node_flow = (
-                    node_sensitivity[node]
-                    * sample_pattern
-                    + node_offsets[node]
-                    + node_trend
-                    + rng.randn(seq_len) * noise_std
-                )
-                X_client[i, node, :] = node_flow
-            X_client[i] = np.clip(X_client[i], TRAFFIC_MIN_VALUE, None)
-
-            # 目标值：最后 pred_len 个时间步内所有节点的平均流量
-            Y_client[i] = X_client[i, :, -pred_len:].mean()
+            X_client[i] = node_series[:, i:i + seq_len]
+            Y_client[i] = node_series[:, i + seq_len:i + seq_len + pred_len].mean()
 
         all_X.append(X_client)
         all_Y.append(Y_client)

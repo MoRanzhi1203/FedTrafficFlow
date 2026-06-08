@@ -2,13 +2,13 @@ Experiment: cnn_fed_base_main
 Seeds: 42, 1234, 2024, 3407, 5678
 
 Per-method statistics:
-- FedAvg: MAE=0.0118±0.0021, RMSE=0.0144±0.0025, MAPE=1.1790±0.2104, R2=-0.3849±0.4127
-- Independent: MAE=0.0147±0.0016, RMSE=0.0174±0.0016, MAPE=1.4746±0.1585, R2=-1.1746±0.3980
+- FedAvg: MAE=0.0568±0.0049, RMSE=0.0709±0.0054, MAPE=5.6802±0.4936, R2=0.8446±0.0242
+- Independent: MAE=0.0742±0.0026, RMSE=0.0897±0.0029, MAPE=7.4201±0.2622, R2=0.7576±0.0152
 
 FedAvg vs Independent:
-- mae: mean improvement=20.59% (std=5.53%), improved on 5/5 seeds
-- rmse: mean improvement=17.62% (std=6.49%), improved on 5/5 seeds
-- mape: mean improvement=20.59% (std=5.53%), improved on 5/5 seeds
-- r2: mean improvement=75.70% (std=26.31%), improved on 5/5 seeds
+- mae: mean improvement=23.39% (std=6.74%), improved on 5/5 seeds
+- rmse: mean improvement=20.92% (std=5.51%), improved on 5/5 seeds
+- mape: mean improvement=23.39% (std=6.74%), improved on 5/5 seeds
+- r2: mean improvement=11.49% (std=2.85%), improved on 5/5 seeds
 
 FedAvg achieves stable improvement over Independent across 5 random seeds, indicating that the observed gain is not caused by a single favorable seed.

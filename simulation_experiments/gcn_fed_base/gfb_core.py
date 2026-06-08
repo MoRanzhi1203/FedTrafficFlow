@@ -9,6 +9,7 @@ import copy
 import math
 import os
 import random
+import sys
 from collections import OrderedDict
 from pathlib import Path
 from typing import Optional, Sequence
@@ -20,10 +21,13 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 
-from simulation_experiments.cnn_fed_base import cfb_core as base_cnn_core
-
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from simulation_experiments.cnn_fed_base import cfb_core as base_cnn_core
+
 RESULTS_ROOT = PROJECT_ROOT / "results"
 SIMULATION_RESULTS_ROOT = RESULTS_ROOT / "simulation_experiments"
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
