@@ -1,16 +1,26 @@
 # 仿真数据集构造总览图说明
 
-本图用于论文“仿真数据构造、客户端划分与 Non-IID 设置”小节。
+旧图处理：
+- 已弃用旧组合图 `simulation_dataset_construction_overview.png`
+- 已弃用旧组合图 `simulation_dataset_construction_overview.pdf`
+- 旧图已移动至 `deprecated/` 目录，仅保留历史记录，不再用于正文
 
-图件：
-- simulation_dataset_construction_overview.png
-- simulation_dataset_construction_overview.pdf
+当前推荐图件：
+- base_simulation_dataset_overview.png
+- base_simulation_dataset_overview.pdf
+- enhanced_simulation_noniid_overview.png
+- enhanced_simulation_noniid_overview.pdf
 
-图件内容：
-- 第一行展示基础仿真数据集：5 个客户端、8 个节点、每客户端 200 个样本、输入窗口 24、预测步长 1。
-- 第二行展示增强仿真数据集：5 个客户端、样本量 600/500/700/550/450、分布族 normal/student-t/chi-square/gaussian_mixture/log_normal，以及样本量、分布族、噪声、高峰和事件扰动构成的联合 Non-IID 设置。
+图件使用位置：
+- `base_simulation_dataset_overview.png` 用于“仿真数据构造、客户端划分与 Non-IID 设置”小节中的基础仿真数据集说明图
+- `enhanced_simulation_noniid_overview.png` 用于同一小节中的增强仿真数据集 Non-IID 说明图
+
+数据来源说明：
+- 基础仿真图基于 `simulation_experiments/cnn_fed_base/cfb_core.py` 中的 `generate_base_traffic_data()` 生成，并结合 `simulation_experiments/gcn_fed_base/gfb_core.py` 中的基础邻接矩阵
+- 增强仿真图基于 `simulation_experiments/cnn_fed_enhanced_experiments/cfe_core.py` 中的 `CLIENT_CONFIGS_BASE`、`generate_traffic_flow()` 与 `build_sequences()` 生成
+- 本脚本仅用于生成数据说明图，不触发模型训练，不修改已有实验 CSV
 
 说明：
-- 本图是实验设计说明图，不是模型性能结果图。
-- 本图不涉及 Proposed、Loss-weighted 或 Data-loss weighted。
-- 本图用于帮助读者理解基础仿真数据集和增强仿真数据集的差异。
+- 基础图强调受控、均衡的客户端设置与基础路网结构
+- 增强图强调样本量不平衡、目标值分布差异、峰型差异以及噪声/事件扰动共同构成的 Non-IID 来源
+- 图中不涉及 Proposed、Loss-weighted 或 Data-loss weighted
