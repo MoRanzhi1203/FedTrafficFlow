@@ -15,9 +15,6 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from simulation_experiments.cnn_fed_base import cfb_core
 from simulation_experiments.cnn_fed_enhanced_experiments import cfe_core
-from simulation_experiments.gcn_fed_base import gfb_core
-
-
 OUTPUT_DIR = PROJECT_ROOT / "results" / "simulation_experiments" / "dataset_overview"
 DEPRECATED_DIR = OUTPUT_DIR / "deprecated"
 README_NAME = "simulation_dataset_construction_overview_readme.md"
@@ -91,28 +88,32 @@ def _smooth_curve(values: np.ndarray, window: int = 3) -> np.ndarray:
 def _configure_line_panel(ax, legend_items: int) -> None:
     ax.grid(alpha=0.25)
     ax.set_axisbelow(True)
-    ncol = 3 if legend_items <= 6 else 4
-    ax.legend(
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.05),
-        ncol=ncol,
-        frameon=False,
+    if legend_items <= 0:
+        return
+    legend = ax.legend(
+        loc="lower right",
+        frameon=True,
         fontsize=9,
+        ncol=1,
         handlelength=2.4,
-        columnspacing=1.2,
     )
+    legend.get_frame().set_alpha(0.85)
+    legend.get_frame().set_edgecolor("none")
 
 
 def _prepare_base_data() -> dict[str, object]:
     all_x, all_y, meta = cfb_core.generate_base_traffic_data(seed=cfb_core.BASE_SEED)
-    _, raw_adj, graph_meta = gfb_core.generate_adjacency_matrix(seed=gfb_core.BASE_SEED)
     mean_series = [_smooth_curve(client_x.mean(axis=(0, 1)), window=3) for client_x in all_x]
+    summary_df = cfb_core.build_base_dataset_client_summary(all_x, all_y, meta["client_configs"])
+    _, audit_stats = cfb_core.build_base_weak_heterogeneity_report(summary_df)
+    audit_stats["flow_mean_cv"] = cfb_core.coefficient_of_variation(summary_df["flow_mean"].to_numpy())
+    audit_stats["noise_std_range"] = float(summary_df["noise_std"].max() - summary_df["noise_std"].min())
     return {
         "meta": meta,
         "mean_series": mean_series,
         "targets": all_y,
-        "raw_adj": raw_adj,
-        "graph_meta": graph_meta,
+        "summary_df": summary_df,
+        "audit_stats": audit_stats,
     }
 
 
@@ -156,30 +157,48 @@ def _prepare_enhanced_data() -> dict[str, object]:
     }
 
 
-def _draw_base_graph(ax, raw_adj: np.ndarray) -> None:
-    num_nodes = raw_adj.shape[0]
-    angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False) + np.pi / 8.0
-    coords = 0.82 * np.column_stack([np.cos(angles), np.sin(angles)])
-    for src in range(num_nodes):
-        for dst in range(src + 1, num_nodes):
-            weight = float(raw_adj[src, dst])
-            if weight <= 0:
-                continue
-            ax.plot(
-                [coords[src, 0], coords[dst, 0]],
-                [coords[src, 1], coords[dst, 1]],
-                color="#7F7F7F",
-                lw=0.8 + 0.9 * weight,
-                alpha=0.70,
-                zorder=1,
-            )
-    ax.scatter(coords[:, 0], coords[:, 1], s=300, color="#4C78A8", edgecolor="white", linewidth=1.0, zorder=2)
-    for node_id, (x_pos, y_pos) in enumerate(coords, start=1):
-        ax.text(x_pos, y_pos, str(node_id), ha="center", va="center", color="white", fontsize=9, fontweight="bold")
-    ax.set_aspect("equal")
-    ax.set_xlim(-1.02, 1.02)
-    ax.set_ylim(-0.98, 0.98)
-    ax.axis("off")
+def _draw_driver_heatmap(
+    fig,
+    ax,
+    matrix: np.ndarray,
+    row_labels: list[str],
+    col_labels: list[str],
+    title: str,
+    strength_label: str = "Relative strength",
+) -> None:
+    im = ax.imshow(matrix, cmap="YlGnBu", aspect="auto", vmin=0.0, vmax=1.0)
+    ax.set_title(title, loc="left", fontweight="bold")
+    ax.set_xticks(np.arange(len(col_labels)))
+    ax.set_xticklabels(col_labels)
+    ax.set_yticks(np.arange(len(row_labels)))
+    ax.set_yticklabels(row_labels)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.set_label(strength_label, fontsize=8)
+    cbar.ax.tick_params(labelsize=8)
+
+
+def _draw_base_driver_heatmap(fig, ax, base_data: dict[str, object]) -> None:
+    summary_df = base_data["summary_df"]
+    meta = base_data["meta"]
+    sample_sizes = np.asarray(meta["samples_per_client"], dtype=float)
+    flow_levels = summary_df["target_mean"].to_numpy(dtype=float)
+    peak_amplitudes = np.asarray([cfg["peak_amp"] for cfg in meta["client_configs"]], dtype=float)
+    noise_levels = summary_df["noise_std"].to_numpy(dtype=float)
+
+    raw_matrix = np.vstack([sample_sizes, flow_levels, peak_amplitudes, noise_levels])
+    row_min = raw_matrix.min(axis=1, keepdims=True)
+    row_max = raw_matrix.max(axis=1, keepdims=True)
+    normalized = (raw_matrix - row_min) / np.maximum(row_max - row_min, 1e-8)
+    softened = 0.22 + 0.38 * normalized
+
+    _draw_driver_heatmap(
+        fig,
+        ax,
+        softened,
+        ["sample size", "flow level", "peak amplitude", "noise level"],
+        [f"Client {idx}" for idx in range(1, len(sample_sizes) + 1)],
+        "(d) Base Weak-Heterogeneity Drivers",
+    )
 
 
 def generate_base_dataset_overview(output_dir: Path) -> None:
@@ -192,7 +211,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
 
     clients = [f"Client {idx}" for idx in range(1, meta["num_clients"] + 1)]
     sample_sizes = list(meta["samples_per_client"])
-    bars = axes[0, 0].bar(clients, sample_sizes, color=COLORS[0], width=0.65, edgecolor="white")
+    bars = axes[0, 0].bar(clients, sample_sizes, color=COLORS, width=0.65, edgecolor="white")
     axes[0, 0].set_title("(a) Mild Client Sample-size Imbalance", loc="left", fontweight="bold")
     axes[0, 0].set_ylabel("Samples")
     axes[0, 0].set_ylim(0, max(sample_sizes) * 1.25)
@@ -201,14 +220,15 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     _add_bar_labels(axes[0, 0], bars, sample_sizes)
 
     time_axis = np.arange(len(base_data["mean_series"][0]))
+    base_labels = [f"Client {idx}" for idx in range(1, len(base_data["mean_series"]) + 1)]
     for cid, series in enumerate(base_data["mean_series"]):
         axes[0, 1].plot(
             time_axis,
             series,
-            label=f"Client {cid + 1}",
             lw=1.9,
             alpha=0.95,
             color=COLORS[cid],
+            label=base_labels[cid],
         )
     overall_mean = np.mean(np.vstack(base_data["mean_series"]), axis=0)
     axes[0, 1].plot(
@@ -227,7 +247,8 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     y_max = max(float(np.max(series)) for series in base_data["mean_series"])
     pad = max((y_max - y_min) * 0.16, 0.06)
     axes[0, 1].set_ylim(max(0.0, y_min - pad), y_max + pad)
-    _configure_line_panel(axes[0, 1], legend_items=len(base_data["mean_series"]) + 1)
+    axes[0, 1].set_xlim(time_axis[0], time_axis[-1])
+    _configure_line_panel(axes[0, 1], legend_items=len(base_labels) + 1)
 
     target_data = [np.asarray(targets, dtype=float) for targets in base_data["targets"]]
     box = axes[1, 0].boxplot(target_data, patch_artist=True, widths=0.6, showfliers=False)
@@ -245,18 +266,7 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
     axes[1, 0].set_xticklabels([f"Client {idx}" for idx in range(1, len(target_data) + 1)])
     axes[1, 0].grid(alpha=0.25)
 
-    _draw_base_graph(axes[1, 1], base_data["raw_adj"])
-    axes[1, 1].set_title("(d) Base 8-node Graph Structure", loc="left", fontweight="bold")
-    axes[1, 1].text(
-        0.02,
-        -0.10,
-        f"Edges={base_data['graph_meta']['num_edges']}, density={base_data['graph_meta']['density']:.3f}",
-        transform=axes[1, 1].transAxes,
-        ha="left",
-        va="top",
-        fontsize=8,
-        color=TEXT_COLOR,
-    )
+    _draw_base_driver_heatmap(fig, axes[1, 1], base_data)
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(output_dir / BASE_PNG, dpi=300, bbox_inches="tight")
@@ -280,6 +290,7 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     axes[0, 0].set_axisbelow(True)
     _add_bar_labels(axes[0, 0], bars, enhanced_data["sample_sizes"])
 
+    enhanced_labels = [f"Client {idx}" for idx in range(1, len(enhanced_data["resampled_series"]) + 1)]
     for cid, series in enumerate(enhanced_data["resampled_series"]):
         axes[0, 1].plot(
             enhanced_data["hours"],
@@ -287,7 +298,7 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
             lw=1.9,
             alpha=0.95,
             color=COLORS[cid],
-            label=f"Client {cid + 1}",
+            label=enhanced_labels[cid],
         )
     axes[0, 1].set_title("(b) Mean Daily Traffic Patterns", loc="left", fontweight="bold")
     axes[0, 1].set_xlabel("Hour of Day")
@@ -298,7 +309,8 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     enhanced_y_max = max(float(np.max(series)) for series in enhanced_data["resampled_series"])
     enhanced_pad = max((enhanced_y_max - enhanced_y_min) * 0.14, 0.25)
     axes[0, 1].set_ylim(max(0.0, enhanced_y_min - enhanced_pad), enhanced_y_max + enhanced_pad)
-    _configure_line_panel(axes[0, 1], legend_items=len(enhanced_data["resampled_series"]))
+    axes[0, 1].set_xlim(0, 24)
+    _configure_line_panel(axes[0, 1], legend_items=len(enhanced_labels))
 
     box = axes[1, 0].boxplot(
         [np.asarray(targets, dtype=float) for targets in enhanced_data["target_distributions"]],
@@ -335,18 +347,14 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
     row_min = driver_matrix.min(axis=1, keepdims=True)
     row_max = driver_matrix.max(axis=1, keepdims=True)
     normalized = (driver_matrix - row_min) / np.maximum(row_max - row_min, 1e-8)
-    im = axes[1, 1].imshow(normalized, cmap="YlGnBu", aspect="auto", vmin=0.0, vmax=1.0)
-    axes[1, 1].set_title("(d) Joint Non-IID Drivers", loc="left", fontweight="bold")
-    axes[1, 1].set_xticks(np.arange(len(clients)))
-    axes[1, 1].set_xticklabels(clients)
-    axes[1, 1].set_yticks(np.arange(4))
-    axes[1, 1].set_yticklabels(["sample size", "noise level", "peak amplitude", "event probability"])
-    for row_idx in range(normalized.shape[0]):
-        for col_idx in range(normalized.shape[1]):
-            axes[1, 1].text(col_idx, row_idx, f"{normalized[row_idx, col_idx]:.2f}", ha="center", va="center", fontsize=7, color="#17324D")
-    cbar = fig.colorbar(im, ax=axes[1, 1], fraction=0.046, pad=0.04)
-    cbar.set_label("Normalized strength", fontsize=8)
-    cbar.ax.tick_params(labelsize=8)
+    _draw_driver_heatmap(
+        fig,
+        axes[1, 1],
+        normalized,
+        ["sample size", "noise level", "peak amplitude", "event probability"],
+        clients,
+        "(d) Joint Non-IID Drivers",
+    )
 
     fig.tight_layout(rect=(0, 0, 1, 0.95))
     fig.savefig(output_dir / ENHANCED_PNG, dpi=300, bbox_inches="tight")
@@ -373,12 +381,12 @@ def write_readme(output_dir: Path) -> None:
 - `{ENHANCED_PNG}` 用于同一小节中的增强仿真数据集 Non-IID 说明图
 
 数据来源说明：
-- 基础仿真图基于 `simulation_experiments/cnn_fed_base/cfb_core.py` 中的 `generate_base_traffic_data()` 生成，并结合 `simulation_experiments/gcn_fed_base/gfb_core.py` 中的基础图结构拓扑
+- 基础仿真图基于 `simulation_experiments/cnn_fed_base/cfb_core.py` 中的 `generate_base_traffic_data()` 生成，并结合基础客户端配置构造弱异质性驱动因素热力图
 - 增强仿真图基于 `simulation_experiments/cnn_fed_enhanced_experiments/cfe_core.py` 中的 `CLIENT_CONFIGS_BASE`、`generate_traffic_flow()` 与 `build_sequences()` 生成
 - 本脚本仅用于生成数据说明图，不触发模型训练，不修改已有实验 CSV
 
 说明：
-- 基础图强调轻度样本量不平衡、受控弱异质性与基础路网结构
+- 基础图强调轻度样本量不平衡、受控弱异质性与弱异质性驱动因素热力图
 - 增强图强调样本量不平衡、目标值分布差异、峰型差异以及噪声/事件扰动共同构成的 Non-IID 来源
 - 图中不涉及 Proposed、Loss-weighted 或 Data-loss weighted
 """
