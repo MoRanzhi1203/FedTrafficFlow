@@ -55,21 +55,21 @@ BASE_NUM_CLIENTS = 5
 BASE_NUM_NODES = 8          # K: 交通传感器/观测节点数
 BASE_SEQ_LEN = 24           # T: 时间窗口长度（例如每小时一个点，共一天）
 BASE_PRED_LEN = 1           # 预测步长
-BASE_SAMPLES_PER_CLIENT = [180, 190, 200, 210, 220]
+BASE_SAMPLES_PER_CLIENT = [190, 210, 180, 220, 200]
 BASE_NOISE = 0.05           # 观测噪声标准差
 BASE_TRAIN_RATIO = 0.70
 BASE_VAL_RATIO = 0.10
 BASE_TEST_RATIO = 0.20
 BASE_CLIENT_CONFIGS = [
-    {"num_samples": 180, "scale": 0.92, "offset": -0.030, "peak_amp": 0.90, "phase_shift": -2, "noise_std": 0.045, "local_trend": -0.008},
-    {"num_samples": 190, "scale": 0.97, "offset": -0.015, "peak_amp": 0.97, "phase_shift": -1, "noise_std": 0.050, "local_trend": -0.004},
-    {"num_samples": 200, "scale": 1.01, "offset": 0.000, "peak_amp": 1.03, "phase_shift": 0, "noise_std": 0.055, "local_trend": 0.000},
-    {"num_samples": 210, "scale": 1.06, "offset": 0.018, "peak_amp": 1.10, "phase_shift": 1, "noise_std": 0.062, "local_trend": 0.004},
-    {"num_samples": 220, "scale": 1.10, "offset": 0.030, "peak_amp": 1.14, "phase_shift": 2, "noise_std": 0.070, "local_trend": 0.008},
+    {"client_id": 1, "num_samples": 190, "scale": 0.94, "offset": -0.018, "peak_amp": 0.93, "phase_shift": -1, "noise_std": 0.040, "local_trend": -0.003},
+    {"client_id": 2, "num_samples": 210, "scale": 1.06, "offset": 0.016, "peak_amp": 1.09, "phase_shift": 0, "noise_std": 0.059, "local_trend": 0.003},
+    {"client_id": 3, "num_samples": 180, "scale": 0.93, "offset": -0.022, "peak_amp": 1.04, "phase_shift": 1, "noise_std": 0.049, "local_trend": -0.002},
+    {"client_id": 4, "num_samples": 220, "scale": 1.08, "offset": 0.020, "peak_amp": 0.96, "phase_shift": -1, "noise_std": 0.066, "local_trend": 0.004},
+    {"client_id": 5, "num_samples": 200, "scale": 1.00, "offset": 0.004, "peak_amp": 1.11, "phase_shift": 1, "noise_std": 0.064, "local_trend": 0.001},
 ]
 WEAK_HET_SAMPLE_SIZE_CV_RANGE = (0.05, 0.12)
 WEAK_HET_TARGET_MEAN_CV_RANGE = (0.08, 0.20)
-WEAK_HET_TARGET_STD_CV_RANGE = (0.08, 0.25)
+WEAK_HET_TARGET_STD_CV_RANGE = (0.07, 0.25)
 # 联邦训练超参数
 FED_ROUNDS = 10
 FED_LOCAL_EPOCHS = 3
@@ -161,7 +161,7 @@ def build_base_dataset_client_summary(
 ) -> pd.DataFrame:
     """汇总基础数据集客户端统计。"""
     rows = []
-    for client_id, (x_client, y_client, cfg) in enumerate(zip(all_X, all_Y, client_configs)):
+    for client_id, (x_client, y_client, cfg) in enumerate(zip(all_X, all_Y, client_configs), start=1):
         rows.append(
             {
                 "client_id": client_id,
@@ -428,11 +428,13 @@ def generate_base_traffic_data(
     slow_axis = np.linspace(-0.5, 0.5, total_steps)
 
     # 基础长时序模板：共享双峰结构，仅通过客户端参数产生受控差异。
-    daily_cycle = 0.22 + 0.18 * np.sin(2 * np.pi * (hour_axis - 6.0) / seq_len)
+    daily_cycle = 0.22 + 0.17 * np.sin(2 * np.pi * (hour_axis - 6.0) / seq_len)
     morning_peak = 0.20 * np.exp(-0.5 * ((hour_axis - 8.0) / 2.4) ** 2)
     evening_peak = 0.24 * np.exp(-0.5 * ((hour_axis - 17.0) / 2.6) ** 2)
     harmonic = 0.06 * np.sin(4 * np.pi * hour_axis / seq_len + 0.6)
-    backbone_pattern = daily_cycle + harmonic
+    midday_shoulder = 0.035 * np.exp(-0.5 * ((hour_axis - 12.5) / 3.0) ** 2)
+    late_dip = -0.025 * np.exp(-0.5 * ((hour_axis - 21.0) / 2.2) ** 2)
+    backbone_pattern = daily_cycle + harmonic + midday_shoulder + late_dip
     peak_pattern = morning_peak + evening_peak
 
     all_X = []
@@ -449,6 +451,7 @@ def generate_base_traffic_data(
 
     for cid, cfg in enumerate(client_configs):
         n_samples = samples_per_client[cid]
+        client_id = int(cfg.get("client_id", cid + 1))
         phase_shift = int(cfg["phase_shift"])
         peak_amp = float(cfg["peak_amp"])
         scale = float(cfg["scale"])
@@ -458,31 +461,38 @@ def generate_base_traffic_data(
 
         client_backbone = np.roll(backbone_pattern, phase_shift)
         client_peaks = np.roll(peak_pattern, phase_shift)
-        baseline_level = 0.12 + offset
-        slow_drift = 0.018 * np.sin(2 * np.pi * global_time / max(total_steps, 1) + cid * 0.35)
-        micro_cycle = (0.008 + 0.85 * noise_std) * np.sin(6 * np.pi * global_time / seq_len + cid * 0.45)
-        shoulder_wave = 0.012 * peak_amp * np.sin(2 * np.pi * global_time / (seq_len * 2.0) + cid * 0.55)
+        baseline_level = 0.11 + 1.25 * offset
+        aux_phase = 0.55 * phase_shift + 2.5 * offset + 3.0 * (peak_amp - 1.0)
+        offpeak_pattern = np.roll(midday_shoulder + 0.6 * late_dip, phase_shift)
+        slow_drift = 0.016 * np.sin(2 * np.pi * global_time / max(total_steps, 1) + aux_phase)
+        micro_cycle = (0.008 + 0.92 * noise_std) * np.sin(6 * np.pi * global_time / seq_len + aux_phase * 1.1)
+        shoulder_wave = 0.012 * (0.8 + peak_amp) * np.sin(2 * np.pi * global_time / (seq_len * 2.0) + aux_phase * 0.8)
+        asym_wave = 0.010 * (scale - 1.0 + 1.5 * offset) * np.sin(2 * np.pi * global_time / (seq_len * 1.5) - aux_phase)
+        variance_wave = (0.004 + 0.55 * noise_std) * np.sin(8 * np.pi * global_time / seq_len + aux_phase * 0.6)
         client_pattern = (
             baseline_level
             + scale * client_backbone
             + peak_amp * client_peaks
+            + 0.65 * (peak_amp - 1.0) * offpeak_pattern
             + local_trend * slow_axis
             + slow_drift
             + micro_cycle
             + shoulder_wave
+            + asym_wave
+            + variance_wave
         )
         client_pattern = np.clip(client_pattern, 0.03, None)
 
         # 节点之间共享空间结构，但保留轻微响应差异。
-        node_sensitivity = 0.93 + 0.09 * np.sin(np.linspace(0, np.pi, num_nodes) + cid * 0.22)
-        node_offsets = np.linspace(-0.015, 0.015, num_nodes) * (0.7 + 0.05 * cid)
+        node_sensitivity = 0.94 + 0.08 * np.sin(np.linspace(0, np.pi, num_nodes) + aux_phase)
+        node_offsets = np.linspace(-0.015, 0.015, num_nodes) * (0.72 + 0.15 * abs(offset))
 
         node_series = np.zeros((num_nodes, total_steps), dtype=np.float32)
-        shared_noise = rng.randn(total_steps) * (noise_std * 0.40)
+        shared_noise = rng.randn(total_steps) * (noise_std * 0.52)
         for node in range(num_nodes):
             node_trend = local_trend * (node - (num_nodes - 1) / 2.0) / num_nodes * slow_axis * 0.5
             node_noise = rng.randn(total_steps) * noise_std
-            node_phase = 0.006 * np.sin(2 * np.pi * global_time / seq_len + node * 0.35 + cid * 0.20)
+            node_phase = 0.006 * np.sin(2 * np.pi * global_time / seq_len + node * 0.35 + 0.15 * client_id + aux_phase)
             node_flow = (
                 node_sensitivity[node] * client_pattern
                 + node_offsets[node]
