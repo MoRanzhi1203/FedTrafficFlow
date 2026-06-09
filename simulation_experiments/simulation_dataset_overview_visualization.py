@@ -101,6 +101,30 @@ def _configure_line_panel(ax, legend_items: int) -> None:
     legend.get_frame().set_edgecolor("none")
 
 
+def annotate_heatmap(
+    ax,
+    data: np.ndarray,
+    fmt: str = "{:.2f}",
+    threshold: float = 0.5,
+    fontsize: int = 9,
+) -> None:
+    data = np.asarray(data, dtype=float)
+    n_rows, n_cols = data.shape
+    for i in range(n_rows):
+        for j in range(n_cols):
+            value = float(data[i, j])
+            text_color = "white" if value >= threshold else "black"
+            ax.text(
+                j,
+                i,
+                fmt.format(value),
+                ha="center",
+                va="center",
+                color=text_color,
+                fontsize=fontsize,
+            )
+
+
 def _prepare_base_data() -> dict[str, object]:
     all_x, all_y, meta = cfb_core.generate_base_traffic_data(seed=cfb_core.BASE_SEED)
     mean_series = [_smooth_curve(client_x.mean(axis=(0, 1)), window=3) for client_x in all_x]
@@ -172,6 +196,11 @@ def _draw_driver_heatmap(
     ax.set_xticklabels(col_labels)
     ax.set_yticks(np.arange(len(row_labels)))
     ax.set_yticklabels(row_labels)
+    ax.set_xticks(np.arange(matrix.shape[1] + 1) - 0.5, minor=True)
+    ax.set_yticks(np.arange(matrix.shape[0] + 1) - 0.5, minor=True)
+    ax.grid(which="minor", color="white", linestyle="-", linewidth=1)
+    ax.tick_params(which="minor", bottom=False, left=False)
+    annotate_heatmap(ax, matrix, threshold=0.5, fontsize=9)
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     cbar.set_label(strength_label, fontsize=8)
     cbar.ax.tick_params(labelsize=8)
@@ -226,29 +255,19 @@ def generate_base_dataset_overview(output_dir: Path) -> None:
             time_axis,
             series,
             lw=1.9,
-            alpha=0.95,
+            alpha=0.92,
             color=COLORS[cid],
             label=base_labels[cid],
         )
-    overall_mean = np.mean(np.vstack(base_data["mean_series"]), axis=0)
-    axes[0, 1].plot(
-        time_axis,
-        overall_mean,
-        color="#222222",
-        lw=1.8,
-        ls="--",
-        alpha=0.75,
-        label="Overall mean",
-    )
     axes[0, 1].set_title("(b) Mean Traffic Trajectories", loc="left", fontweight="bold")
     axes[0, 1].set_xlabel("Time Step")
     axes[0, 1].set_ylabel("Average Flow")
     y_min = min(float(np.min(series)) for series in base_data["mean_series"])
     y_max = max(float(np.max(series)) for series in base_data["mean_series"])
-    pad = max((y_max - y_min) * 0.16, 0.06)
+    pad = max((y_max - y_min) * 0.20, 0.07)
     axes[0, 1].set_ylim(max(0.0, y_min - pad), y_max + pad)
     axes[0, 1].set_xlim(time_axis[0], time_axis[-1])
-    _configure_line_panel(axes[0, 1], legend_items=len(base_labels) + 1)
+    _configure_line_panel(axes[0, 1], legend_items=len(base_labels))
 
     target_data = [np.asarray(targets, dtype=float) for targets in base_data["targets"]]
     box = axes[1, 0].boxplot(target_data, patch_artist=True, widths=0.6, showfliers=False)
@@ -296,7 +315,7 @@ def generate_enhanced_noniid_overview(output_dir: Path) -> None:
             enhanced_data["hours"],
             series,
             lw=1.9,
-            alpha=0.95,
+            alpha=0.92,
             color=COLORS[cid],
             label=enhanced_labels[cid],
         )
