@@ -1,0 +1,211 @@
+{
+  "environment": {
+    "python_requirement": "Python 3.9.23 (analysis)",
+    "python_path": "E:\\anaconda3\\envs\\analysis\\python.exe",
+    "python39_compatible": true
+  },
+  "input": {
+    "input_dir": "data/analysis/node_intersection_flow_parquet",
+    "output_dir": "results/real_data_missingness_experiments",
+    "input_pattern": "node_flow_chunk_*.parquet",
+    "selected_files": [
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_001.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_002.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_003.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_004.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_005.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_006.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_007.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_008.parquet",
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_009.parquet"
+    ],
+    "max_files": 10,
+    "max_rows": 500,
+    "mechanisms": [
+      "mcar_point"
+    ],
+    "missing_rates": [
+      0.0,
+      0.05,
+      0.1,
+      0.2,
+      0.3
+    ],
+    "seeds": [
+      42,
+      2024,
+      3407,
+      1234,
+      5678
+    ],
+    "impute_methods": [
+      "zero_fill",
+      "forward_fill",
+      "linear_interpolation"
+    ]
+  },
+  "detected_columns": {
+    "target_col": "路口车流量",
+    "time_col": "时间段",
+    "node_col": "节点ID"
+  },
+  "summary": {
+    "design_rows": 250,
+    "mask_rows": 250,
+    "quality_rows": 750,
+    "actual_missing_rate_mean": 0.13,
+    "imputation_rmse_mean": 1385.1706323722403
+  },
+  "aggregates": {
+    "actual_missing_rate": [
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.0,
+        "actual_missing_rate": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.05,
+        "actual_missing_rate": 0.05
+      },
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.1,
+        "actual_missing_rate": 0.1
+      },
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.2,
+        "actual_missing_rate": 0.2
+      },
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.3,
+        "actual_missing_rate": 0.3
+      }
+    ],
+    "imputation_quality": [
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.05,
+        "imputation_mae": 882.7466204437255,
+        "imputation_rmse": 1227.8326323163146,
+        "imputation_mape": 47.6974296060033
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.1,
+        "imputation_mae": 883.6221988674163,
+        "imputation_rmse": 1209.3052627020554,
+        "imputation_mape": 60.04035082709167
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.2,
+        "imputation_mae": 881.7607657417298,
+        "imputation_rmse": 1242.7169131481317,
+        "imputation_mape": 54.09815452370046
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.3,
+        "imputation_mae": 884.4085329538981,
+        "imputation_rmse": 1240.8013315277437,
+        "imputation_mape": 50.75675797188088
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.05,
+        "imputation_mae": 1141.3380438262939,
+        "imputation_rmse": 1567.627302730436,
+        "imputation_mape": 78.48221261967407
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.1,
+        "imputation_mae": 1075.5677285240172,
+        "imputation_rmse": 1485.2384679886727,
+        "imputation_mape": 84.46618539906473
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.2,
+        "imputation_mae": 1101.5828513938905,
+        "imputation_rmse": 1535.6929636759683,
+        "imputation_mape": 81.76521207232474
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.3,
+        "imputation_mae": 1102.0568580206555,
+        "imputation_rmse": 1532.9940244125908,
+        "imputation_mape": 75.56443727067466
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.05,
+        "imputation_mae": 2161.403979067993,
+        "imputation_rmse": 2437.730228165423,
+        "imputation_mape": 100.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.1,
+        "imputation_mae": 2122.3369335056304,
+        "imputation_rmse": 2401.430835014883,
+        "imputation_mape": 100.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.2,
+        "imputation_mae": 2164.531182500458,
+        "imputation_rmse": 2447.67232621792,
+        "imputation_mape": 100.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.3,
+        "imputation_mae": 2163.0813691619874,
+        "imputation_rmse": 2448.517197683466,
+        "imputation_mape": 100.0
+      }
+    ]
+  }
+}
