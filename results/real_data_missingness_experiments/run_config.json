@@ -1,0 +1,37 @@
+{
+  "python_version": "Python 3.9.23",
+  "python_path": "E:\\anaconda3\\envs\\analysis\\python.exe",
+  "input_dir": "data/analysis/node_intersection_flow_parquet",
+  "output_dir": "results/real_data_missingness_experiments",
+  "target_col": "路口车流量",
+  "time_col": "时间段",
+  "node_col": "节点ID",
+  "missing_rates": [
+    0.0,
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "mechanisms": [
+    "mcar_point"
+  ],
+  "seeds": [
+    42,
+    2024,
+    3407,
+    1234,
+    5678
+  ],
+  "impute_methods": [
+    "zero_fill",
+    "forward_fill",
+    "linear_interpolation"
+  ],
+  "max_files": 10,
+  "max_rows": 500,
+  "write_corrupted": false,
+  "write_imputed": false,
+  "save_masks": false,
+  "note": "This experiment injects artificial missingness into complete real traffic data. It does not claim that the public dataset naturally contains missing values."
+}
