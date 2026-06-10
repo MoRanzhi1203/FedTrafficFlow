@@ -9,11 +9,11 @@
 ## 2. File Inventory Summary
 
 - Candidate data files: 252
-- Readable tabular files: 252
-- Files with read errors: 0
-- Files with time columns: 213
-- Files with traffic metric columns: 236
-- Files with node or sensor columns: 226
+- Readable tabular files: 21
+- Files with read errors: 231
+- Files with time columns: 5
+- Files with traffic metric columns: 15
+- Files with node or sensor columns: 12
 
 ## 3. Identified Pipeline
 
@@ -117,8 +117,8 @@
 ## 5. Paper-Usable Evidence
 
 - 共识别到 252 个候选真实数据/分析文件，其中原始文件 3 个、处理后文件 63 个。
-- 包含时间列的文件数量为 213，包含交通指标字段的文件数量为 236。
-- 包含节点/传感器字段的文件数量为 226。
+- 包含时间列的文件数量为 5，包含交通指标字段的文件数量为 15。
+- 包含节点/传感器字段的文件数量为 12。
 - 已检测到节点完整性汇总表，可直接支撑论文中关于覆盖完整性、缺失记录和非法值检查的描述。
 - 当前未发现真实数据训练/验证/测试划分证据，正式论文中需要补充。
 - 当前未发现真实数据联邦客户端划分证据，正式论文中需要补充。
