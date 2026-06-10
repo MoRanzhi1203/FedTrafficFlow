@@ -8,6 +8,7 @@ from typing import Any, Iterable, Optional, Tuple
 import zlib
 
 import matplotlib.pyplot as plt
+from matplotlib.ticker import LogFormatterSciNotation, LogLocator, NullFormatter, PercentFormatter
 import numpy as np
 import pandas as pd
 
@@ -995,36 +996,103 @@ METHOD_LABEL_MAP = {
 }
 
 
+def plot_rmse_series(
+    ax: Any,
+    agg: pd.DataFrame,
+) -> None:
+    if agg.empty:
+        return
+    for (mechanism, impute_method), group in agg.groupby(["mechanism", "impute_method"]):
+        label = f"{mechanism}-{impute_method}"
+        ax.plot(
+            group["missing_rate"],
+            group["imputation_rmse"],
+            marker="o",
+            linewidth=1.8,
+            label=label,
+        )
+
+
+def configure_missing_rate_axis(ax: Any) -> None:
+    ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+    ax.set_xlabel("Missing rate")
+
+
 def plot_missing_rate_vs_rmse(quality_df: pd.DataFrame, output_dir: Path) -> Tuple[Path, Path]:
     figures_dir = ensure_directory(output_dir / "figures")
     png_path = figures_dir / "missing_rate_vs_imputation_rmse.png"
     pdf_path = figures_dir / "missing_rate_vs_imputation_rmse.pdf"
 
     agg = aggregate_imputation_quality(quality_df)
-    plt.figure(figsize=(8, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
+    plot_rmse_series(ax, agg)
+    configure_missing_rate_axis(ax)
+    ax.set_ylabel("Imputation RMSE")
+    ax.set_title("Imputation RMSE under Artificial Missing Rates\nReal Data (Geo + Func)")
+    ax.grid(True, linestyle="--", alpha=0.35)
+    if not agg.empty:
+        ax.legend(frameon=False)
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=300)
+    fig.savefig(pdf_path)
+    plt.close(fig)
+    return png_path, pdf_path
+
+
+def plot_missing_rate_vs_rmse_log_y(quality_df: pd.DataFrame, output_dir: Path) -> Path:
+    figures_dir = ensure_directory(output_dir / "figures")
+    png_path = figures_dir / "missing_rate_vs_imputation_rmse_log_y.png"
+
+    agg = aggregate_imputation_quality(quality_df)
+    positive_rmse = pd.to_numeric(agg.get("imputation_rmse"), errors="coerce")
+    positive_rmse = positive_rmse[(positive_rmse > 0) & np.isfinite(positive_rmse)]
+    display_floor = 1e-3
+    if not positive_rmse.empty:
+        display_floor = float(positive_rmse.min()) / 10.0
+        display_floor = max(display_floor, 1e-6)
+
+    fig, ax = plt.subplots(figsize=(8, 5))
     if not agg.empty:
         for (mechanism, impute_method), group in agg.groupby(["mechanism", "impute_method"]):
-            plt.plot(
-                group["missing_rate"],
-                group["imputation_rmse"],
+            plot_group = group.copy()
+            rmse_values = pd.to_numeric(plot_group["imputation_rmse"], errors="coerce")
+            plot_group["imputation_rmse_plot"] = rmse_values.where(rmse_values > 0, display_floor)
+            ax.plot(
+                plot_group["missing_rate"],
+                plot_group["imputation_rmse_plot"],
                 marker="o",
                 linewidth=1.8,
                 label=f"{mechanism}-{impute_method}",
             )
-    plt.xlabel("Missing rate")
-    # 横轴显示百分比
-    ax = plt.gca()
-    ax.set_xticklabels([f"{int(x*100)}%" for x in ax.get_xticks()])
-    plt.ylabel("Imputation RMSE")
-    plt.title("Imputation RMSE under Artificial Missing Rates\nReal Data (Geo + Func)")
-    plt.grid(True, linestyle="--", alpha=0.35)
+    configure_missing_rate_axis(ax)
+    ax.set_ylabel("Imputation RMSE")
+    ax.set_title("Imputation RMSE under Artificial Missing Rates\nReal Data (Geo + Func)")
+    ax.set_yscale("log")
+
+    if not positive_rmse.empty:
+        y_min = float(positive_rmse.min())
+        y_max = float(positive_rmse.max())
+        lower = 10 ** np.floor(np.log10(min(display_floor, y_min)))
+        upper = 10 ** np.ceil(np.log10(y_max))
+        if lower == upper:
+            upper *= 10.0
+        ax.set_ylim(lower, upper)
+    else:
+        ax.set_ylim(display_floor, display_floor * 10.0)
+
+    ax.yaxis.set_major_locator(LogLocator(base=10.0))
+    ax.yaxis.set_major_formatter(LogFormatterSciNotation(base=10.0))
+    ax.yaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+    ax.grid(True, which="major", linestyle="--", linewidth=0.8, alpha=0.4)
+    ax.grid(True, which="minor", linestyle=":", linewidth=0.6, alpha=0.25)
+
     if not agg.empty:
-        plt.legend(frameon=False)
-    plt.tight_layout()
-    plt.savefig(png_path, dpi=300)
-    plt.savefig(pdf_path)
-    plt.close()
-    return png_path, pdf_path
+        ax.legend(frameon=False)
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=300)
+    plt.close(fig)
+    return png_path
 
 
 def maybe_write_mask(mask: np.ndarray, output_dir: Path, file_stub: str) -> Path:
