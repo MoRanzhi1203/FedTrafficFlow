@@ -1,0 +1,213 @@
+{
+  "environment": {
+    "python_requirement": "Python 3.9.23 (analysis)",
+    "python_path": "E:\\anaconda3\\envs\\analysis\\python.exe",
+    "python39_compatible": true
+  },
+  "input": {
+    "input_dir": "data/analysis/node_intersection_flow_parquet",
+    "output_dir": "results/real_data_missingness_experiments_sample",
+    "input_pattern": "node_flow_chunk_*.parquet",
+    "selected_files": [
+      "data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet"
+    ],
+    "max_files": 1,
+    "max_rows": 500,
+    "mechanisms": [
+      "mcar_point"
+    ],
+    "missing_rates": [
+      0.0,
+      0.05,
+      0.1
+    ],
+    "seeds": [
+      42
+    ],
+    "impute_methods": [
+      "zero_fill",
+      "forward_fill",
+      "linear_interpolation",
+      "geo_neighbor_fill",
+      "function_curve_fit",
+      "geo_func_hybrid"
+    ]
+  },
+  "detected_columns": {
+    "target_col": "路口车流量",
+    "time_col": "时间段",
+    "node_col": "节点ID"
+  },
+  "summary": {
+    "design_rows": 3,
+    "mask_rows": 3,
+    "quality_rows": 18,
+    "actual_missing_rate_mean": 0.05000000000000001,
+    "imputation_rmse_mean": 1042.729494538499
+  },
+  "aggregates": {
+    "actual_missing_rate": [
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.0,
+        "actual_missing_rate": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.05,
+        "actual_missing_rate": 0.05
+      },
+      {
+        "mechanism": "mcar_point",
+        "missing_rate": 0.1,
+        "actual_missing_rate": 0.1
+      }
+    ],
+    "imputation_quality": [
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.05,
+        "imputation_mae": 799.4495190429687,
+        "imputation_rmse": 1126.5977472835773,
+        "imputation_mape": 31.380290790440686
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "forward_fill",
+        "missing_rate": 0.1,
+        "imputation_mae": 955.2018823242188,
+        "imputation_rmse": 1265.7439611843647,
+        "imputation_mape": 31.861694675292078
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "function_curve_fit",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "function_curve_fit",
+        "missing_rate": 0.05,
+        "imputation_mae": 1165.5810607910157,
+        "imputation_rmse": 1615.8382628334589,
+        "imputation_mape": 63.21323186988897
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "function_curve_fit",
+        "missing_rate": 0.1,
+        "imputation_mae": 1277.5873828125,
+        "imputation_rmse": 1677.8032487743574,
+        "imputation_mape": 57.78315576794577
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "geo_func_hybrid",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "geo_func_hybrid",
+        "missing_rate": 0.05,
+        "imputation_mae": 861.4541033935546,
+        "imputation_rmse": 1127.9608389156065,
+        "imputation_mape": 41.29897195321908
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "geo_func_hybrid",
+        "missing_rate": 0.1,
+        "imputation_mae": 1052.9475036621093,
+        "imputation_rmse": 1293.2189232496687,
+        "imputation_mape": 42.02393901986931
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "geo_neighbor_fill",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "geo_neighbor_fill",
+        "missing_rate": 0.05,
+        "imputation_mae": 799.4495190429687,
+        "imputation_rmse": 1126.5977472835773,
+        "imputation_mape": 31.380290790440686
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "geo_neighbor_fill",
+        "missing_rate": 0.1,
+        "imputation_mae": 955.2018823242188,
+        "imputation_rmse": 1265.7439611843647,
+        "imputation_mape": 31.861694675292078
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.05,
+        "imputation_mae": 1165.5810607910157,
+        "imputation_rmse": 1615.8382628334589,
+        "imputation_mape": 63.21323186988897
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "linear_interpolation",
+        "missing_rate": 0.1,
+        "imputation_mae": 1277.5873828125,
+        "imputation_rmse": 1677.8032487743574,
+        "imputation_mape": 57.78315576794577
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.0,
+        "imputation_mae": 0.0,
+        "imputation_rmse": 0.0,
+        "imputation_mape": 0.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.05,
+        "imputation_mae": 2089.480769042969,
+        "imputation_rmse": 2345.9230332814295,
+        "imputation_mape": 100.0
+      },
+      {
+        "mechanism": "mcar_point",
+        "impute_method": "zero_fill",
+        "missing_rate": 0.1,
+        "imputation_mae": 2422.3730908203124,
+        "imputation_rmse": 2630.0616660947626,
+        "imputation_mape": 100.0
+      }
+    ]
+  }
+}
