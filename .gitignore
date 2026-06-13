@@ -231,6 +231,9 @@ data/analysis/speed_class_daily_period_stats.csv
 results/real_data_missingness_full_intersection_causal_history/masks/
 results/real_data_missingness_full_intersection_causal_history/missing_datasets/
 results/real_data_missingness_full_intersection_causal_history/imputed_datasets/
+results/real_data_missingness_full_intersection_causal_history/**/masks/
+results/real_data_missingness_full_intersection_causal_history/**/missing_datasets/
+results/real_data_missingness_full_intersection_causal_history/**/imputed_datasets/
 
 # Allow uploading only the manuscript sections under paper_revision
 paper_revision/*
