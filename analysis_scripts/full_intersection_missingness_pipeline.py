@@ -88,6 +88,26 @@ class ImputationManifestRecord:
     detail_path: str
 
 
+@dataclass
+class ChunkProcessStatusRecord:
+    stage: str
+    missing_rate: float
+    mechanism: str
+    seed: int
+    impute_method: str
+    day_index: int
+    file_name: str
+    status: str
+    mask_exists: bool
+    missing_dataset_exists: bool
+    imputed_dataset_exists: bool
+    detail_exists: bool
+    actual_missing_count: int
+    filled_missing_count: int
+    residual_missing_count: int
+    note: str
+
+
 def str2bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -307,14 +327,25 @@ def read_chunk_frame(
         df["time_slot"] = mapped_slots.astype(int)
     else:
         as_text = df[time_col].astype(str)
-        df["time_slot"] = as_text.map(slot_mapping).astype(int)
+        slot_mapping_text = {str(key): value for key, value in slot_mapping.items()}
+        df["time_slot"] = as_text.map(slot_mapping_text)
+        if df["time_slot"].isna().any():
+            unresolved = sorted(as_text.loc[df["time_slot"].isna()].unique().tolist())[:10]
+            raise ValueError(f"无法为时间段字段映射 time_slot，示例值: {unresolved}")
+        df["time_slot"] = df["time_slot"].astype(int)
     df[node_col] = df[node_col].astype(str)
     df["day_index"] = int(day_index)
     df["global_time_index"] = df["day_index"] * int(period) + df["time_slot"]
     df["source_chunk_name"] = file_path.name
     df["source_chunk_path"] = get_relative_path(file_path)
     df["is_warmup"] = bool(day_index < warmup_days)
-    df = df.sort_values([node_col, "time_slot"]).reset_index(drop=True)
+    node_numeric = pd.to_numeric(df[node_col], errors="coerce")
+    if node_numeric.notna().all():
+        df["_node_sort_key"] = node_numeric.astype(np.int64)
+        df = df.sort_values(["_node_sort_key", "time_slot"], kind="stable").drop(columns=["_node_sort_key"]).reset_index(drop=True)
+    else:
+        df["_node_sort_key"] = pd.factorize(df[node_col], sort=True)[0].astype(np.int64)
+        df = df.sort_values(["_node_sort_key", "time_slot"], kind="stable").drop(columns=["_node_sort_key"]).reset_index(drop=True)
     df["row_in_chunk"] = np.arange(len(df), dtype=np.int64)
     meta = ChunkMetaRecord(
         day_index=int(day_index),
@@ -357,6 +388,46 @@ def write_chunk_manifest(output_dir: Path, records: list[ChunkMetaRecord]) -> Pa
     path = manifest_dir / "chunk_index_summary.csv"
     pd.DataFrame([asdict(record) for record in records]).to_csv(path, index=False, encoding="utf-8-sig")
     return path
+
+
+def write_stage_status_manifest(output_dir: Path, stage: str, records: list[ChunkProcessStatusRecord]) -> Path:
+    manifest_dir = ensure_directory(output_dir / "manifests")
+    path = manifest_dir / f"{stage}_chunk_status.csv"
+    pd.DataFrame([asdict(record) for record in records]).to_csv(path, index=False, encoding="utf-8-sig")
+    return path
+
+
+def summarize_stage_status(records: list[ChunkProcessStatusRecord]) -> pd.DataFrame:
+    if not records:
+        return pd.DataFrame()
+    df = pd.DataFrame([asdict(record) for record in records])
+    return (
+        df.groupby(["stage", "missing_rate", "mechanism", "seed", "impute_method", "status"], as_index=False)
+        .size()
+        .rename(columns={"size": "chunk_count"})
+    )
+
+
+def summarize_status_file(status_path: Path) -> dict[str, Any]:
+    if not status_path.exists():
+        return {
+            "exists": False,
+            "row_count": 0,
+            "completed": 0,
+            "skipped_existing": 0,
+            "other": 0,
+            "unique_chunks": 0,
+        }
+    df = pd.read_csv(status_path)
+    counts = df["status"].value_counts().to_dict() if "status" in df.columns else {}
+    return {
+        "exists": True,
+        "row_count": int(len(df)),
+        "completed": int(counts.get("completed", 0)),
+        "skipped_existing": int(counts.get("skipped_existing", 0)),
+        "other": int(len(df) - counts.get("completed", 0) - counts.get("skipped_existing", 0)),
+        "unique_chunks": int(df[["day_index", "file_name"]].drop_duplicates().shape[0]) if {"day_index", "file_name"} <= set(df.columns) else 0,
+    }
 
 
 def make_mcar_mask(df: pd.DataFrame, target_col: str, missing_rate: float, seed: int) -> np.ndarray:
@@ -882,6 +953,7 @@ def run_generate_missing(args: argparse.Namespace) -> None:
     target_col, time_col, node_col = resolve_columns(first_columns, args.target_col, args.time_col, args.node_col)
     chunk_records: list[ChunkMetaRecord] = []
     manifest_records: list[MissingManifestRecord] = []
+    stage_status_records: list[ChunkProcessStatusRecord] = []
     block_lengths = parse_int_list(args.block_lengths)
     missing_rates = parse_float_list(args.missing_rates)
     seeds = parse_int_list(args.seed)
@@ -916,6 +988,47 @@ def run_generate_missing(args: argparse.Namespace) -> None:
                 mask_path = args.output_dir / "masks" / run_stub / f"{file_path.stem}_mask.parquet"
                 missing_dataset_path: Optional[Path] = None
                 if args.skip_existing and mask_path.exists():
+                    existing_mask_df = load_mask_from_file(mask_path)
+                    actual_missing_count = int(existing_mask_df["is_missing"].astype(bool).sum())
+                    stage_status_records.append(
+                        ChunkProcessStatusRecord(
+                            stage="generate_missing",
+                            missing_rate=float(missing_rate),
+                            mechanism=mechanism,
+                            seed=int(seed),
+                            impute_method="",
+                            day_index=int(day_index),
+                            file_name=file_path.name,
+                            status="skipped_existing",
+                            mask_exists=True,
+                            missing_dataset_exists=bool(
+                                (args.output_dir / "missing_datasets" / run_stub / f"{file_path.stem}_missing.parquet").exists()
+                            ),
+                            imputed_dataset_exists=False,
+                            detail_exists=False,
+                            actual_missing_count=actual_missing_count,
+                            filled_missing_count=0,
+                            residual_missing_count=0,
+                            note="mask 已存在，按 skip_existing 跳过重复构造",
+                        )
+                    )
+                    manifest_records.append(
+                        MissingManifestRecord(
+                            missing_rate=float(missing_rate),
+                            mechanism=mechanism,
+                            seed=int(seed),
+                            day_index=int(day_index),
+                            file_name=file_path.name,
+                            mask_path=get_relative_path(mask_path),
+                            missing_dataset_path=(
+                                get_relative_path(args.output_dir / "missing_datasets" / run_stub / f"{file_path.stem}_missing.parquet")
+                                if (args.output_dir / "missing_datasets" / run_stub / f"{file_path.stem}_missing.parquet").exists()
+                                else None
+                            ),
+                            actual_missing_count=actual_missing_count,
+                            actual_missing_rate=float(actual_missing_count / eligible_count) if eligible_count else 0.0,
+                        )
+                    )
                     continue
                 mask_df = mask_to_dataframe(df, mask, node_col)
                 save_mask_dataframe(mask_df, mask_path)
@@ -937,10 +1050,34 @@ def run_generate_missing(args: argparse.Namespace) -> None:
                         actual_missing_rate=actual_missing_rate,
                     )
                 )
+                stage_status_records.append(
+                    ChunkProcessStatusRecord(
+                        stage="generate_missing",
+                        missing_rate=float(missing_rate),
+                        mechanism=mechanism,
+                        seed=int(seed),
+                        impute_method="",
+                        day_index=int(day_index),
+                        file_name=file_path.name,
+                        status="completed",
+                        mask_exists=True,
+                        missing_dataset_exists=bool(missing_dataset_path and missing_dataset_path.exists()),
+                        imputed_dataset_exists=False,
+                        detail_exists=False,
+                        actual_missing_count=actual_missing_count,
+                        filled_missing_count=0,
+                        residual_missing_count=0,
+                        note="缺失掩码与缺失数据集已登记",
+                    )
+                )
     write_chunk_manifest(args.output_dir, chunk_records)
     manifest_df = pd.DataFrame([asdict(record) for record in manifest_records])
     ensure_directory(args.output_dir / "manifests")
     manifest_df.to_csv(args.output_dir / "manifests" / "missing_runs.csv", index=False, encoding="utf-8-sig")
+    write_stage_status_manifest(args.output_dir, "generate_missing", stage_status_records)
+    summary_df = summarize_stage_status(stage_status_records)
+    if not summary_df.empty:
+        summary_df.to_csv(args.output_dir / "manifests" / "generate_missing_stage_summary.csv", index=False, encoding="utf-8-sig")
 
 
 def prepare_day_template(
@@ -970,6 +1107,42 @@ def materialize_matrix(template: pd.DataFrame, matrix: np.ndarray, node_to_idx: 
     return output
 
 
+def preload_method_history_from_existing_outputs(
+    history_store: dict[str, list[np.ndarray]],
+    method: str,
+    bootstrap_rows: pd.DataFrame,
+    files: list[Path],
+    run_stub: str,
+    target_col: str,
+    time_col: str,
+    node_col: str,
+    args: argparse.Namespace,
+) -> None:
+    if method == "zero_fill" or bootstrap_rows.empty:
+        return
+    for _, bootstrap_row in bootstrap_rows.sort_values("day_index").iterrows():
+        bootstrap_day_index = int(bootstrap_row["day_index"])
+        bootstrap_file = files[bootstrap_day_index]
+        impute_stub = build_impute_stub(run_stub, method)
+        imputed_path = args.output_dir / "imputed_datasets" / impute_stub / f"{bootstrap_file.stem}_imputed.parquet"
+        if not imputed_path.exists():
+            continue
+        existing_imputed_df, _ = read_chunk_frame(
+            file_path=imputed_path,
+            day_index=bootstrap_day_index,
+            target_col=target_col,
+            time_col=time_col,
+            node_col=node_col,
+            period=args.period,
+            warmup_days=args.warmup_days,
+            max_rows=args.max_rows,
+        )
+        existing_filled_matrix, _, _, _ = prepare_day_template(existing_imputed_df, target_col, node_col, args.period)
+        history_store[method].append(existing_filled_matrix)
+        if len(history_store[method]) > args.history_days:
+            history_store[method] = history_store[method][-args.history_days:]
+
+
 def run_impute(args: argparse.Namespace) -> None:
     missing_runs_path = args.output_dir / "manifests" / "missing_runs.csv"
     if not missing_runs_path.exists():
@@ -990,13 +1163,45 @@ def run_impute(args: argparse.Namespace) -> None:
     if missing_runs.empty:
         raise ValueError("missing_runs.csv 中没有匹配当前参数的缺失数据清单。")
     impute_methods = normalize_impute_methods(parse_str_list(args.impute_methods), args.causal_history_only)
-    node_group_df = build_node_flow_groups(files, target_col, time_col, node_col, args.period, args.warmup_days, args.max_rows)
+    print(
+        "[impute] matched missing runs: rows={0}, rates={1}, seeds={2}, methods={3}".format(
+            len(missing_runs),
+            sorted(requested_rates),
+            sorted(requested_seeds),
+            ",".join(impute_methods),
+        )
+    )
     ensure_directory(args.output_dir / "summaries")
-    node_group_df.to_csv(args.output_dir / "summaries" / "node_flow_group_summary.csv", index=False, encoding="utf-8-sig")
+    node_group_path = args.output_dir / "summaries" / "node_flow_group_summary.csv"
+    if node_group_path.exists():
+        node_group_df = pd.read_csv(node_group_path)
+        if node_col not in node_group_df.columns or "flow_group" not in node_group_df.columns:
+            node_group_df = build_node_flow_groups(
+                files,
+                target_col,
+                time_col,
+                node_col,
+                args.period,
+                args.warmup_days,
+                args.max_rows,
+            )
+            node_group_df.to_csv(node_group_path, index=False, encoding="utf-8-sig")
+    else:
+        node_group_df = build_node_flow_groups(
+            files,
+            target_col,
+            time_col,
+            node_col,
+            args.period,
+            args.warmup_days,
+            args.max_rows,
+        )
+        node_group_df.to_csv(node_group_path, index=False, encoding="utf-8-sig")
     flow_group_map = dict(zip(node_group_df[node_col].astype(str), node_group_df["flow_group"]))
     neighbor_edges = load_neighbor_edges(args.topology_path)
     manifest_records: list[ImputationManifestRecord] = []
     detail_frames: list[pd.DataFrame] = []
+    stage_status_records: list[ChunkProcessStatusRecord] = []
     for missing_rate in sorted(requested_rates):
         for seed in sorted(requested_seeds):
             run_stub = build_run_stub(missing_rate, mechanism, seed)
@@ -1013,9 +1218,146 @@ def run_impute(args: argparse.Namespace) -> None:
             day_node_to_idx: dict[int, dict[str, int]] = {}
             day_templates: dict[int, pd.DataFrame] = {}
             history_by_method: dict[str, list[np.ndarray]] = {method: [] for method in impute_methods}
+            if args.skip_existing and len(impute_methods) == 1:
+                repair_method = impute_methods[0]
+                repair_stub = build_impute_stub(run_stub, repair_method)
+                run_rows_with_flags = run_rows.copy()
+                run_rows_with_flags["detail_exists"] = run_rows_with_flags["day_index"].apply(
+                    lambda day_index: (
+                        args.output_dir
+                        / "manifests"
+                        / "detail_runs"
+                        / repair_stub
+                        / f"{files[int(day_index)].stem}_detail.csv"
+                    ).exists()
+                )
+                missing_subset = run_rows_with_flags.loc[~run_rows_with_flags["detail_exists"]].copy()
+                if missing_subset.empty:
+                    print(
+                        "[impute] all requested chunks already complete for method={0}".format(
+                            repair_method
+                        )
+                    )
+                    continue
+                first_missing_day = int(missing_subset["day_index"].min())
+                if first_missing_day > 0:
+                    bootstrap_start = max(0, first_missing_day - args.history_days)
+                    bootstrap_rows = run_rows_with_flags.loc[
+                        (run_rows_with_flags["day_index"] >= bootstrap_start)
+                        & (run_rows_with_flags["day_index"] < first_missing_day)
+                    ].copy()
+                    preload_method_history_from_existing_outputs(
+                        history_store=history_by_method,
+                        method=repair_method,
+                        bootstrap_rows=bootstrap_rows,
+                        files=files,
+                        run_stub=run_stub,
+                        target_col=target_col,
+                        time_col=time_col,
+                        node_col=node_col,
+                        args=args,
+                    )
+                run_rows = missing_subset.drop(columns=["detail_exists"]).copy()
+                print(
+                    "[impute] repair scope optimized for method={0}: first_missing_day={1}, missing_chunk_count={2}, bootstrap_days={3}".format(
+                        repair_method,
+                        first_missing_day,
+                        len(run_rows),
+                        len(history_by_method.get(repair_method, [])),
+                    )
+                )
+            print(
+                "[impute] run scope: missing_rate={0}, seed={1}, chunk_count={2}".format(
+                    float(missing_rate),
+                    int(seed),
+                    len(run_rows),
+                )
+            )
             for _, row in run_rows.iterrows():
                 day_index = int(row["day_index"])
                 file_path = files[day_index]
+                skipped_contexts: list[tuple[str, Optional[np.ndarray], Path, Path, int]] = []
+                methods_to_compute: list[tuple[str, Path, Path]] = []
+                for method in impute_methods:
+                    impute_stub = build_impute_stub(run_stub, method)
+                    detail_path = args.output_dir / "manifests" / "detail_runs" / impute_stub / f"{file_path.stem}_detail.csv"
+                    imputed_path = args.output_dir / "imputed_datasets" / impute_stub / f"{file_path.stem}_imputed.parquet"
+                    if args.skip_existing and detail_path.exists():
+                        existing_detail_df = pd.read_csv(detail_path)
+                        overall_row = existing_detail_df.loc[existing_detail_df["flow_group"] == "all"].head(1)
+                        filled_missing_count = int(overall_row["count"].iloc[0]) if not overall_row.empty else 0
+                        existing_filled_matrix: Optional[np.ndarray] = None
+                        if method != "zero_fill" and imputed_path.exists():
+                            existing_imputed_df, _ = read_chunk_frame(
+                                file_path=imputed_path,
+                                day_index=day_index,
+                                target_col=target_col,
+                                time_col=time_col,
+                                node_col=node_col,
+                                period=args.period,
+                                warmup_days=args.warmup_days,
+                                max_rows=args.max_rows,
+                            )
+                            existing_filled_matrix, _, _, _ = prepare_day_template(existing_imputed_df, target_col, node_col, args.period)
+                        manifest_records.append(
+                            ImputationManifestRecord(
+                                missing_rate=float(missing_rate),
+                                mechanism=mechanism,
+                                seed=int(seed),
+                                impute_method=method,
+                                day_index=int(day_index),
+                                file_name=file_path.name,
+                                imputed_dataset_path=get_relative_path(imputed_path) if imputed_path.exists() else None,
+                                filled_missing_count=filled_missing_count,
+                                residual_missing_count=0,
+                                detail_path=get_relative_path(detail_path),
+                            )
+                        )
+                        detail_frames.append(existing_detail_df)
+                        stage_status_records.append(
+                            ChunkProcessStatusRecord(
+                                stage="impute",
+                                missing_rate=float(missing_rate),
+                                mechanism=mechanism,
+                                seed=int(seed),
+                                impute_method=method,
+                                day_index=int(day_index),
+                                file_name=file_path.name,
+                                status="skipped_existing",
+                                mask_exists=True,
+                                missing_dataset_exists=False,
+                                imputed_dataset_exists=bool(imputed_path.exists()),
+                                detail_exists=True,
+                                actual_missing_count=filled_missing_count,
+                                filled_missing_count=filled_missing_count,
+                                residual_missing_count=0,
+                                note="detail 已存在，按 skip_existing 跳过重复补全",
+                            )
+                        )
+                        skipped_contexts.append(
+                            (
+                                method,
+                                existing_filled_matrix,
+                                detail_path,
+                                imputed_path,
+                                filled_missing_count,
+                            )
+                        )
+                        continue
+                    methods_to_compute.append((method, detail_path, imputed_path))
+
+                if not methods_to_compute and all(
+                    existing_filled_matrix is not None or method == "zero_fill"
+                    for method, existing_filled_matrix, _, _, _ in skipped_contexts
+                ):
+                    for method, existing_filled_matrix, _, _, _ in skipped_contexts:
+                        if existing_filled_matrix is None or method == "zero_fill":
+                            continue
+                        history_by_method[method].append(existing_filled_matrix)
+                        if len(history_by_method[method]) > args.history_days:
+                            history_by_method[method] = history_by_method[method][-args.history_days:]
+                    continue
+
                 original_df, _ = read_chunk_frame(
                     file_path=file_path,
                     day_index=day_index,
@@ -1040,7 +1382,22 @@ def run_impute(args: argparse.Namespace) -> None:
                 original_matrix, _, _, _ = prepare_day_template(original_df, target_col, node_col, args.period)
                 mask_matrix = np.isnan(base_matrix)
                 flow_groups = np.array([flow_group_map.get(node, "mid_flow") for node in nodes], dtype=object)
-                for method in impute_methods:
+
+                for method, existing_filled_matrix, _, _, _ in skipped_contexts:
+                    if method == "zero_fill":
+                        continue
+                    history_by_method[method].append(base_matrix.copy() if existing_filled_matrix is None else existing_filled_matrix)
+                    if len(history_by_method[method]) > args.history_days:
+                        history_by_method[method] = history_by_method[method][-args.history_days:]
+
+                for method, detail_path, imputed_path in methods_to_compute:
+                    print(
+                        "[impute] computing method={0}, day_index={1}, file={2}".format(
+                            method,
+                            int(day_index),
+                            file_path.name,
+                        )
+                    )
                     history_arrays = get_history_arrays(history_by_method[method], args.history_days)
                     filled = base_matrix.copy()
                     last_value = np.full(filled.shape[0], np.nan, dtype=np.float64)
@@ -1189,8 +1546,7 @@ def run_impute(args: argparse.Namespace) -> None:
                             current = filled[:, slot]
                             observed_mask = np.isfinite(current)
                             last_value[observed_mask] = current[observed_mask]
-                    impute_stub = build_impute_stub(run_stub, method)
-                    imputed_path: Optional[Path] = None
+                    imputed_path_runtime: Optional[Path] = None
                     if args.write_imputed_datasets:
                         output_frame = materialize_matrix(
                             template=day_templates[day_index],
@@ -1199,8 +1555,8 @@ def run_impute(args: argparse.Namespace) -> None:
                             target_col=target_col,
                             node_col=node_col,
                         )
-                        imputed_path = args.output_dir / "imputed_datasets" / impute_stub / f"{file_path.stem}_imputed.parquet"
-                        save_frame(output_frame, imputed_path)
+                        imputed_path_runtime = imputed_path
+                        save_frame(output_frame, imputed_path_runtime)
                     y_true = original_matrix[mask_matrix]
                     y_pred = filled[mask_matrix]
                     valid = np.isfinite(y_true) & np.isfinite(y_pred)
@@ -1226,9 +1582,10 @@ def run_impute(args: argparse.Namespace) -> None:
                         stats = compute_metric_stats(y_true[group_mask], y_pred[group_mask])
                         detail_rows.append({**base_row, "flow_group": flow_group, **stats})
                     detail_df = pd.DataFrame(detail_rows)
-                    detail_path = args.output_dir / "manifests" / "detail_runs" / impute_stub / f"{file_path.stem}_detail.csv"
                     save_detail_frame(detail_df, detail_path)
                     detail_frames.append(detail_df)
+                    filled_missing_count = int(np.isfinite(filled[mask_matrix]).sum())
+                    residual_missing_count = int(np.isnan(filled[mask_matrix]).sum())
                     manifest_records.append(
                         ImputationManifestRecord(
                             missing_rate=float(missing_rate),
@@ -1237,10 +1594,30 @@ def run_impute(args: argparse.Namespace) -> None:
                             impute_method=method,
                             day_index=int(day_index),
                             file_name=file_path.name,
-                            imputed_dataset_path=None if imputed_path is None else get_relative_path(imputed_path),
-                            filled_missing_count=int(np.isfinite(filled[mask_matrix]).sum()),
-                            residual_missing_count=int(np.isnan(filled[mask_matrix]).sum()),
+                            imputed_dataset_path=None if imputed_path_runtime is None else get_relative_path(imputed_path_runtime),
+                            filled_missing_count=filled_missing_count,
+                            residual_missing_count=residual_missing_count,
                             detail_path=get_relative_path(detail_path),
+                        )
+                    )
+                    stage_status_records.append(
+                        ChunkProcessStatusRecord(
+                            stage="impute",
+                            missing_rate=float(missing_rate),
+                            mechanism=mechanism,
+                            seed=int(seed),
+                            impute_method=method,
+                            day_index=int(day_index),
+                            file_name=file_path.name,
+                            status="completed",
+                            mask_exists=True,
+                            missing_dataset_exists=False,
+                            imputed_dataset_exists=bool(imputed_path_runtime and imputed_path_runtime.exists()),
+                            detail_exists=True,
+                            actual_missing_count=int(mask_matrix.sum()),
+                            filled_missing_count=filled_missing_count,
+                            residual_missing_count=residual_missing_count,
+                            note="历史因果补全结果与明细已登记",
                         )
                     )
                     history_by_method[method].append(filled.copy())
@@ -1255,6 +1632,17 @@ def run_impute(args: argparse.Namespace) -> None:
             index=False,
             encoding="utf-8-sig",
         )
+    write_stage_status_manifest(args.output_dir, "impute", stage_status_records)
+    summary_df = summarize_stage_status(stage_status_records)
+    if not summary_df.empty:
+        summary_df.to_csv(args.output_dir / "manifests" / "impute_stage_summary.csv", index=False, encoding="utf-8-sig")
+    print(
+        "[impute] finished: manifest_records={0}, detail_frames={1}, stage_status_records={2}".format(
+            len(manifest_records),
+            len(detail_frames),
+            len(stage_status_records),
+        )
+    )
 
 
 def aggregate_detail(detail_df: pd.DataFrame) -> pd.DataFrame:
@@ -1412,6 +1800,7 @@ def write_markdown(path: Path, lines: list[str]) -> Path:
 
 def build_audit_payload(args: argparse.Namespace, chunk_df: pd.DataFrame, summary_all: pd.DataFrame, summary_main: pd.DataFrame) -> dict[str, Any]:
     chunk_records = [] if chunk_df.empty else chunk_df.to_dict(orient="records")
+    total_chunks = int(len(chunk_df))
     return {
         "environment": {
             "python_path": r"E:\anaconda3\envs\analysis\python.exe",
@@ -1443,6 +1832,10 @@ def build_audit_payload(args: argparse.Namespace, chunk_df: pd.DataFrame, summar
             "period": int(args.period),
             "chunk_records": chunk_records,
         },
+        "batch_scope": {
+            "total_chunks_selected": total_chunks,
+            "processes_all_chunks": bool(args.max_chunks == 0),
+        },
         "summary_rows": {
             "all_days": int(len(summary_all)),
             "exclude_warmup": int(len(summary_main)),
@@ -1454,14 +1847,20 @@ def run_validate(args: argparse.Namespace) -> None:
     detail_path = args.output_dir / "summaries" / "imputation_quality_detail.csv"
     chunk_path = args.output_dir / "manifests" / "chunk_index_summary.csv"
     manifest_path = args.output_dir / "manifests" / "imputation_runs.csv"
+    generate_status_path = args.output_dir / "manifests" / "generate_missing_chunk_status.csv"
+    impute_status_path = args.output_dir / "manifests" / "impute_chunk_status.csv"
     detail_df = pd.read_csv(detail_path) if detail_path.exists() else pd.DataFrame()
     chunk_df = pd.read_csv(chunk_path) if chunk_path.exists() else pd.DataFrame()
     manifest_df = pd.read_csv(manifest_path) if manifest_path.exists() else pd.DataFrame()
+    generate_status = summarize_status_file(generate_status_path)
+    impute_status = summarize_status_file(impute_status_path)
     payload = {
         "checks": {
             "detail_exists": bool(detail_path.exists()),
             "chunk_manifest_exists": bool(chunk_path.exists()),
             "imputation_manifest_exists": bool(manifest_path.exists()),
+            "generate_status_exists": generate_status["exists"],
+            "impute_status_exists": impute_status["exists"],
             "causal_history_only": bool(args.causal_history_only),
             "context_days_after": int(args.context_days_after),
             "uses_future_days": False,
@@ -1473,6 +1872,8 @@ def run_validate(args: argparse.Namespace) -> None:
             "detail_rows": int(len(detail_df)),
             "chunk_rows": int(len(chunk_df)),
             "imputation_rows": int(len(manifest_df)),
+            "generate_completed_or_skipped": int(generate_status["completed"] + generate_status["skipped_existing"]),
+            "impute_completed_or_skipped": int(impute_status["completed"] + impute_status["skipped_existing"]),
         },
     }
     write_json(args.output_dir / "full_intersection_missingness_validation.json", payload)
@@ -1488,6 +1889,8 @@ def run_validate(args: argparse.Namespace) -> None:
         f"- detail_rows: `{len(detail_df)}`",
         f"- chunk_rows: `{len(chunk_df)}`",
         f"- imputation_rows: `{len(manifest_df)}`",
+        f"- generate_completed_or_skipped: `{generate_status['completed'] + generate_status['skipped_existing']}`",
+        f"- impute_completed_or_skipped: `{impute_status['completed'] + impute_status['skipped_existing']}`",
     ]
     write_markdown(args.output_dir / "full_intersection_missingness_validation.md", lines)
 
@@ -1499,6 +1902,10 @@ def run_summarize(args: argparse.Namespace) -> None:
     detail_df = pd.read_csv(detail_path)
     chunk_path = args.output_dir / "manifests" / "chunk_index_summary.csv"
     chunk_df = pd.read_csv(chunk_path) if chunk_path.exists() else pd.DataFrame()
+    generate_status_path = args.output_dir / "manifests" / "generate_missing_chunk_status.csv"
+    impute_status_path = args.output_dir / "manifests" / "impute_chunk_status.csv"
+    generate_status = summarize_status_file(generate_status_path)
+    impute_status = summarize_status_file(impute_status_path)
     all_days_agg = aggregate_detail(detail_df)
     exclude_df = detail_df.loc[~detail_df["is_warmup"].astype(bool)].copy() if args.exclude_warmup_from_main_metrics else detail_df.copy()
     exclude_agg = aggregate_detail(exclude_df)
@@ -1532,6 +1939,34 @@ def run_summarize(args: argparse.Namespace) -> None:
     plot_main_rmse(summary_main, args.output_dir)
     plot_zoom_rmse(summary_main, args.output_dir)
     plot_delta_rmse(summary_main, args.output_dir)
+    batch_report = {
+        "total_chunks_selected": int(len(chunk_df)),
+        "generate_missing_status": generate_status,
+        "impute_status": impute_status,
+        "all_chunks_covered_in_generate": bool(
+            len(chunk_df) == 0 or generate_status["unique_chunks"] == len(chunk_df)
+        ),
+        "all_chunks_covered_in_impute": bool(
+            len(chunk_df) == 0 or impute_status["unique_chunks"] == len(chunk_df)
+        ),
+        "detail_row_count": int(len(detail_df)),
+        "summary_all_row_count": int(len(summary_all)),
+        "summary_exclude_warmup_row_count": int(len(summary_main)),
+    }
+    write_json(summaries_dir / "batch_processing_report.json", batch_report)
+    batch_lines = [
+        "# Batch Processing Report",
+        "",
+        f"- total_chunks_selected: `{batch_report['total_chunks_selected']}`",
+        f"- generate_completed: `{generate_status['completed']}`",
+        f"- generate_skipped_existing: `{generate_status['skipped_existing']}`",
+        f"- impute_completed: `{impute_status['completed']}`",
+        f"- impute_skipped_existing: `{impute_status['skipped_existing']}`",
+        f"- all_chunks_covered_in_generate: `{str(batch_report['all_chunks_covered_in_generate']).lower()}`",
+        f"- all_chunks_covered_in_impute: `{str(batch_report['all_chunks_covered_in_impute']).lower()}`",
+        f"- detail_row_count: `{batch_report['detail_row_count']}`",
+    ]
+    write_markdown(summaries_dir / "batch_processing_report.md", batch_lines)
     payload = build_audit_payload(args, chunk_df, summary_all, summary_main)
     write_json(args.output_dir / "full_intersection_missingness_audit.json", payload)
     lines = [
@@ -1561,6 +1996,14 @@ def run_summarize(args: argparse.Namespace) -> None:
         f"- `imputation_quality_summary_all_days.csv` 行数：`{len(summary_all)}`",
         f"- `imputation_quality_summary_exclude_warmup.csv` 行数：`{len(summary_main)}`",
         f"- `imputation_quality_by_flow_group.csv` 行数：`{len(flow_group_summary)}`",
+        "",
+        "## 4. Batch Coverage",
+        "",
+        f"- 选中的 chunk 总数：`{len(chunk_df)}`",
+        f"- `generate_missing` 已完成或跳过的 chunk 数：`{generate_status['completed'] + generate_status['skipped_existing']}`",
+        f"- `impute` 已完成或跳过的 chunk 数：`{impute_status['completed'] + impute_status['skipped_existing']}`",
+        f"- `generate_missing` 是否覆盖全部 chunk：`{str(batch_report['all_chunks_covered_in_generate']).lower()}`",
+        f"- `impute` 是否覆盖全部 chunk：`{str(batch_report['all_chunks_covered_in_impute']).lower()}`",
     ]
     write_markdown(args.output_dir / "full_intersection_missingness_audit.md", lines)
 
