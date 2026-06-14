@@ -15,8 +15,8 @@
 - `forward_fill`：imputed=`61`，detail=`61`，缺失 imputed chunk=`[]`
 - `historical_linear_extrapolation`：imputed=`61`，detail=`61`，缺失 imputed chunk=`[]`
 - `geo_neighbor_fill`：imputed=`61`，detail=`61`，缺失 imputed chunk=`[]`
-- `function_curve_fit`：imputed=`0`，detail=`0`，缺失 imputed chunk=`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]`
-- `geo_func_hybrid`：imputed=`0`，detail=`0`，缺失 imputed chunk=`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]`
+- `function_curve_fit`：imputed=`61`，detail=`61`，缺失 imputed chunk=`[]`
+- `geo_func_hybrid`：imputed=`61`，detail=`61`，缺失 imputed chunk=`[]`
 
 ## 关键文件
 
