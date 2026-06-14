@@ -5,7 +5,7 @@ chunk_count,missing_datasets,True,61,61,[],results/real_data_missingness_full_in
 method_completion,zero_fill,True,61,61,[],detail_count=61; detail_missing=[]
 method_completion,forward_fill,True,61,61,[],detail_count=61; detail_missing=[]
 method_completion,historical_linear_extrapolation,True,61,61,[],detail_count=61; detail_missing=[]
-method_completion,geo_neighbor_fill,True,57,61,"[57, 58, 59, 60]","detail_count=57; detail_missing=[57, 58, 59, 60]"
+method_completion,geo_neighbor_fill,True,61,61,[],detail_count=61; detail_missing=[]
 method_completion,function_curve_fit,False,0,61,"[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]","detail_count=0; detail_missing=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]"
 method_completion,geo_func_hybrid,False,0,61,"[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]","detail_count=0; detail_missing=[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]"
 artifact_check,generate_missing_chunk_status.csv,True,,,,results/real_data_missingness_full_intersection_causal_history/manifests/generate_missing_chunk_status.csv
@@ -19,6 +19,6 @@ artifact_check,full_intersection_missingness_audit.json,False,,,,results/real_da
 artifact_check,figures,False,,,,results/real_data_missingness_full_intersection_causal_history/figures
 manifest_rows,chunk_index_summary_rows,True,61,61,,results/real_data_missingness_full_intersection_causal_history/manifests/chunk_index_summary.csv
 manifest_rows,generate_missing_chunk_status_rows,True,61,,,results/real_data_missingness_full_intersection_causal_history/manifests/generate_missing_chunk_status.csv
-manifest_rows,impute_chunk_status_rows,True,5,,,results/real_data_missingness_full_intersection_causal_history/manifests/impute_chunk_status.csv
-manifest_rows,imputation_runs_rows,True,5,,,results/real_data_missingness_full_intersection_causal_history/manifests/imputation_runs.csv
-manifest_rows,imputation_quality_detail_rows,True,20,,,results/real_data_missingness_full_intersection_causal_history/summaries/imputation_quality_detail.csv
+manifest_rows,impute_chunk_status_rows,True,4,,,results/real_data_missingness_full_intersection_causal_history/manifests/impute_chunk_status.csv
+manifest_rows,imputation_runs_rows,True,4,,,results/real_data_missingness_full_intersection_causal_history/manifests/imputation_runs.csv
+manifest_rows,imputation_quality_detail_rows,True,16,,,results/real_data_missingness_full_intersection_causal_history/summaries/imputation_quality_detail.csv

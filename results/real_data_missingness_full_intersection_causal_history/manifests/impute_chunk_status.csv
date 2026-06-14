@@ -1,6 +1,5 @@
 ﻿stage,missing_rate,mechanism,seed,impute_method,day_index,file_name,status,mask_exists,missing_dataset_exists,imputed_dataset_exists,detail_exists,actual_missing_count,filled_missing_count,residual_missing_count,note
-impute,0.05,mcar_point,42,historical_linear_extrapolation,56,node_flow_chunk_056.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
-impute,0.05,mcar_point,42,historical_linear_extrapolation,57,node_flow_chunk_057.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
-impute,0.05,mcar_point,42,historical_linear_extrapolation,58,node_flow_chunk_058.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
-impute,0.05,mcar_point,42,historical_linear_extrapolation,59,node_flow_chunk_059.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
-impute,0.05,mcar_point,42,historical_linear_extrapolation,60,node_flow_chunk_060.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
+impute,0.05,mcar_point,42,geo_neighbor_fill,57,node_flow_chunk_057.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
+impute,0.05,mcar_point,42,geo_neighbor_fill,58,node_flow_chunk_058.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
+impute,0.05,mcar_point,42,geo_neighbor_fill,59,node_flow_chunk_059.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记
+impute,0.05,mcar_point,42,geo_neighbor_fill,60,node_flow_chunk_060.parquet,completed,True,False,True,True,201749,201749,0,历史因果补全结果与明细已登记

@@ -1,0 +1,5 @@
+﻿missing_rate,mechanism,seed,impute_method,day_index,file_name,is_warmup,flow_group,count,sum_abs_error,sum_squared_error,sum_pct_error,count_pct,sum_smape
+0.05,mcar_point,42,geo_neighbor_fill,57,node_flow_chunk_057.parquet,False,all,201749.0,30634018.01841267,17508725081.022976,2351845.3044101987,200591.0,1605071.1710514482
+0.05,mcar_point,42,geo_neighbor_fill,57,node_flow_chunk_057.parquet,False,low_flow,60303.0,5491884.74825856,2222410347.372529,753286.8787296936,59396.0,584141.2218724508
+0.05,mcar_point,42,geo_neighbor_fill,57,node_flow_chunk_057.parquet,False,mid_flow,80807.0,13653783.57774312,7804117989.975477,1057242.9021082171,80579.0,684797.8579377801
+0.05,mcar_point,42,geo_neighbor_fill,57,node_flow_chunk_057.parquet,False,high_flow,60639.0,11488349.692410989,7482196743.6749735,541315.5235722888,60616.0,336132.09124121716
