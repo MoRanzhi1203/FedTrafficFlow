@@ -93,8 +93,6 @@
     "single_rate_0p05_mape_by_method_all6_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_mape_by_method_all6.pdf",
     "single_rate_0p05_flow_group_rmse_by_method_all6_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse_by_method_all6.png",
     "single_rate_0p05_flow_group_rmse_by_method_all6_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse_by_method_all6.pdf",
-    "single_rate_0p05_rmse_by_method_nonzero_zoom_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method_nonzero_zoom.png",
-    "single_rate_0p05_rmse_by_method_nonzero_zoom_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method_nonzero_zoom.pdf",
     "single_rate_0p05_figure_index_csv": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_figure_index.csv",
     "formal_visualization_uses_direct_six_method_comparison": true,
     "forward_fill_is_not_formal_baseline": true,

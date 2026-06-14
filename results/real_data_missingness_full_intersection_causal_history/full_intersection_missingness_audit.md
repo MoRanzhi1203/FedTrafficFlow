@@ -41,5 +41,4 @@
 - 正式主图：`figures\single_rate_0p05_mae_by_method_all6.png`
 - 正式主图：`figures\single_rate_0p05_mape_by_method_all6.png`
 - 正式主图：`figures\single_rate_0p05_flow_group_rmse_by_method_all6.png`
-- 辅助图：`figures\single_rate_0p05_rmse_by_method_nonzero_zoom.png`
 - 正式结果采用 6 个方法的 RMSE、MAE、sMAPE/MAPE 绝对指标并列比较。

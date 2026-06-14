@@ -3,4 +3,3 @@ single_rate_0p05_rmse_by_method_all6.png,bar,RMSE,all_6_methods,true,Formal six-
 single_rate_0p05_mae_by_method_all6.png,bar,MAE,all_6_methods,true,Formal six-method direct comparison
 single_rate_0p05_mape_by_method_all6.png,bar,MAPE,all_6_methods,true,Formal six-method direct comparison
 single_rate_0p05_flow_group_rmse_by_method_all6.png,grouped_bar,RMSE,all_6_methods,true,"Compares low-flow, mid-flow, and high-flow RMSE across all six methods without a baseline method"
-single_rate_0p05_rmse_by_method_nonzero_zoom.png,bar,RMSE,nonzero_methods,false,Zoom view excluding zero fill for readability

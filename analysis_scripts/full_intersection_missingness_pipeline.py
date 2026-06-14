@@ -1724,7 +1724,6 @@ def plot_single_rate_metric_bars(
     method_order: list[str],
     ylabel: str,
     exclude_methods: Optional[set[str]] = None,
-    legacy_file_stub: Optional[str] = None,
 ) -> tuple[Optional[Path], Optional[Path]]:
     if summary_df.empty or "impute_method" not in summary_df.columns or metric not in summary_df.columns:
         return None, None
@@ -1755,9 +1754,6 @@ def plot_single_rate_metric_bars(
     fig.tight_layout()
     fig.savefig(png_path, dpi=300)
     fig.savefig(pdf_path)
-    if legacy_file_stub:
-        fig.savefig(figures_dir / f"single_rate_{rate_tag}_{legacy_file_stub}.png", dpi=300)
-        fig.savefig(figures_dir / f"single_rate_{rate_tag}_{legacy_file_stub}.pdf")
     plt.close(fig)
     return png_path, pdf_path
 
@@ -1775,7 +1771,6 @@ def plot_main_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Pa
             file_stub="rmse_by_method_all6",
             method_order=method_order,
             ylabel="RMSE",
-            legacy_file_stub="rmse_by_method",
         )
         assert png_path is not None and pdf_path is not None
     else:
@@ -1933,8 +1928,6 @@ def plot_flow_group_rmse(flow_group_summary: pd.DataFrame, output_dir: Path) -> 
     fig.tight_layout()
     fig.savefig(png_path, dpi=300)
     fig.savefig(pdf_path)
-    fig.savefig(figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.png", dpi=300)
-    fig.savefig(figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.pdf")
     plt.close(fig)
     return png_path, pdf_path
 
@@ -1981,14 +1974,6 @@ def build_single_rate_figure_index_rows(
             "method_scope": "all_6_methods",
             "is_formal_main_figure": "true",
             "notes": "Compares low-flow, mid-flow, and high-flow RMSE across all six methods without a baseline method",
-        },
-        {
-            "figure_file": f"single_rate_{rate_tag}_rmse_by_method_nonzero_zoom.png",
-            "figure_type": "bar",
-            "metric": "RMSE",
-            "method_scope": "nonzero_methods",
-            "is_formal_main_figure": "false",
-            "notes": "Zoom view excluding zero fill for readability",
         },
     ]
 
@@ -2172,16 +2157,6 @@ def run_summarize(args: argparse.Namespace) -> None:
         method_order=method_order,
         ylabel=secondary_metric_label,
     )
-    plot_single_rate_metric_bars(
-        summary_df=summary_main,
-        output_dir=args.output_dir,
-        metric="RMSE",
-        title="Single missing rate = {0:.0%}: RMSE by method, excluding zero fill for readability",
-        file_stub="rmse_by_method_nonzero_zoom",
-        method_order=method_order,
-        ylabel="RMSE",
-        exclude_methods={"zero_fill"},
-    )
     plot_flow_group_rmse(flow_group_summary, args.output_dir)
     if single_rate is not None:
         figure_index_rows = build_single_rate_figure_index_rows(summary_main, secondary_metric_label)
@@ -2230,9 +2205,7 @@ def run_summarize(args: argparse.Namespace) -> None:
                 f"figures/single_rate_{rate_tag}_{secondary_metric_stub}_by_method_all6.png",
                 f"figures/single_rate_{rate_tag}_flow_group_rmse_by_method_all6.png",
             ],
-            "auxiliary_figures": [
-                f"figures/single_rate_{rate_tag}_rmse_by_method_nonzero_zoom.png",
-            ],
+            "auxiliary_figures": [],
             "notes": [
                 "Formal visualization uses direct six-method comparison on absolute metrics.",
                 "Forward fill is one of the six imputation methods and is not used as the formal baseline method.",
@@ -2289,7 +2262,6 @@ def run_summarize(args: argparse.Namespace) -> None:
                 f"- 正式主图：`figures\\single_rate_{rate_tag}_mae_by_method_all6.png`",
                 f"- 正式主图：`figures\\single_rate_{rate_tag}_{secondary_metric_stub}_by_method_all6.png`",
                 f"- 正式主图：`figures\\single_rate_{rate_tag}_flow_group_rmse_by_method_all6.png`",
-                f"- 辅助图：`figures\\single_rate_{rate_tag}_rmse_by_method_nonzero_zoom.png`",
                 "- 正式结果采用 6 个方法的 RMSE、MAE、sMAPE/MAPE 绝对指标并列比较。",
             ]
         )

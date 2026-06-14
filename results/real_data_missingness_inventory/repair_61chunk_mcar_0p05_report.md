@@ -69,9 +69,6 @@
   - `figures\single_rate_0p05_mape_by_method_all6.pdf`
   - `figures\single_rate_0p05_flow_group_rmse_by_method_all6.png`
   - `figures\single_rate_0p05_flow_group_rmse_by_method_all6.pdf`
-- Auxiliary figures:
-  - `figures\single_rate_0p05_rmse_by_method_nonzero_zoom.png`
-  - `figures\single_rate_0p05_rmse_by_method_nonzero_zoom.pdf`
 - Figure index:
   - `figures\single_rate_0p05_figure_index.csv`
 
