@@ -1,0 +1,131 @@
+{
+  "project_root": "E:\\Jupter_Notebook\\FedTrafficFlow",
+  "experiment_dir": "results/real_data_missingness_full_intersection_causal_history",
+  "target": {
+    "missing_rate": 0.05,
+    "mechanism": "mcar_point",
+    "seed": 42
+  },
+  "read_only_audit": {
+    "ran_generate_missing": false,
+    "ran_impute": false,
+    "ran_summarize": false,
+    "ran_validate": false,
+    "regenerated_masks": false,
+    "regenerated_missing_datasets": false,
+    "regenerated_imputed_datasets": false
+  },
+  "checked_objects": {
+    "code_files": [
+      "analysis_scripts/full_intersection_missingness_pipeline.py",
+      "analysis_scripts/real_data_missingness_experiment.py",
+      "analysis_scripts/check_full_missingness_completion.py"
+    ],
+    "config_files": [
+      "results/real_data_missingness_full_intersection_causal_history/run_config.json",
+      "results/real_data_missingness_full_intersection_causal_history/run_commands.txt"
+    ],
+    "manifest_files": [
+      "results/real_data_missingness_full_intersection_causal_history/manifests/generate_missing_chunk_status.csv",
+      "results/real_data_missingness_full_intersection_causal_history/manifests/missing_runs.csv",
+      "results/real_data_missingness_full_intersection_causal_history/manifests/chunk_index_summary.csv"
+    ],
+    "mask_dir": "results/real_data_missingness_full_intersection_causal_history/masks/rate_0p05__mechanism_mcar_point__seed_42"
+  },
+  "code_flags": {
+    "mask_generated_inside_day_loop": true,
+    "per_chunk_missing_count": true,
+    "global_sampling_found": false,
+    "global_time_index_used_for_mask_generation": false,
+    "global_time_index_used_for_time_index_only": true
+  },
+  "code_evidence": [
+    {
+      "file_path": "analysis_scripts/full_intersection_missingness_pipeline.py",
+      "function": "make_mcar_mask",
+      "line_start": 433,
+      "line_end": 445,
+      "snippet": "433: def make_mcar_mask(df: pd.DataFrame, target_col: str, missing_rate: float, seed: int) -> np.ndarray:\n434:     values = pd.to_numeric(df[target_col], errors=\"coerce\")\n435:     eligible = np.flatnonzero(values.notna().to_numpy())\n436:     mask = np.zeros(len(df), dtype=bool)\n437:     if len(eligible) == 0 or missing_rate <= 0:\n438:         return mask\n439:     count = int(round(len(eligible) * float(missing_rate)))\n440:     if count <= 0:\n441:         return mask\n442:     rng = np.random.RandomState(seed)\n443:     selected = rng.choice(eligible, size=count, replace=False)\n444:     mask[selected] = True\n445:     return mask",
+      "judgment": "在单个 DataFrame 内，用 eligible 行数乘 missing_rate 计算缺失点数量，并在该 DataFrame 内随机抽样。"
+    },
+    {
+      "file_path": "analysis_scripts/full_intersection_missingness_pipeline.py",
+      "function": "run_generate_missing",
+      "line_start": 963,
+      "line_end": 986,
+      "snippet": "963:     for day_index, file_path in enumerate(files):\n964:         df, meta = read_chunk_frame(\n965:             file_path=file_path,\n966:             day_index=day_index,\n967:             target_col=target_col,\n968:             time_col=time_col,\n969:             node_col=node_col,\n970:             period=args.period,\n971:             warmup_days=args.warmup_days,\n972:             max_rows=args.max_rows,\n973:         )\n974:         chunk_records.append(meta)\n975:         for missing_rate in missing_rates:\n976:             for seed in seeds:\n977:                 run_seed = stable_seed(seed, file_path.name, mechanism, missing_rate)\n978:                 if mechanism == \"mcar_point\":\n979:                     mask = make_mcar_mask(df, target_col, missing_rate, run_seed)\n980:                 elif mechanism == \"node_temporal_block\":\n981:                     mask = make_temporal_block_mask(df, target_col, node_col, missing_rate, run_seed, block_lengths)\n982:                 else:\n983:                     raise ValueError(f\"不支持的缺失机制: {mechanism}\")\n984:                 actual_missing_count = int(mask.sum())\n985:                 eligible_count = int(pd.to_numeric(df[target_col], errors=\"coerce\").notna().sum())\n986:                 actual_missing_rate = float(actual_missing_count / eligible_count) if eligible_count else 0.0",
+      "judgment": "mask 在 day_index/file_path 循环内部生成，每个 chunk 单独执行一次。"
+    },
+    {
+      "file_path": "analysis_scripts/full_intersection_missingness_pipeline.py",
+      "function": "read_chunk_frame",
+      "line_start": 337,
+      "line_end": 339,
+      "snippet": "337:     df[\"day_index\"] = int(day_index)\n338:     df[\"global_time_index\"] = df[\"day_index\"] * int(period) + df[\"time_slot\"]\n339:     df[\"source_chunk_name\"] = file_path.name",
+      "judgment": "global_time_index 被构造出来，但仅作为时间索引字段，不是全局 MCAR 抽样入口。"
+    },
+    {
+      "file_path": "analysis_scripts/real_data_missingness_experiment.py",
+      "function": "make_mask",
+      "line_start": 671,
+      "line_end": 698,
+      "snippet": "671: def make_mask(\n672:     df: pd.DataFrame,\n673:     target_col: Optional[str],\n674:     missing_rate: float,\n675:     mechanism: str,\n676:     seed: int,\n677:     time_col: Optional[str],\n678:     node_col: Optional[str],\n679: ) -> np.ndarray:\n680:     if target_col is None:\n681:         raise ValueError(\"target_col 不能为空。\")\n682:     if mechanism != \"mcar_point\":\n683:         raise ValueError(f\"当前仅支持 `mcar_point`，收到: {mechanism}\")\n684: \n685:     values = df[target_col]\n686:     eligible_indices = np.flatnonzero(values.notna().to_numpy())\n687:     mask = np.zeros(len(df), dtype=bool)\n688:     if len(eligible_indices) == 0 or missing_rate <= 0:\n689:         return mask\n690: \n691:     missing_count = int(round(len(eligible_indices) * float(missing_rate)))\n692:     if missing_count <= 0:\n693:         return mask\n694: \n695:     rng = np.random.RandomState(seed)\n696:     selected = rng.choice(eligible_indices, size=missing_count, replace=False)\n697:     mask[selected] = True\n698:     return mask",
+      "judgment": "旧实验脚本同样是在单文件 DataFrame 内用 missing_count=round(len(eligible_indices)*missing_rate) 随机抽样。"
+    },
+    {
+      "file_path": "analysis_scripts/real_data_missingness_experiment.py",
+      "function": "experiment main loop",
+      "line_start": 1144,
+      "line_end": 1186,
+      "snippet": "1144:     for file_path in selected_files:\n1145:         file_columns = get_parquet_columns(file_path)\n1146:         file_target_col, file_time_col, file_node_col = resolve_columns(\n1147:             file_columns,\n1148:             target_col,\n1149:             time_col,\n1150:             node_col,\n1151:         )\n1152:         df = read_input_frame(file_path, file_target_col, file_time_col, file_node_col, max_rows=max_rows)\n1153:         if df.empty:\n1154:             continue\n1155: \n1156:         eligible_count = int(df[file_target_col].notna().sum())\n1157:         rel_file_path = get_relative_path(file_path)\n1158:         file_name = file_path.name\n1159: \n1160:         for mechanism in mechanisms:\n1161:             for missing_rate in missing_rates:\n1162:                 for seed in seeds:\n1163:                     run_seed = stable_seed(seed, file_name, mechanism, missing_rate)\n1164:                     mask = make_mask(\n1165:                         df=df,\n1166:                         target_col=file_target_col,\n1167:                         missing_rate=missing_rate,\n1168:                         mechanism=mechanism,\n1169:                         seed=run_seed,\n1170:                         time_col=file_time_col,\n1171:                         node_col=file_node_col,\n1172:                     )\n1173:                     corrupted = apply_mask(df, file_target_col, mask)\n1174:                     actual_missing_count = int(mask.sum())\n1175:                     actual_missing_rate = float(actual_missing_count / eligible_count) if eligible_count else 0.0\n1176:                     requested_missing_count = int(round(eligible_count * missing_rate))\n1177:                     file_stub = f\"{file_path.stem}_seed{seed}_{mechanism}_{str(missing_rate).replace('.', 'p')}\"\n1178: \n1179:                     mask_path: Optional[str] = None\n1180:                     corrupted_path: Optional[str] = None\n1181:                     if args.save_masks:\n1182:                         mask_path = get_relative_path(maybe_write_mask(mask, args.output_dir, file_stub))\n1183:                     if args.write_corrupted:\n1184:                         corrupted_path = get_relative_path(\n1185:                             maybe_write_dataframe(corrupted, args.output_dir, \"corrupted\", f\"{file_stub}_corrupted\")\n1186:                         )",
+      "judgment": "旧实验脚本按 selected_files 循环，逐文件生成 mask，没有先构建 61 天全局索引统一抽样。"
+    },
+    {
+      "file_path": "analysis_scripts/check_full_missingness_completion.py",
+      "function": "mask/missing chunk checks",
+      "line_start": 203,
+      "line_end": 204,
+      "snippet": "203:         count_chunk_dir(\"masks\", mask_dir, \"node_flow_chunk_*_mask.parquet\", \"_mask.parquet\", expected),\n204:         count_chunk_dir(\"missing_datasets\", missing_dir, \"node_flow_chunk_*_missing.parquet\", \"_missing.parquet\", expected),",
+      "judgment": "完成度检查本身也是按 chunk 文件粒度检查 masks/missing_datasets，而不是检查单个全局 mask。"
+    }
+  ],
+  "manifest_evidence": {
+    "run_config_stage": "impute",
+    "run_config_missing_rates": "0.05",
+    "run_config_mechanism": "mcar_point",
+    "run_config_seed": "42",
+    "run_commands_has_generate_missing": true,
+    "missing_runs_row_count": 61,
+    "missing_runs_is_one_row_per_day_chunk": true,
+    "generate_missing_chunk_status_row_count": 61,
+    "chunk_index_summary_row_count": 61,
+    "missing_runs_unique_missing_counts": [
+      201749
+    ],
+    "missing_runs_actual_missing_rate_min": 0.0500000495665897,
+    "missing_runs_actual_missing_rate_max": 0.0500000495665897,
+    "missing_runs_actual_missing_rate_mean": 0.05000004956658971,
+    "has_single_global_mask_record": false,
+    "has_single_global_sampling_manifest": false
+  },
+  "mask_summary": {
+    "day_count": 61,
+    "total_points": 246133536,
+    "total_missing_points": 12306689,
+    "global_missing_rate_observed": 0.05000004956658974,
+    "per_day_missing_rate_min": 0.05000004956658974,
+    "per_day_missing_rate_max": 0.05000004956658974,
+    "per_day_missing_rate_mean": 0.05000004956658975,
+    "per_day_missing_rate_std": 1.3877787807814457e-17
+  },
+  "conclusion": {
+    "code": "A",
+    "scope_label": "day-stratified MCAR point missingness",
+    "text": "当前 5% MCAR 缺失是在每个日级 chunk 内分别按节点—时间片位置随机抽取约 5% 观测点，因此属于按日分层 MCAR 点级缺失，而不是严格的完整 61 天全局统一抽样。"
+  },
+  "paper_wording_suggestion": {
+    "daily_chunk": "在每个日级节点流量矩阵中分别随机选择 5% 的节点—时间片观测作为人工缺失点。",
+    "global_matrix": "",
+    "follow_up": "当前已完成的 5% 结果应标记为 day-stratified MCAR。 如需 global MCAR，应另起实验目录重新生成全局 mask。"
+  }
+}
