@@ -9,7 +9,7 @@
   "missing_rates": "0.05",
   "mechanism": "mcar_point",
   "seed": "42",
-  "impute_methods": "forward_fill",
+  "impute_methods": "geo_neighbor_fill",
   "max_chunks": 0,
   "max_rows": 0,
   "write_missing_datasets": false,
