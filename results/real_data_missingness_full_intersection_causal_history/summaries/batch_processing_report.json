@@ -1,0 +1,24 @@
+{
+  "total_chunks_selected": 61,
+  "generate_missing_status": {
+    "exists": true,
+    "row_count": 61,
+    "completed": 60,
+    "skipped_existing": 1,
+    "other": 0,
+    "unique_chunks": 61
+  },
+  "impute_status": {
+    "exists": true,
+    "row_count": 366,
+    "completed": 366,
+    "skipped_existing": 0,
+    "other": 0,
+    "unique_chunks": 61
+  },
+  "all_chunks_covered_in_generate": true,
+  "all_chunks_covered_in_impute": true,
+  "detail_row_count": 1464,
+  "summary_all_row_count": 6,
+  "summary_exclude_warmup_row_count": 6
+}

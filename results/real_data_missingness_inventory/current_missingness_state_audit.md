@@ -2,7 +2,7 @@
 
 ## 1. 审计时间与环境
 
-- 审计时间：2026-06-14T00:11:38
+- 审计时间：2026-06-14T23:57:11
 - Python：`E:\anaconda3\envs\analysis\python.exe`
 - Python 版本：`3.9.23`
 - pandas：`2.3.3`
@@ -19,12 +19,34 @@
 
 ```text
 M analysis_scripts/full_intersection_missingness_pipeline.py
-?? MISSINGNESS_OPTIMIZATION_PLAN.md
-?? MISSINGNESS_PHASE_RUNBOOK.md
-?? PROJECT_PROGRESS_ANALYSIS.md
-?? analysis_scripts/inventory_real_missingness_assets.py
-?? results/real_data_missingness_full_intersection_causal_history/
-?? results/real_data_missingness_inventory/
+ M analysis_scripts/inventory_real_missingness_assets.py
+ M results/real_data_missingness_full_intersection_causal_history/manifests/completion_check_before_repair.csv
+ M results/real_data_missingness_full_intersection_causal_history/manifests/imputation_runs.csv
+ M results/real_data_missingness_full_intersection_causal_history/manifests/impute_chunk_status.csv
+ M results/real_data_missingness_full_intersection_causal_history/manifests/impute_stage_summary.csv
+ M results/real_data_missingness_full_intersection_causal_history/summaries/imputation_quality_detail.csv
+ M results/real_data_missingness_inventory/current_missingness_state_audit.json
+ M results/real_data_missingness_inventory/current_missingness_state_audit.md
+ M results/real_data_missingness_inventory/current_missingness_workflow_summary_zh.md
+ M results/real_data_missingness_inventory/inventory_code_files.csv
+ M results/real_data_missingness_inventory/inventory_document_files.csv
+ M results/real_data_missingness_inventory/inventory_result_directories.csv
+ M results/real_data_missingness_inventory/inventory_run_configs.csv
+ M results/real_data_missingness_inventory/inventory_summary_tables.csv
+ M results/real_data_missingness_inventory/inventory_visualization_files.csv
+ M results/real_data_missingness_inventory/missingness_experiment_run_matrix.csv
+ M results/real_data_missingness_inventory/open_issues_and_next_steps_zh.md
+?? analysis_scripts/rebuild_full_missingness_manifests.py
+?? results/real_data_missingness_full_intersection_causal_history/figures/
+?? results/real_data_missingness_full_intersection_causal_history/full_intersection_missingness_audit.json
+?? results/real_data_missingness_full_intersection_causal_history/full_intersection_missingness_audit.md
+?? results/real_data_missingness_full_intersection_causal_history/full_intersection_missingness_validation.json
+?? results/real_data_missingness_full_intersection_causal_history/full_intersection_missingness_validation.md
+?? results/real_data_missingness_full_intersection_causal_history/summaries/batch_processing_report.json
+?? results/real_data_missingness_full_intersection_causal_history/summaries/batch_processing_report.md
+?? results/real_data_missingness_full_intersection_causal_history/summaries/imputation_quality_by_flow_group.csv
+?? results/real_data_missingness_full_intersection_causal_history/summaries/imputation_quality_summary_all_days.csv
+?? results/real_data_missingness_full_intersection_causal_history/summaries/imputation_quality_summary_exclude_warmup.csv
 ```
 
 ## 4. Python 环境
@@ -36,6 +58,7 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 
 - `analysis_scripts/audit_missingness_mechanism.py`：缺失机制审计脚本
 - `analysis_scripts/audit_real_data_preprocessing.py`：真实数据预处理资产审计脚本
+- `analysis_scripts/check_full_missingness_completion.py`：缺失或插补相关脚本
 - `analysis_scripts/check_spatial_node_completeness.py`：未找到明确证据，需要人工确认
 - `analysis_scripts/compare_date_type_curve_methods.py`：函数曲线或形态建模相关脚本
 - `analysis_scripts/compare_node_flow_fourier_orders.py`：未找到明确证据，需要人工确认
@@ -45,6 +68,7 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 - `analysis_scripts/full_intersection_missingness_pipeline.py`：完整路口真实数据缺失构造、历史因果补全、验证与汇总流水线
 - `analysis_scripts/inventory_real_missingness_assets.py`：缺失或插补相关脚本
 - `analysis_scripts/real_data_missingness_experiment.py`：早期样本级真实数据人工缺失注入与简单插补评估脚本
+- `analysis_scripts/rebuild_full_missingness_manifests.py`：缺失或插补相关脚本
 - `analysis_scripts/visualize_fitted_function_clusters.py`：函数曲线或形态建模相关脚本
 - `analysis_scripts/visualize_node_flow_daily_curve_fit.py`：函数曲线或形态建模相关脚本
 - `dataset_inspection_scripts/inspect_node_intersection_flow.py`：检查或审计相关脚本
@@ -82,7 +106,7 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 - `results/real_data_missingness_experiments_medium`：exists=True，scope=medium，status=summaries_present_without_validation
 - `results/real_data_missingness_experiments_sample`：exists=True，scope=sample，status=summaries_present_without_validation
 - `results/real_data_missingness_full_intersection`：exists=False，scope=full_intersection，status=missing
-- `results/real_data_missingness_full_intersection_causal_history`：exists=True，scope=61_chunk_main_directory，status=summaries_present_without_validation
+- `results/real_data_missingness_full_intersection_causal_history`：exists=True，scope=61_chunk_main_directory，status=validated_and_summarized
 - `results/real_data_missingness_full_intersection_causal_history/historical_test`：exists=True，scope=8_chunk_historical_test，status=validated_and_summarized
 - `results/real_data_missingness_full_intersection_causal_history/smoke_test`：exists=True，scope=1_chunk_smoke_test，status=validated_and_summarized
 - `results/real_data_missingness_full_intersection_causal_history_hybridtest`：exists=True，scope=hybridtest，status=validated_and_summarized
@@ -103,6 +127,12 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 - `results/real_data_missingness_experiments_sample/figures/missing_rate_vs_imputation_rmse.pdf`：plot_type=overall，single_rate=False，paper_ready=False
 - `results/real_data_missingness_experiments_sample/figures/missing_rate_vs_imputation_rmse.png`：plot_type=overall，single_rate=False，paper_ready=False
 - `results/real_data_missingness_experiments_sample/figures/missing_rate_vs_imputation_rmse_log_y.png`：plot_type=overall，single_rate=False，paper_ready=False
+- `results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_delta_rmse_relative_to_forward_fill.pdf`：plot_type=delta，single_rate=True，paper_ready=True
+- `results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_delta_rmse_relative_to_forward_fill.png`：plot_type=delta，single_rate=True，paper_ready=True
+- `results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse.pdf`：plot_type=other，single_rate=True，paper_ready=True
+- `results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse.png`：plot_type=other，single_rate=True，paper_ready=True
+- `results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method.pdf`：plot_type=other，single_rate=True，paper_ready=True
+- `results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method.png`：plot_type=other，single_rate=True，paper_ready=True
 - `results/real_data_missingness_full_intersection_causal_history/historical_test/figures/missing_rate_vs_imputation_rmse.pdf`：plot_type=overall，single_rate=True，paper_ready=False
 - `results/real_data_missingness_full_intersection_causal_history/historical_test/figures/missing_rate_vs_imputation_rmse.png`：plot_type=overall，single_rate=True，paper_ready=False
 - `results/real_data_missingness_full_intersection_causal_history/historical_test/figures/rmse_difference_relative_to_forward_fill.pdf`：plot_type=delta，single_rate=True，paper_ready=True
@@ -112,18 +142,12 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 - `results/real_data_missingness_full_intersection_causal_history/smoke_test/figures/missing_rate_vs_imputation_rmse.pdf`：plot_type=overall，single_rate=True，paper_ready=False
 - `results/real_data_missingness_full_intersection_causal_history/smoke_test/figures/missing_rate_vs_imputation_rmse.png`：plot_type=overall，single_rate=True，paper_ready=False
 - `results/real_data_missingness_full_intersection_causal_history/smoke_test/figures/rmse_difference_relative_to_forward_fill.pdf`：plot_type=delta，single_rate=True，paper_ready=False
-- `results/real_data_missingness_full_intersection_causal_history/smoke_test/figures/rmse_difference_relative_to_forward_fill.png`：plot_type=delta，single_rate=True，paper_ready=False
-- `results/real_data_missingness_full_intersection_causal_history/smoke_test/figures/zoom_historical_geo_function_rmse.pdf`：plot_type=zoom，single_rate=True，paper_ready=False
-- `results/real_data_missingness_full_intersection_causal_history/smoke_test/figures/zoom_historical_geo_function_rmse.png`：plot_type=zoom，single_rate=True，paper_ready=False
-- `results/real_data_missingness_full_intersection_causal_history_hybridtest_small/figures/missing_rate_vs_imputation_rmse.pdf`：plot_type=overall，single_rate=True，paper_ready=False
-- `results/real_data_missingness_full_intersection_causal_history_hybridtest_small/figures/missing_rate_vs_imputation_rmse.png`：plot_type=overall，single_rate=True，paper_ready=False
-- `results/real_data_missingness_full_intersection_causal_history_hybridtest_small/figures/rmse_difference_relative_to_forward_fill.pdf`：plot_type=delta，single_rate=True，paper_ready=False
 
 ## 10. 运行配置解析
 
 - `results/real_data_missingness_experiments/run_config.json`：mechanism=["mcar_point"]，missing_rates=["0.0", "0.05", "0.1", "0.2", "0.3"]，methods=["zero_fill", "forward_fill", "linear_interpolation"]
 - `results/real_data_missingness_full_intersection_causal_history/historical_test/run_config.json`：mechanism=mcar_point，missing_rates=["0.05"]，methods=["forward_fill", "historical_linear_extrapolation", "function_curve_fit", "geo_neighbor_fill", "geo_func_hybrid", "zero_fill"]
-- `results/real_data_missingness_full_intersection_causal_history/run_config.json`：mechanism=mcar_point，missing_rates=["0.05"]，methods=["forward_fill"]
+- `results/real_data_missingness_full_intersection_causal_history/run_config.json`：mechanism=mcar_point，missing_rates=["0.05"]，methods=["geo_func_hybrid"]
 - `results/real_data_missingness_full_intersection_causal_history/smoke_test/run_config.json`：mechanism=mcar_point，missing_rates=["0.05"]，methods=["zero_fill", "forward_fill", "historical_linear_extrapolation", "geo_neighbor_fill", "function_curve_fit", "geo_func_hybrid"]
 - `results/real_data_missingness_full_intersection_causal_history_hybridtest/run_config.json`：mechanism=mcar_point，missing_rates=["0.05"]，methods=["geo_func_hybrid"]
 - `results/real_data_missingness_full_intersection_causal_history_hybridtest_small/run_config.json`：mechanism=mcar_point，missing_rates=["0.05"]，methods=["geo_func_hybrid"]
@@ -136,7 +160,7 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 - `results/real_data_missingness_experiments_medium`：generate=False，impute=False，summarize=False，validate=False
 - `results/real_data_missingness_experiments_sample`：generate=False，impute=False，summarize=True，validate=True
 - `results/real_data_missingness_full_intersection`：generate=False，impute=False，summarize=False，validate=False
-- `results/real_data_missingness_full_intersection_causal_history`：generate=True，impute=True，summarize=False，validate=False
+- `results/real_data_missingness_full_intersection_causal_history`：generate=True，impute=True，summarize=True，validate=True
 - `results/real_data_missingness_full_intersection_causal_history/historical_test`：generate=True，impute=True，summarize=True，validate=True
 - `results/real_data_missingness_full_intersection_causal_history/smoke_test`：generate=True，impute=True，summarize=True，validate=True
 - `results/real_data_missingness_full_intersection_causal_history_hybridtest`：generate=True，impute=True，summarize=False，validate=True
@@ -174,5 +198,5 @@ M analysis_scripts/full_intersection_missingness_pipeline.py
 - 61 chunk 主目录中各方法的完整 chunk 覆盖情况。
 - `node_temporal_block` 是否在未纳入本次目录的外部位置运行过。
 
-附：风险关键词命中 68 条。
+附：风险关键词命中 74 条。
 

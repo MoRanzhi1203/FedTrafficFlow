@@ -23,12 +23,12 @@
 
 代码与结果均表明 `mcar_point` 已实际运行。已找到的运行目录包括：
 
-- `results/real_data_missingness_full_intersection_causal_history`：missing_rates=["0.05"]，methods=["forward_fill"]
-- `results/real_data_missingness_full_intersection_causal_history/historical_test`：missing_rates=["0.05"]，methods=["forward_fill", "historical_linear_extrapolation", "function_curve_fit", "geo_neighbor_fill", "geo_func_hybrid", "zero_fill"]
-- `results/real_data_missingness_full_intersection_causal_history/smoke_test`：missing_rates=["0.05"]，methods=["zero_fill", "forward_fill", "historical_linear_extrapolation", "geo_neighbor_fill", "function_curve_fit", "geo_func_hybrid"]
+- `results/real_data_missingness_full_intersection_causal_history`：missing_rates=["0.05"]，methods=["forward_fill", "function_curve_fit", "geo_func_hybrid", "geo_neighbor_fill", "historical_linear_extrapolation", "zero_fill"]
+- `results/real_data_missingness_full_intersection_causal_history/historical_test`：missing_rates=["0.05"]，methods=["forward_fill", "function_curve_fit", "geo_func_hybrid", "geo_neighbor_fill", "historical_linear_extrapolation", "zero_fill"]
+- `results/real_data_missingness_full_intersection_causal_history/smoke_test`：missing_rates=["0.05"]，methods=["forward_fill", "function_curve_fit", "geo_func_hybrid", "geo_neighbor_fill", "historical_linear_extrapolation", "zero_fill"]
 - `results/real_data_missingness_full_intersection_causal_history_hybridtest`：missing_rates=["0.05"]，methods=["geo_func_hybrid"]
 - `results/real_data_missingness_full_intersection_causal_history_hybridtest_small`：missing_rates=["0.05"]，methods=["geo_func_hybrid"]
-- `results/real_data_missingness_full_intersection_causal_history_smoketest`：missing_rates=["0.05"]，methods=["forward_fill", "historical_linear_extrapolation", "geo_neighbor_fill", "function_curve_fit", "geo_func_hybrid"]
+- `results/real_data_missingness_full_intersection_causal_history_smoketest`：missing_rates=["0.05"]，methods=["forward_fill", "function_curve_fit", "geo_func_hybrid", "geo_neighbor_fill", "historical_linear_extrapolation"]
 
 ### 3.2 node_temporal_block
 
@@ -82,7 +82,7 @@
 
 - overall RMSE 图：11
 - zoom 图：6
-- delta 图：6
+- delta 图：8
 - 当前多张 `missing_rate_vs_*` 图来自单缺失率 `5%` 结果，存在横轴重复 5% 的表达风险，不宜直接作为最终多缺失率曲线图。
 
 ## 7. 当前结果结论

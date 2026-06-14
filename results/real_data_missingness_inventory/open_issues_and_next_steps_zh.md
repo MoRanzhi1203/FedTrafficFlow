@@ -42,5 +42,5 @@
 - 不建议现在把人工缺失写成天然缺失。
 - 不建议现在继续跑 `generate_missing / impute / summarize / validate / FedAvg / Independent`。
 
-附注：本次风险关键词命中 68 条，建议先做文档口径复核。
+附注：本次风险关键词命中 74 条，建议先做文档口径复核。
 

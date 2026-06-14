@@ -1,2 +1,7 @@
 ﻿stage,missing_rate,mechanism,seed,impute_method,status,chunk_count
-impute,0.05,mcar_point,42,geo_func_hybrid,completed,35
+impute,0.05,mcar_point,42,forward_fill,completed,61
+impute,0.05,mcar_point,42,function_curve_fit,completed,61
+impute,0.05,mcar_point,42,geo_func_hybrid,completed,61
+impute,0.05,mcar_point,42,geo_neighbor_fill,completed,61
+impute,0.05,mcar_point,42,historical_linear_extrapolation,completed,61
+impute,0.05,mcar_point,42,zero_fill,completed,61

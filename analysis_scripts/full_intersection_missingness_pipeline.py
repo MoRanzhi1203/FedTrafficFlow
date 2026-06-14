@@ -1689,12 +1689,41 @@ def build_main_summary(agg_df: pd.DataFrame) -> pd.DataFrame:
     return summary.sort_values(["mechanism", "impute_method", "missing_rate"]).reset_index(drop=True)
 
 
+def get_single_rate_value(df: pd.DataFrame) -> Optional[float]:
+    if df.empty or "missing_rate" not in df.columns:
+        return None
+    rates = sorted({float(value) for value in df["missing_rate"].dropna().tolist()})
+    return rates[0] if len(rates) == 1 else None
+
+
+def build_single_rate_tag(rate: float) -> str:
+    text = "{0:.4f}".format(rate).rstrip("0").rstrip(".")
+    return text.replace(".", "p")
+
+
 def plot_main_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Path]:
     figures_dir = ensure_directory(output_dir / "figures")
-    png_path = figures_dir / "missing_rate_vs_imputation_rmse.png"
-    pdf_path = figures_dir / "missing_rate_vs_imputation_rmse.pdf"
+    single_rate = get_single_rate_value(summary_df)
+    if single_rate is not None:
+        rate_tag = build_single_rate_tag(single_rate)
+        png_path = figures_dir / f"single_rate_{rate_tag}_rmse_by_method.png"
+        pdf_path = figures_dir / f"single_rate_{rate_tag}_rmse_by_method.pdf"
+    else:
+        png_path = figures_dir / "missing_rate_vs_imputation_rmse.png"
+        pdf_path = figures_dir / "missing_rate_vs_imputation_rmse.pdf"
     fig, ax = plt.subplots(figsize=(8, 5))
-    if not summary_df.empty and "impute_method" in summary_df.columns:
+    if single_rate is not None and not summary_df.empty and "impute_method" in summary_df.columns:
+        subset = summary_df.sort_values("RMSE").copy()
+        labels = [METHOD_LABEL_MAP.get(method, method) for method in subset["impute_method"]]
+        ax.bar(labels, subset["RMSE"], color="#4C78A8")
+        ax.set_xlabel("Imputation method")
+        ax.set_ylabel("Imputation RMSE")
+        ax.set_title(
+            "Single missing rate = {0:.0%}: Imputation RMSE by method\n"
+            "Full Intersection-stage Real Data, Historical Causal Setting".format(single_rate)
+        )
+        ax.tick_params(axis="x", rotation=20)
+    elif not summary_df.empty and "impute_method" in summary_df.columns:
         for method, group in summary_df.groupby("impute_method"):
             ax.plot(
                 group["missing_rate"],
@@ -1703,12 +1732,12 @@ def plot_main_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Pa
                 linewidth=1.8,
                 label=METHOD_LABEL_MAP.get(method, method),
             )
-    ax.set_xlabel("Missing rate")
-    ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
-    ax.set_ylabel("Imputation RMSE")
-    ax.set_title("Imputation RMSE under Artificial Missing Rates\nFull Intersection-stage Real Data, Historical Causal Setting")
+        ax.set_xlabel("Missing rate")
+        ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+        ax.set_ylabel("Imputation RMSE")
+        ax.set_title("Imputation RMSE under Artificial Missing Rates\nFull Intersection-stage Real Data, Historical Causal Setting")
     ax.grid(True, linestyle="--", alpha=0.35)
-    if not summary_df.empty and "impute_method" in summary_df.columns:
+    if single_rate is None and not summary_df.empty and "impute_method" in summary_df.columns:
         ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(png_path, dpi=300)
@@ -1752,9 +1781,6 @@ def plot_zoom_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Pa
 
 def plot_delta_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Path]:
     figures_dir = ensure_directory(output_dir / "figures")
-    png_path = figures_dir / "rmse_difference_relative_to_forward_fill.png"
-    pdf_path = figures_dir / "rmse_difference_relative_to_forward_fill.pdf"
-    fig, ax = plt.subplots(figsize=(8, 5))
     if summary_df.empty or "impute_method" not in summary_df.columns:
         subset = pd.DataFrame()
     else:
@@ -1762,7 +1788,25 @@ def plot_delta_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, P
         merged = summary_df.merge(baseline, on="missing_rate", how="left")
         merged["delta_rmse"] = merged["RMSE"] - merged["baseline_rmse"]
         subset = merged.loc[merged["impute_method"] != "forward_fill"].copy()
-    if not subset.empty:
+    single_rate = get_single_rate_value(summary_df)
+    if single_rate is not None:
+        rate_tag = build_single_rate_tag(single_rate)
+        png_path = figures_dir / f"single_rate_{rate_tag}_delta_rmse_relative_to_forward_fill.png"
+        pdf_path = figures_dir / f"single_rate_{rate_tag}_delta_rmse_relative_to_forward_fill.pdf"
+    else:
+        png_path = figures_dir / "rmse_difference_relative_to_forward_fill.png"
+        pdf_path = figures_dir / "rmse_difference_relative_to_forward_fill.pdf"
+    fig, ax = plt.subplots(figsize=(8, 5))
+    if single_rate is not None and not subset.empty:
+        subset = subset.sort_values("delta_rmse").copy()
+        labels = [METHOD_LABEL_MAP.get(method, method) for method in subset["impute_method"]]
+        colors = ["#E45756" if value > 0 else "#54A24B" for value in subset["delta_rmse"]]
+        ax.bar(labels, subset["delta_rmse"], color=colors)
+        ax.set_xlabel("Imputation method")
+        ax.set_ylabel("RMSE Difference")
+        ax.set_title("Single missing rate = {0:.0%}: RMSE delta relative to forward fill".format(single_rate))
+        ax.tick_params(axis="x", rotation=20)
+    elif not subset.empty:
         for method, group in subset.groupby("impute_method"):
             ax.plot(
                 group["missing_rate"],
@@ -1772,13 +1816,57 @@ def plot_delta_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, P
                 label=METHOD_LABEL_MAP.get(method, method),
             )
     ax.axhline(0.0, color="black", linewidth=1.0, linestyle="--")
-    ax.set_xlabel("Missing rate")
-    ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
-    ax.set_ylabel("RMSE Difference")
-    ax.set_title("RMSE Difference Relative to Causal Forward Fill")
+    if single_rate is None:
+        ax.set_xlabel("Missing rate")
+        ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
+        ax.set_ylabel("RMSE Difference")
+        ax.set_title("RMSE Difference Relative to Causal Forward Fill")
     ax.grid(True, linestyle="--", alpha=0.35)
-    if not subset.empty:
+    if single_rate is None and not subset.empty:
         ax.legend(frameon=False)
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=300)
+    fig.savefig(pdf_path)
+    plt.close(fig)
+    return png_path, pdf_path
+
+
+def plot_flow_group_rmse(flow_group_summary: pd.DataFrame, output_dir: Path) -> tuple[Optional[Path], Optional[Path]]:
+    if flow_group_summary.empty or "missing_rate" not in flow_group_summary.columns or "flow_group" not in flow_group_summary.columns:
+        return None, None
+    single_rate = get_single_rate_value(flow_group_summary)
+    if single_rate is None:
+        return None, None
+    figures_dir = ensure_directory(output_dir / "figures")
+    rate_tag = build_single_rate_tag(single_rate)
+    png_path = figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.png"
+    pdf_path = figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.pdf"
+    subset = flow_group_summary.loc[flow_group_summary["flow_group"].isin(["low_flow", "mid_flow", "high_flow"])].copy()
+    if subset.empty:
+        return None, None
+    pivot = (
+        subset.pivot_table(index="impute_method", columns="flow_group", values="RMSE", aggfunc="first")
+        .reindex(index=[method for method in DEFAULT_IMPUTE_METHODS if method in subset["impute_method"].unique()])
+        .dropna(how="all")
+    )
+    if pivot.empty:
+        return None, None
+    flow_groups = ["low_flow", "mid_flow", "high_flow"]
+    labels = [METHOD_LABEL_MAP.get(method, method) for method in pivot.index]
+    x = np.arange(len(labels))
+    width = 0.24
+    fig, ax = plt.subplots(figsize=(10, 5))
+    colors = {"low_flow": "#4C78A8", "mid_flow": "#F58518", "high_flow": "#54A24B"}
+    for idx, flow_group in enumerate(flow_groups):
+        values = pivot.get(flow_group, pd.Series(index=pivot.index, dtype=float)).fillna(np.nan).to_numpy()
+        ax.bar(x + (idx - 1) * width, values, width=width, label=flow_group.replace("_", " "), color=colors[flow_group])
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=20)
+    ax.set_xlabel("Imputation method")
+    ax.set_ylabel("Imputation RMSE")
+    ax.set_title("Single missing rate = {0:.0%}: RMSE by flow group and method".format(single_rate))
+    ax.grid(True, axis="y", linestyle="--", alpha=0.35)
+    ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(png_path, dpi=300)
     fig.savefig(pdf_path)
@@ -1937,8 +2025,10 @@ def run_summarize(args: argparse.Namespace) -> None:
         flow_group_summary = exclude_agg.loc[exclude_agg["flow_group"] != "all"].copy()
     flow_group_summary.to_csv(summaries_dir / "imputation_quality_by_flow_group.csv", index=False, encoding="utf-8-sig")
     plot_main_rmse(summary_main, args.output_dir)
-    plot_zoom_rmse(summary_main, args.output_dir)
     plot_delta_rmse(summary_main, args.output_dir)
+    plot_flow_group_rmse(flow_group_summary, args.output_dir)
+    if get_single_rate_value(summary_main) is None:
+        plot_zoom_rmse(summary_main, args.output_dir)
     batch_report = {
         "total_chunks_selected": int(len(chunk_df)),
         "generate_missing_status": generate_status,

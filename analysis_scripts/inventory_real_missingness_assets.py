@@ -1085,6 +1085,36 @@ def detect_stage_presence(project_root: Path, result_dir: str) -> Tuple[bool, bo
     return generate_exists, impute_exists, summarize_exists, validate_exists, chunk_count
 
 
+def infer_run_scope_from_manifests(project_root: Path, result_dir: str) -> Dict[str, Any]:
+    path = project_root / result_dir
+    methods: Set[str] = set()
+    rates: Set[str] = set()
+    seeds: Set[str] = set()
+    mechanisms: Set[str] = set()
+    for manifest_name in ["impute_stage_summary.csv", "imputation_runs.csv"]:
+        manifest_path = path / "manifests" / manifest_name
+        if not manifest_path.exists():
+            continue
+        try:
+            df = pd.read_csv(manifest_path)
+        except Exception:
+            continue
+        if "impute_method" in df.columns:
+            methods.update(str(item) for item in df["impute_method"].dropna().astype(str) if str(item).strip())
+        if "missing_rate" in df.columns:
+            rates.update(str(item) for item in df["missing_rate"].dropna().astype(str) if str(item).strip())
+        if "seed" in df.columns:
+            seeds.update(str(item) for item in df["seed"].dropna().astype(str) if str(item).strip())
+        if "mechanism" in df.columns:
+            mechanisms.update(str(item) for item in df["mechanism"].dropna().astype(str) if str(item).strip())
+    return {
+        "methods": sorted(methods),
+        "missing_rates": sorted(rates, key=lambda item: float(item)),
+        "seeds": sorted(seeds),
+        "mechanisms": sorted(mechanisms),
+    }
+
+
 def build_run_matrix(
     project_root: Path,
     result_dir_rows: List[Dict[str, Any]],
@@ -1106,12 +1136,35 @@ def build_run_matrix(
                 methods = [str(item) for item in json.loads(config.get("impute_methods"))]
             except Exception:
                 methods = [item.strip() for item in str(config.get("impute_methods")).split(",") if item.strip()]
+        inferred_scope = infer_run_scope_from_manifests(project_root, result_dir)
+        if inferred_scope["methods"]:
+            methods = inferred_scope["methods"]
+        if inferred_scope["missing_rates"]:
+            missing_rates = json_cell(inferred_scope["missing_rates"])
+        if inferred_scope["seeds"]:
+            seeds = inferred_scope["seeds"]
+        if inferred_scope["mechanisms"]:
+            config["mechanism"] = inferred_scope["mechanisms"][0]
         data_scope = entry["detected_scope"]
         current_status = entry["detected_status"]
         usable_for_paper_main_table = False
         notes = entry.get("notes", "")
         if data_scope == "8_chunk_historical_test" and summarize_exists:
             notes = (notes + " 当前有 8 chunk、5% MCAR、排除 warmup 的正式 summary，可用于阶段性说明，但不代表最终全量主表。").strip()
+        if (
+            result_dir == "results/real_data_missingness_full_intersection_causal_history"
+            and chunk_count == 61
+            and len(methods) == 6
+            and generate_exists
+            and impute_exists
+            and summarize_exists
+            and validate_exists
+        ):
+            current_status = "full_61_chunk_6_method_closed"
+            notes = (
+                notes
+                + " 5% MCAR, seed=42, 61 chunks, 6 methods, generate_missing/impute/summarize/validate closed"
+            ).strip()
         rows.append(
             {
                 "result_dir": result_dir,
