@@ -32,3 +32,14 @@
 - `impute` 已完成或跳过的 chunk 数：`366`
 - `generate_missing` 是否覆盖全部 chunk：`true`
 - `impute` 是否覆盖全部 chunk：`true`
+
+## 5. Figure Policy
+
+- 正式可视化已调整为 6 个方法在绝对指标上的直接比较图。
+- `forward_fill` 不再作为正式图的参照基准，而是作为 6 个方法之一参与比较。
+- 正式主图：`figures\single_rate_0p05_rmse_by_method_all6.png`
+- 正式主图：`figures\single_rate_0p05_mae_by_method_all6.png`
+- 正式主图：`figures\single_rate_0p05_mape_by_method_all6.png`
+- 正式主图：`figures\single_rate_0p05_flow_group_rmse_by_method_all6.png`
+- 辅助图：`figures\single_rate_0p05_rmse_by_method_nonzero_zoom.png`
+- 正式结果采用 6 个方法的 RMSE、MAE、sMAPE/MAPE 绝对指标并列比较。

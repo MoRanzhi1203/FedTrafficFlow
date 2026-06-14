@@ -719,5 +719,21 @@
   "summary_rows": {
     "all_days": 6,
     "exclude_warmup": 6
+  },
+  "figure_policy": {
+    "formal_main_figures": [
+      "figures/single_rate_0p05_rmse_by_method_all6.png",
+      "figures/single_rate_0p05_mae_by_method_all6.png",
+      "figures/single_rate_0p05_mape_by_method_all6.png",
+      "figures/single_rate_0p05_flow_group_rmse_by_method_all6.png"
+    ],
+    "auxiliary_figures": [
+      "figures/single_rate_0p05_rmse_by_method_nonzero_zoom.png"
+    ],
+    "notes": [
+      "Formal visualization uses direct six-method comparison on absolute metrics.",
+      "Forward fill is one of the six imputation methods and is not used as the formal baseline method.",
+      "Flow-group RMSE compares low-flow, mid-flow, and high-flow nodes without using forward fill as a baseline."
+    ]
   }
 }

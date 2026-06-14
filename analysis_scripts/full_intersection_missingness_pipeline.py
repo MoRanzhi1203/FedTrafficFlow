@@ -1701,29 +1701,88 @@ def build_single_rate_tag(rate: float) -> str:
     return text.replace(".", "p")
 
 
+def get_single_rate_method_order(summary_df: pd.DataFrame) -> list[str]:
+    if summary_df.empty or "impute_method" not in summary_df.columns:
+        return []
+    ordered = summary_df.sort_values(["RMSE", "MAE", "impute_method"])["impute_method"].tolist()
+    deduped: list[str] = []
+    for method in ordered:
+        if method not in deduped:
+            deduped.append(method)
+    for method in DEFAULT_IMPUTE_METHODS:
+        if method in summary_df["impute_method"].tolist() and method not in deduped:
+            deduped.append(method)
+    return deduped
+
+
+def plot_single_rate_metric_bars(
+    summary_df: pd.DataFrame,
+    output_dir: Path,
+    metric: str,
+    title: str,
+    file_stub: str,
+    method_order: list[str],
+    ylabel: str,
+    exclude_methods: Optional[set[str]] = None,
+    legacy_file_stub: Optional[str] = None,
+) -> tuple[Optional[Path], Optional[Path]]:
+    if summary_df.empty or "impute_method" not in summary_df.columns or metric not in summary_df.columns:
+        return None, None
+    single_rate = get_single_rate_value(summary_df)
+    if single_rate is None:
+        return None, None
+    figures_dir = ensure_directory(output_dir / "figures")
+    rate_tag = build_single_rate_tag(single_rate)
+    subset = summary_df.copy()
+    if exclude_methods:
+        subset = subset.loc[~subset["impute_method"].isin(exclude_methods)].copy()
+    if subset.empty:
+        return None, None
+    order = [method for method in method_order if method in subset["impute_method"].tolist()]
+    if not order:
+        order = subset["impute_method"].tolist()
+    subset = subset.set_index("impute_method").loc[order].reset_index()
+    labels = [METHOD_LABEL_MAP.get(method, method) for method in subset["impute_method"]]
+    png_path = figures_dir / f"single_rate_{rate_tag}_{file_stub}.png"
+    pdf_path = figures_dir / f"single_rate_{rate_tag}_{file_stub}.pdf"
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.bar(labels, subset[metric], color="#4C78A8")
+    ax.set_xlabel("Imputation method")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title.format(single_rate))
+    ax.tick_params(axis="x", rotation=20)
+    ax.grid(True, axis="y", linestyle="--", alpha=0.35)
+    fig.tight_layout()
+    fig.savefig(png_path, dpi=300)
+    fig.savefig(pdf_path)
+    if legacy_file_stub:
+        fig.savefig(figures_dir / f"single_rate_{rate_tag}_{legacy_file_stub}.png", dpi=300)
+        fig.savefig(figures_dir / f"single_rate_{rate_tag}_{legacy_file_stub}.pdf")
+    plt.close(fig)
+    return png_path, pdf_path
+
+
 def plot_main_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Path]:
     figures_dir = ensure_directory(output_dir / "figures")
     single_rate = get_single_rate_value(summary_df)
     if single_rate is not None:
-        rate_tag = build_single_rate_tag(single_rate)
-        png_path = figures_dir / f"single_rate_{rate_tag}_rmse_by_method.png"
-        pdf_path = figures_dir / f"single_rate_{rate_tag}_rmse_by_method.pdf"
+        method_order = get_single_rate_method_order(summary_df)
+        png_path, pdf_path = plot_single_rate_metric_bars(
+            summary_df=summary_df,
+            output_dir=output_dir,
+            metric="RMSE",
+            title="Single missing rate = {0:.0%}: RMSE by imputation method",
+            file_stub="rmse_by_method_all6",
+            method_order=method_order,
+            ylabel="RMSE",
+            legacy_file_stub="rmse_by_method",
+        )
+        assert png_path is not None and pdf_path is not None
     else:
         png_path = figures_dir / "missing_rate_vs_imputation_rmse.png"
         pdf_path = figures_dir / "missing_rate_vs_imputation_rmse.pdf"
     fig, ax = plt.subplots(figsize=(8, 5))
-    if single_rate is not None and not summary_df.empty and "impute_method" in summary_df.columns:
-        subset = summary_df.sort_values("RMSE").copy()
-        labels = [METHOD_LABEL_MAP.get(method, method) for method in subset["impute_method"]]
-        ax.bar(labels, subset["RMSE"], color="#4C78A8")
-        ax.set_xlabel("Imputation method")
-        ax.set_ylabel("Imputation RMSE")
-        ax.set_title(
-            "Single missing rate = {0:.0%}: Imputation RMSE by method\n"
-            "Full Intersection-stage Real Data, Historical Causal Setting".format(single_rate)
-        )
-        ax.tick_params(axis="x", rotation=20)
-    elif not summary_df.empty and "impute_method" in summary_df.columns:
+    if not summary_df.empty and "impute_method" in summary_df.columns:
         for method, group in summary_df.groupby("impute_method"):
             ax.plot(
                 group["missing_rate"],
@@ -1736,12 +1795,11 @@ def plot_main_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, Pa
         ax.xaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
         ax.set_ylabel("Imputation RMSE")
         ax.set_title("Imputation RMSE under Artificial Missing Rates\nFull Intersection-stage Real Data, Historical Causal Setting")
-    ax.grid(True, linestyle="--", alpha=0.35)
-    if single_rate is None and not summary_df.empty and "impute_method" in summary_df.columns:
+        ax.grid(True, linestyle="--", alpha=0.35)
         ax.legend(frameon=False)
-    fig.tight_layout()
-    fig.savefig(png_path, dpi=300)
-    fig.savefig(pdf_path)
+        fig.tight_layout()
+        fig.savefig(png_path, dpi=300)
+        fig.savefig(pdf_path)
     plt.close(fig)
     return png_path, pdf_path
 
@@ -1804,7 +1862,7 @@ def plot_delta_rmse(summary_df: pd.DataFrame, output_dir: Path) -> tuple[Path, P
         ax.bar(labels, subset["delta_rmse"], color=colors)
         ax.set_xlabel("Imputation method")
         ax.set_ylabel("RMSE Difference")
-        ax.set_title("Single missing rate = {0:.0%}: RMSE delta relative to forward fill".format(single_rate))
+        ax.set_title("Auxiliary diagnostic: single missing rate = {0:.0%} RMSE delta relative to forward fill".format(single_rate))
         ax.tick_params(axis="x", rotation=20)
     elif not subset.empty:
         for method, group in subset.groupby("impute_method"):
@@ -1839,14 +1897,19 @@ def plot_flow_group_rmse(flow_group_summary: pd.DataFrame, output_dir: Path) -> 
         return None, None
     figures_dir = ensure_directory(output_dir / "figures")
     rate_tag = build_single_rate_tag(single_rate)
-    png_path = figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.png"
-    pdf_path = figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.pdf"
+    png_path = figures_dir / f"single_rate_{rate_tag}_flow_group_rmse_by_method_all6.png"
+    pdf_path = figures_dir / f"single_rate_{rate_tag}_flow_group_rmse_by_method_all6.pdf"
     subset = flow_group_summary.loc[flow_group_summary["flow_group"].isin(["low_flow", "mid_flow", "high_flow"])].copy()
     if subset.empty:
         return None, None
+    summary_main_path = output_dir / "summaries" / "imputation_quality_summary_exclude_warmup.csv"
+    if summary_main_path.exists():
+        method_order = get_single_rate_method_order(pd.read_csv(summary_main_path))
+    else:
+        method_order = DEFAULT_IMPUTE_METHODS
     pivot = (
         subset.pivot_table(index="impute_method", columns="flow_group", values="RMSE", aggfunc="first")
-        .reindex(index=[method for method in DEFAULT_IMPUTE_METHODS if method in subset["impute_method"].unique()])
+        .reindex(index=[method for method in method_order if method in subset["impute_method"].unique()])
         .dropna(how="all")
     )
     if pivot.empty:
@@ -1863,15 +1926,77 @@ def plot_flow_group_rmse(flow_group_summary: pd.DataFrame, output_dir: Path) -> 
     ax.set_xticks(x)
     ax.set_xticklabels(labels, rotation=20)
     ax.set_xlabel("Imputation method")
-    ax.set_ylabel("Imputation RMSE")
-    ax.set_title("Single missing rate = {0:.0%}: RMSE by flow group and method".format(single_rate))
+    ax.set_ylabel("RMSE")
+    ax.set_title("Single missing rate = {0:.0%}: RMSE by flow group and imputation method".format(single_rate))
     ax.grid(True, axis="y", linestyle="--", alpha=0.35)
     ax.legend(frameon=False)
     fig.tight_layout()
     fig.savefig(png_path, dpi=300)
     fig.savefig(pdf_path)
+    fig.savefig(figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.png", dpi=300)
+    fig.savefig(figures_dir / f"single_rate_{rate_tag}_flow_group_rmse.pdf")
     plt.close(fig)
     return png_path, pdf_path
+
+
+def build_single_rate_figure_index_rows(
+    summary_df: pd.DataFrame,
+    metric_label: str,
+) -> list[dict[str, str]]:
+    single_rate = get_single_rate_value(summary_df)
+    if single_rate is None:
+        return []
+    rate_tag = build_single_rate_tag(single_rate)
+    third_metric_file_label = "sMAPE" if metric_label == "sMAPE" else "MAPE"
+    third_metric_file_stub = "smape" if metric_label == "sMAPE" else "mape"
+    return [
+        {
+            "figure_file": f"single_rate_{rate_tag}_rmse_by_method_all6.png",
+            "figure_type": "bar",
+            "metric": "RMSE",
+            "method_scope": "all_6_methods",
+            "is_formal_main_figure": "true",
+            "notes": "Formal six-method direct comparison",
+        },
+        {
+            "figure_file": f"single_rate_{rate_tag}_mae_by_method_all6.png",
+            "figure_type": "bar",
+            "metric": "MAE",
+            "method_scope": "all_6_methods",
+            "is_formal_main_figure": "true",
+            "notes": "Formal six-method direct comparison",
+        },
+        {
+            "figure_file": f"single_rate_{rate_tag}_{third_metric_file_stub}_by_method_all6.png",
+            "figure_type": "bar",
+            "metric": third_metric_file_label,
+            "method_scope": "all_6_methods",
+            "is_formal_main_figure": "true",
+            "notes": "Formal six-method direct comparison",
+        },
+        {
+            "figure_file": f"single_rate_{rate_tag}_flow_group_rmse_by_method_all6.png",
+            "figure_type": "grouped_bar",
+            "metric": "RMSE",
+            "method_scope": "all_6_methods",
+            "is_formal_main_figure": "true",
+            "notes": "Compares low-flow, mid-flow, and high-flow RMSE across all six methods without a baseline method",
+        },
+        {
+            "figure_file": f"single_rate_{rate_tag}_rmse_by_method_nonzero_zoom.png",
+            "figure_type": "bar",
+            "metric": "RMSE",
+            "method_scope": "nonzero_methods",
+            "is_formal_main_figure": "false",
+            "notes": "Zoom view excluding zero fill for readability",
+        },
+    ]
+
+
+def get_single_rate_secondary_metric(summary_df: pd.DataFrame) -> tuple[str, str]:
+    if "sMAPE" in summary_df.columns:
+        return "sMAPE", "smape"
+    return "MAPE", "mape"
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> Path:
@@ -2024,9 +2149,47 @@ def run_summarize(args: argparse.Namespace) -> None:
     else:
         flow_group_summary = exclude_agg.loc[exclude_agg["flow_group"] != "all"].copy()
     flow_group_summary.to_csv(summaries_dir / "imputation_quality_by_flow_group.csv", index=False, encoding="utf-8-sig")
+    figures_dir = ensure_directory(args.output_dir / "figures")
+    single_rate = get_single_rate_value(summary_main)
+    method_order = get_single_rate_method_order(summary_main)
     plot_main_rmse(summary_main, args.output_dir)
-    plot_delta_rmse(summary_main, args.output_dir)
+    plot_single_rate_metric_bars(
+        summary_df=summary_main,
+        output_dir=args.output_dir,
+        metric="MAE",
+        title="Single missing rate = {0:.0%}: MAE by imputation method",
+        file_stub="mae_by_method_all6",
+        method_order=method_order,
+        ylabel="MAE",
+    )
+    secondary_metric_label, secondary_metric_stub = get_single_rate_secondary_metric(summary_main)
+    plot_single_rate_metric_bars(
+        summary_df=summary_main,
+        output_dir=args.output_dir,
+        metric=secondary_metric_label,
+        title=f"Single missing rate = {{0:.0%}}: {secondary_metric_label} by imputation method",
+        file_stub=f"{secondary_metric_stub}_by_method_all6",
+        method_order=method_order,
+        ylabel=secondary_metric_label,
+    )
+    plot_single_rate_metric_bars(
+        summary_df=summary_main,
+        output_dir=args.output_dir,
+        metric="RMSE",
+        title="Single missing rate = {0:.0%}: RMSE by method, excluding zero fill for readability",
+        file_stub="rmse_by_method_nonzero_zoom",
+        method_order=method_order,
+        ylabel="RMSE",
+        exclude_methods={"zero_fill"},
+    )
     plot_flow_group_rmse(flow_group_summary, args.output_dir)
+    if single_rate is not None:
+        figure_index_rows = build_single_rate_figure_index_rows(summary_main, secondary_metric_label)
+        pd.DataFrame(figure_index_rows).to_csv(
+            figures_dir / f"single_rate_{build_single_rate_tag(single_rate)}_figure_index.csv",
+            index=False,
+            encoding="utf-8-sig",
+        )
     if get_single_rate_value(summary_main) is None:
         plot_zoom_rmse(summary_main, args.output_dir)
     batch_report = {
@@ -2058,6 +2221,24 @@ def run_summarize(args: argparse.Namespace) -> None:
     ]
     write_markdown(summaries_dir / "batch_processing_report.md", batch_lines)
     payload = build_audit_payload(args, chunk_df, summary_all, summary_main)
+    if single_rate is not None:
+        rate_tag = build_single_rate_tag(single_rate)
+        payload["figure_policy"] = {
+            "formal_main_figures": [
+                f"figures/single_rate_{rate_tag}_rmse_by_method_all6.png",
+                f"figures/single_rate_{rate_tag}_mae_by_method_all6.png",
+                f"figures/single_rate_{rate_tag}_{secondary_metric_stub}_by_method_all6.png",
+                f"figures/single_rate_{rate_tag}_flow_group_rmse_by_method_all6.png",
+            ],
+            "auxiliary_figures": [
+                f"figures/single_rate_{rate_tag}_rmse_by_method_nonzero_zoom.png",
+            ],
+            "notes": [
+                "Formal visualization uses direct six-method comparison on absolute metrics.",
+                "Forward fill is one of the six imputation methods and is not used as the formal baseline method.",
+                "Flow-group RMSE compares low-flow, mid-flow, and high-flow nodes without using forward fill as a baseline.",
+            ],
+        }
     write_json(args.output_dir / "full_intersection_missingness_audit.json", payload)
     lines = [
         "# Full Intersection Missingness Audit",
@@ -2095,6 +2276,23 @@ def run_summarize(args: argparse.Namespace) -> None:
         f"- `generate_missing` 是否覆盖全部 chunk：`{str(batch_report['all_chunks_covered_in_generate']).lower()}`",
         f"- `impute` 是否覆盖全部 chunk：`{str(batch_report['all_chunks_covered_in_impute']).lower()}`",
     ]
+    if single_rate is not None:
+        rate_tag = build_single_rate_tag(single_rate)
+        lines.extend(
+            [
+                "",
+                "## 5. Figure Policy",
+                "",
+                "- 正式可视化已调整为 6 个方法在绝对指标上的直接比较图。",
+                "- `forward_fill` 不再作为正式图的参照基准，而是作为 6 个方法之一参与比较。",
+                f"- 正式主图：`figures\\single_rate_{rate_tag}_rmse_by_method_all6.png`",
+                f"- 正式主图：`figures\\single_rate_{rate_tag}_mae_by_method_all6.png`",
+                f"- 正式主图：`figures\\single_rate_{rate_tag}_{secondary_metric_stub}_by_method_all6.png`",
+                f"- 正式主图：`figures\\single_rate_{rate_tag}_flow_group_rmse_by_method_all6.png`",
+                f"- 辅助图：`figures\\single_rate_{rate_tag}_rmse_by_method_nonzero_zoom.png`",
+                "- 正式结果采用 6 个方法的 RMSE、MAE、sMAPE/MAPE 绝对指标并列比较。",
+            ]
+        )
     write_markdown(args.output_dir / "full_intersection_missingness_audit.md", lines)
 
 

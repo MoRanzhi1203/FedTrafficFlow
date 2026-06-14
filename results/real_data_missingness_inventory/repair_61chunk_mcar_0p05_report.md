@@ -60,16 +60,27 @@
 
 ## 7. Formal Single-Rate Figures
 
-- `figures\single_rate_0p05_rmse_by_method.png`
-- `figures\single_rate_0p05_rmse_by_method.pdf`
-- `figures\single_rate_0p05_delta_rmse_relative_to_forward_fill.png`
-- `figures\single_rate_0p05_delta_rmse_relative_to_forward_fill.pdf`
-- `figures\single_rate_0p05_flow_group_rmse.png`
-- `figures\single_rate_0p05_flow_group_rmse.pdf`
+- Formal six-method comparison:
+  - `figures\single_rate_0p05_rmse_by_method_all6.png`
+  - `figures\single_rate_0p05_rmse_by_method_all6.pdf`
+  - `figures\single_rate_0p05_mae_by_method_all6.png`
+  - `figures\single_rate_0p05_mae_by_method_all6.pdf`
+  - `figures\single_rate_0p05_mape_by_method_all6.png`
+  - `figures\single_rate_0p05_mape_by_method_all6.pdf`
+  - `figures\single_rate_0p05_flow_group_rmse_by_method_all6.png`
+  - `figures\single_rate_0p05_flow_group_rmse_by_method_all6.pdf`
+- Auxiliary figures:
+  - `figures\single_rate_0p05_rmse_by_method_nonzero_zoom.png`
+  - `figures\single_rate_0p05_rmse_by_method_nonzero_zoom.pdf`
+- Figure index:
+  - `figures\single_rate_0p05_figure_index.csv`
 
 Note:
 
-- In the single-rate setting, the formal figures are now bar-style single-rate comparisons rather than missing-rate line charts.
+- Formal visualization now uses direct six-method comparison on absolute metrics.
+- `forward_fill` is no longer used as the formal baseline figure; it is displayed as one of the six methods.
+- The previous delta plot relative to forward fill has been removed from the formal figure set and is no longer used for this single-rate presentation.
+- The flow-group figure compares low-flow, mid-flow, and high-flow node RMSE across all six methods without using `forward_fill` as a reference baseline.
 - Any old missing-rate line chart produced under a single-rate-only context should be treated as a temporary figure and not as a formal paper figure.
 
 ## 8. Inventory Conclusion

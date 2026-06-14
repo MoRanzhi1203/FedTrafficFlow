@@ -34,6 +34,7 @@
     "ran summarize on existing detail csv",
     "ran validate for structure and causal constraints",
     "generated single-rate formal figures",
+    "removed the previous delta-style forward-fill comparison from the formal figure set and replaced it with direct six-method comparison figures on RMSE, MAE, and MAPE",
     "reran inventory and improved manifest-based scope inference"
   ],
   "final_method_completion": {
@@ -84,12 +85,20 @@
     "uses_bidirectional_interpolation": false
   },
   "figures": {
-    "single_rate_0p05_rmse_by_method_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method.png",
-    "single_rate_0p05_rmse_by_method_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method.pdf",
-    "single_rate_0p05_delta_rmse_relative_to_forward_fill_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_delta_rmse_relative_to_forward_fill.png",
-    "single_rate_0p05_delta_rmse_relative_to_forward_fill_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_delta_rmse_relative_to_forward_fill.pdf",
-    "single_rate_0p05_flow_group_rmse_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse.png",
-    "single_rate_0p05_flow_group_rmse_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse.pdf",
+    "single_rate_0p05_rmse_by_method_all6_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method_all6.png",
+    "single_rate_0p05_rmse_by_method_all6_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method_all6.pdf",
+    "single_rate_0p05_mae_by_method_all6_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_mae_by_method_all6.png",
+    "single_rate_0p05_mae_by_method_all6_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_mae_by_method_all6.pdf",
+    "single_rate_0p05_mape_by_method_all6_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_mape_by_method_all6.png",
+    "single_rate_0p05_mape_by_method_all6_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_mape_by_method_all6.pdf",
+    "single_rate_0p05_flow_group_rmse_by_method_all6_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse_by_method_all6.png",
+    "single_rate_0p05_flow_group_rmse_by_method_all6_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_flow_group_rmse_by_method_all6.pdf",
+    "single_rate_0p05_rmse_by_method_nonzero_zoom_png": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method_nonzero_zoom.png",
+    "single_rate_0p05_rmse_by_method_nonzero_zoom_pdf": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_rmse_by_method_nonzero_zoom.pdf",
+    "single_rate_0p05_figure_index_csv": "results/real_data_missingness_full_intersection_causal_history/figures/single_rate_0p05_figure_index.csv",
+    "formal_visualization_uses_direct_six_method_comparison": true,
+    "forward_fill_is_not_formal_baseline": true,
+    "delta_plot_removed_from_formal_outputs": true,
     "single_rate_line_chart_should_not_be_used_as_formal_paper_figure": true
   },
   "inventory": {
