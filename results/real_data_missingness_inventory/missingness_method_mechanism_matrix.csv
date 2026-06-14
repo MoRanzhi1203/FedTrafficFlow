@@ -1,8 +1,0 @@
-﻿method,method_label,is_baseline,is_historical_causal,uses_spatial_topology,uses_function_curve,uses_future_data,requires_topology,supported_in_script,observed_in_results,observed_mechanisms,observed_missing_rates,notes
-zero_fill,Zero fill,True,False,False,False,False,False,True,True,"[""[\""mcar_point\""]"", ""mcar_point""]","[""0.0"", ""0.05"", ""0.1"", ""0.2"", ""0.3""]",
-forward_fill,Forward fill,True,True,False,False,True,False,True,True,"[""[\""mcar_point\""]"", ""mcar_point""]","[""0.0"", ""0.05"", ""0.1"", ""0.2"", ""0.3""]",旧样本脚本中的 forward_fill 含 bfill 回退；历史因果流水线版本不使用未来数据。
-historical_linear_extrapolation,Historical linear extrapolation,False,True,False,False,False,False,True,True,"[""mcar_point""]","[""0.05""]",
-geo_neighbor_fill,Geo-neighbor fill,False,True,True,False,False,True,True,True,"[""mcar_point""]","[""0.05""]",历史因果流水线版本不使用未来数据；早期原型脚本存在含未来信息的回退逻辑。
-function_curve_fit,Function curve fit,False,True,False,True,False,False,True,True,"[""mcar_point""]","[""0.05""]",历史因果流水线版本不使用未来数据；早期原型脚本存在含未来信息的回退逻辑。
-geo_func_hybrid,Geo-function hybrid,False,True,True,True,False,True,True,True,"[""mcar_point""]","[""0.05""]",历史因果流水线版本不使用未来数据；早期原型脚本存在含未来信息的回退逻辑。
-linear_interpolation,Linear interpolation,True,False,False,False,True,False,True,True,"[""[\""mcar_point\""]""]","[""0.0"", ""0.05"", ""0.1"", ""0.2"", ""0.3""]",旧实验中的 linear_interpolation 使用双向插值。

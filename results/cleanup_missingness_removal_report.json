@@ -1,0 +1,65 @@
+{
+  "cleanup_purpose": "移除所有缺失值设置、缺失注入、插补补全和插补评估相关内容，同时保留真实数据预处理、交通流预测主任务、FedAvg / Independent 和仿真实验代码。",
+  "stopped_related_process": {
+    "found_running_missingness_process": true,
+    "stopped": true
+  },
+  "deleted_scripts": [
+    "analysis_scripts/full_intersection_missingness_pipeline.py",
+    "analysis_scripts/real_data_missingness_experiment.py",
+    "analysis_scripts/audit_missing_rate_scope.py",
+    "analysis_scripts/audit_global_mcar_missingness.py",
+    "analysis_scripts/check_full_missingness_completion.py",
+    "analysis_scripts/rebuild_full_missingness_manifests.py",
+    "analysis_scripts/inventory_real_missingness_assets.py",
+    "analysis_scripts/inventory_missingness_cleanup_targets.py"
+  ],
+  "deleted_result_directories": [
+    "results/real_data_missingness_experiments",
+    "results/real_data_missingness_experiments_sample",
+    "results/real_data_missingness_full_intersection_causal_history",
+    "results/real_data_missingness_full_intersection_causal_history_global_mcar",
+    "results/real_data_missingness_full_intersection_causal_history_hybridtest",
+    "results/real_data_missingness_full_intersection_causal_history_hybridtest_small",
+    "results/real_data_missingness_full_intersection_causal_history_smoketest",
+    "results/real_data_missingness_inventory"
+  ],
+  "deleted_documents": [
+    "MISSINGNESS_OPTIMIZATION_PLAN.md",
+    "MISSINGNESS_PHASE_RUNBOOK.md",
+    "results/code_execution_status_report_zh.md",
+    "paper_revision/manuscript_sections_zh/real_data_missingness_experiment_design_zh.md",
+    "paper_revision/manuscript_sections_zh/real_data_missingness_experiment_results_zh.md",
+    "paper_revision/manuscript_sections_zh/current/real_data_missingness_experiment_design_zh.md",
+    "paper_revision/manuscript_sections_zh/current/real_data_missingness_experiment_results_zh.md"
+  ],
+  "edited_files": {
+    "PROJECT_PROGRESS_ANALYSIS.md": "移除缺失注入、插补实验与相关结果描述，仅保留真实数据预处理、仿真实验和真实预测主任务。",
+    "paper_revision/manuscript_sections_zh/real_data_prediction_pipeline_next_steps_zh.md": "移除缺失率鲁棒性与插补相关描述。",
+    "paper_revision/manuscript_sections_zh/current/real_data_prediction_pipeline_next_steps_zh.md": "移除缺失率鲁棒性与插补相关描述。",
+    "paper_revision/manuscript_sections_zh/README.md": "移除 missingness 章节目录说明。",
+    ".gitignore": "移除过度具体的 missingness 结果目录忽略规则。"
+  },
+  "retained_content": [
+    "data/raw/",
+    "data/analysis/node_intersection_flow_parquet",
+    "data/processed/rnsd_processed.csv",
+    "preprocessing_scripts/",
+    "analysis_scripts/audit_real_data_preprocessing.py",
+    "simulation_experiments/"
+  ],
+  "allowed_residuals": [
+    "results/cleanup_missingness_removal_plan.csv",
+    "results/cleanup_missingness_removal_plan_zh.md",
+    "results/cleanup_missingness_removal_report.md",
+    "results/cleanup_missingness_removal_report.json",
+    "analysis_scripts/audit_real_data_preprocessing.py -> missing_rate_per_column",
+    "results/real_data_preprocessing/real_data_preprocessing_audit.json -> missing_rate_per_column"
+  ],
+  "cleanup_validation": {
+    "missingness_main_pipeline_exists": false,
+    "mcar_or_mask_scope_entry_exists": false,
+    "imputation_result_directories_exist": false,
+    "remaining_hits_should_be_allowed_only": true
+  }
+}

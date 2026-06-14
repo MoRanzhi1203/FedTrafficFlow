@@ -1,2 +1,0 @@
-﻿day_index,file_name,file_path,rows_used,node_count,time_slot_count,time_slot_min,time_slot_max,warmup
-0,node_flow_chunk_000.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet,1000,1000,1,0,0,True

@@ -1,2 +1,0 @@
-﻿stage,missing_rate,mechanism,seed,impute_method,day_index,file_name,status,mask_exists,missing_dataset_exists,imputed_dataset_exists,detail_exists,actual_missing_count,filled_missing_count,residual_missing_count,note
-generate_missing,0.05,mcar_point,42,,0,node_flow_chunk_000.parquet,completed,True,True,False,False,201749,0,0,缺失掩码与缺失数据集已登记

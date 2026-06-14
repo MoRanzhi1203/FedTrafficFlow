@@ -1,2 +1,0 @@
-﻿mechanism,impute_method,missing_rate,MAE,RMSE,MAPE,masked_count,low_flow_MAE,low_flow_RMSE,low_flow_sMAPE,mid_flow_MAE,mid_flow_RMSE,mid_flow_sMAPE,high_flow_MAE,high_flow_RMSE,high_flow_sMAPE
-mcar_point,geo_func_hybrid,0.05,1494.7819702148438,1645.5660260314894,100.0,10.0,830.3970540364584,1022.1367045157352,133.33333333333334,1582.7185668945312,1590.6553979739183,200.0,2960.317138671875,2960.317138671875,200.0

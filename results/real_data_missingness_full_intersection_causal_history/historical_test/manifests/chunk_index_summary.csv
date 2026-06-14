@@ -1,9 +1,0 @@
-﻿day_index,file_name,file_path,rows_used,node_count,time_slot_count,time_slot_min,time_slot_max,warmup
-0,node_flow_chunk_000.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet,4034976,42031,96,0,95,True
-1,node_flow_chunk_001.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_001.parquet,4034976,42031,96,0,95,True
-2,node_flow_chunk_002.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_002.parquet,4034976,42031,96,0,95,True
-3,node_flow_chunk_003.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_003.parquet,4034976,42031,96,0,95,True
-4,node_flow_chunk_004.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_004.parquet,4034976,42031,96,0,95,True
-5,node_flow_chunk_005.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_005.parquet,4034976,42031,96,0,95,True
-6,node_flow_chunk_006.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_006.parquet,4034976,42031,96,0,95,True
-7,node_flow_chunk_007.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_007.parquet,4034976,42031,96,0,95,False

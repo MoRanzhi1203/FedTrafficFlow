@@ -1,4 +1,0 @@
-﻿file_name,file_path,rows_used,mechanism,missing_rate,seed,target_col,time_col,node_col,mask_path
-node_flow_chunk_000.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet,500,mcar_point,0.0,42,路口车流量,时间段,节点ID,
-node_flow_chunk_000.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet,500,mcar_point,0.05,42,路口车流量,时间段,节点ID,
-node_flow_chunk_000.parquet,data/analysis/node_intersection_flow_parquet/node_flow_chunk_000.parquet,500,mcar_point,0.1,42,路口车流量,时间段,节点ID,
