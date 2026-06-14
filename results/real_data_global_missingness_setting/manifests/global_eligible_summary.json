@@ -1,0 +1,13 @@
+{
+  "experiment_name": "real_data_global_missingness_setting",
+  "input_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\analysis\\node_intersection_flow_parquet",
+  "chunk_count": 61,
+  "global_eligible_count": 246133536,
+  "target_col": "路口车流量",
+  "node_col": "节点ID",
+  "time_col": "时间段",
+  "period": 96,
+  "mechanism": "mcar_point",
+  "mask_scope": "global",
+  "seed": 42
+}
