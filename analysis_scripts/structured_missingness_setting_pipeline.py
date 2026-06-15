@@ -457,6 +457,17 @@ def scenario_missing_dir(paths: StagePaths, scenario: ScenarioDefinition) -> Pat
     return paths.missing_datasets_dir / scenario.scenario_tag
 
 
+def scenario_event_path(paths: StagePaths, scenario: ScenarioDefinition) -> Path:
+    event_stem = "node_temporal_block_events" if scenario.mechanism == NODE_TEMPORAL_BLOCK else "node_subset_temporal_outage_events"
+    return paths.manifests_dir / f"{event_stem}__{scenario.scenario_tag}.csv"
+
+
+def legacy_event_path(paths: StagePaths, scenario: ScenarioDefinition) -> Path:
+    if scenario.mechanism == NODE_TEMPORAL_BLOCK:
+        return paths.manifests_dir / "node_temporal_block_events.csv"
+    return paths.manifests_dir / "node_subset_temporal_outage_events.csv"
+
+
 def write_design_doc(paths: StagePaths, length_config: LengthSamplingConfig) -> None:
     short_start, short_end = length_config.short_length_range
     mid_start, mid_end = length_config.mid_length_range
@@ -1144,57 +1155,18 @@ def can_reuse_existing_chunk(
     return int(missing_meta.num_rows) > 0
 
 
-def filter_event_file_by_completed_keys(
-    event_path: Path,
-    keep_keys: set[Tuple[str, float]],
-) -> None:
-    if not event_path.exists():
-        return
-    temp_path = event_path.with_suffix(".tmp")
-    if temp_path.exists():
-        temp_path.unlink()
-    kept_any = False
-    for chunk_df in pd.read_csv(event_path, chunksize=200000):
-        chunk_df["__key__"] = list(
-            zip(
-                chunk_df["mechanism"].astype(str),
-                chunk_df["missing_rate_target"].astype(float).round(6),
-            )
-        )
-        filtered_df = chunk_df.loc[chunk_df["__key__"].isin(keep_keys)].drop(columns="__key__")
-        if not filtered_df.empty:
-            append_csv(filtered_df, temp_path)
-            kept_any = True
-    event_path.unlink()
-    if kept_any:
-        temp_path.replace(event_path)
-    elif temp_path.exists():
-        temp_path.unlink()
-
-
 def cleanup_resume_artifacts(
     paths: StagePaths,
     scenarios: List[ScenarioDefinition],
     expected_chunk_count: int,
 ) -> None:
-    complete_keys = {
-        scenario_key(scenario)
-        for scenario in scenarios
-        if scenario_is_complete(paths, scenario, expected_chunk_count)
-    }
-    filter_event_file_by_completed_keys(paths.manifests_dir / "node_temporal_block_events.csv", complete_keys)
-    filter_event_file_by_completed_keys(paths.manifests_dir / "node_subset_temporal_outage_events.csv", complete_keys)
-
-    outage_events_path = paths.manifests_dir / "node_subset_temporal_outage_events.csv"
-    keep_node_files: set[str] = set()
-    if outage_events_path.exists():
-        for chunk_df in pd.read_csv(outage_events_path, usecols=["node_list_file"], chunksize=200000):
-            keep_node_files.update({str(value).replace("\\", "/") for value in chunk_df["node_list_file"].dropna().tolist()})
-    if paths.outage_node_lists_dir.exists():
-        for node_list_path in paths.outage_node_lists_dir.glob("*.csv"):
-            relative_name = f"outage_node_lists/{node_list_path.name}"
-            if relative_name not in keep_node_files:
-                node_list_path.unlink()
+    for temp_path in paths.manifests_dir.glob("*.tmp"):
+        temp_path.unlink()
+    for scenario in scenarios:
+        event_path = scenario_event_path(paths, scenario)
+        temp_path = event_path.with_suffix(".tmp")
+        if temp_path.exists():
+            temp_path.unlink()
 
 
 def reconstruct_existing_chunk_status(
@@ -1248,23 +1220,27 @@ def reconstruct_existing_chunk_status(
 
 
 def load_event_stats_for_scenario(
-    event_path: Path,
+    event_paths: Sequence[Path],
     scenario: ScenarioDefinition,
 ) -> LengthStatsAccumulator:
     stats = LengthStatsAccumulator()
-    if not event_path.exists():
-        return stats
-    for chunk_df in pd.read_csv(
-        event_path,
-        usecols=["mechanism", "missing_rate_target", "actual_length", "length_group"],
-        chunksize=200000,
-    ):
-        filtered_df = chunk_df.loc[
-            (chunk_df["mechanism"].astype(str) == scenario.mechanism)
-            & np.isclose(chunk_df["missing_rate_target"].astype(float), float(scenario.missing_rate))
-        ]
-        for row in filtered_df.itertuples(index=False):
-            stats.add(int(row.actual_length), str(row.length_group))
+    visited: set[str] = set()
+    for event_path in event_paths:
+        resolved = str(event_path)
+        if resolved in visited or not event_path.exists():
+            continue
+        visited.add(resolved)
+        for chunk_df in pd.read_csv(
+            event_path,
+            usecols=["mechanism", "missing_rate_target", "actual_length", "length_group"],
+            chunksize=200000,
+        ):
+            filtered_df = chunk_df.loc[
+                (chunk_df["mechanism"].astype(str) == scenario.mechanism)
+                & np.isclose(chunk_df["missing_rate_target"].astype(float), float(scenario.missing_rate))
+            ]
+            for row in filtered_df.itertuples(index=False):
+                stats.add(int(row.actual_length), str(row.length_group))
     return stats
 
 
@@ -1305,7 +1281,7 @@ def build_existing_scenario_summary(
     prepare_artifacts: PrepareArtifacts,
 ) -> Dict[str, Any]:
     config = scenario_length_config(scenario)
-    stats = load_event_stats_for_scenario(event_path, scenario)
+    stats = load_event_stats_for_scenario([event_path, legacy_event_path(paths, scenario)], scenario)
     if stats.event_count <= 0:
         stats = load_length_stats_from_masks(paths, scenario, prepare_artifacts)
     observed_missing_count = int(chunk_status_df["observed_missing_count"].sum())
@@ -1725,52 +1701,53 @@ def run_generate_missing(
     scenarios = build_scenarios(mechanisms, missing_rates, length_config, args.seed)
     expected_chunk_count = int(len(prepare_artifacts.chunk_summary_df))
     total_observation_count = int(prepare_artifacts.chunk_summary_df["target_non_null_count"].sum())
-    block_events_path = paths.manifests_dir / "node_temporal_block_events.csv"
-    outage_events_path = paths.manifests_dir / "node_subset_temporal_outage_events.csv"
-    ensure_event_file_schema(
-        block_events_path,
-        [
-            "mechanism",
-            "missing_rate_target",
-            "event_id",
-            "node_id",
-            "start_global_time_index",
-            "end_global_time_index",
-            "actual_length",
-            "length_group",
-            "length_mode",
-            "seed",
-            "chunk_index",
-            "day_index",
-            "file_name",
-        ],
-    )
-    ensure_event_file_schema(
-        outage_events_path,
-        [
-            "mechanism",
-            "missing_rate_target",
-            "event_id",
-            "node_subset_ratio",
-            "selected_node_count",
-            "start_global_time_index",
-            "end_global_time_index",
-            "actual_length",
-            "length_group",
-            "length_mode",
-            "seed",
-            "node_list_file",
-            "chunk_index",
-            "day_index",
-            "file_name",
-        ],
-    )
     cleanup_resume_artifacts(paths, scenarios, expected_chunk_count)
     current_status_df = load_existing_chunk_status(paths)
 
     chunk_status_rows: List[pd.DataFrame] = []
     scenario_summary_rows: List[Dict[str, Any]] = []
     for scenario in scenarios:
+        event_path = scenario_event_path(paths, scenario)
+        if scenario.mechanism == NODE_TEMPORAL_BLOCK:
+            ensure_event_file_schema(
+                event_path,
+                [
+                    "mechanism",
+                    "missing_rate_target",
+                    "event_id",
+                    "node_id",
+                    "start_global_time_index",
+                    "end_global_time_index",
+                    "actual_length",
+                    "length_group",
+                    "length_mode",
+                    "seed",
+                    "chunk_index",
+                    "day_index",
+                    "file_name",
+                ],
+            )
+        else:
+            ensure_event_file_schema(
+                event_path,
+                [
+                    "mechanism",
+                    "missing_rate_target",
+                    "event_id",
+                    "node_subset_ratio",
+                    "selected_node_count",
+                    "start_global_time_index",
+                    "end_global_time_index",
+                    "actual_length",
+                    "length_group",
+                    "length_mode",
+                    "seed",
+                    "node_list_file",
+                    "chunk_index",
+                    "day_index",
+                    "file_name",
+                ],
+            )
         if scenario_is_complete(paths, scenario, expected_chunk_count):
             existing_chunk_status_df = reconstruct_existing_chunk_status(
                 args=args,
@@ -1778,13 +1755,12 @@ def run_generate_missing(
                 scenario=scenario,
                 prepare_artifacts=prepare_artifacts,
             )
-            existing_event_path = block_events_path if scenario.mechanism == NODE_TEMPORAL_BLOCK else outage_events_path
             existing_summary = build_existing_scenario_summary(
                 scenario=scenario,
                 chunk_status_df=existing_chunk_status_df,
                 total_observation_count=total_observation_count,
                 tolerance=args.tolerance,
-                event_path=existing_event_path,
+                event_path=event_path,
                 paths=paths,
                 prepare_artifacts=prepare_artifacts,
             )
@@ -1802,7 +1778,6 @@ def run_generate_missing(
 
         allocation_df = allocate_chunk_missing_counts(prepare_artifacts.chunk_summary_df, scenario, args.seed)
         allocation_lookup = build_chunk_target_lookup(allocation_df)
-        event_path = block_events_path if scenario.mechanism == NODE_TEMPORAL_BLOCK else outage_events_path
         next_id = next_event_id(event_path)
         scenario_chunk_status_rows: List[Dict[str, Any]] = []
         for row in prepare_artifacts.chunk_summary_df.to_dict(orient="records"):
