@@ -664,6 +664,13 @@ def has_complete_chunk_records(
     chunk_index: int,
     methods: list[str],
 ) -> bool:
+    required_status_cols = {"missing_rate", "chunk_index", "method"}
+    required_detail_cols = {"missing_rate", "chunk_index", "method", "flow_group"}
+    if status_df.empty or not required_status_cols.issubset(status_df.columns):
+        return False
+    if detail_df.empty or not required_detail_cols.issubset(detail_df.columns):
+        return False
+
     status_subset = status_df.loc[
         np.isclose(status_df["missing_rate"], rate) & (status_df["chunk_index"] == chunk_index)
     ].copy()
