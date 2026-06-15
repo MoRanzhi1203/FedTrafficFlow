@@ -227,6 +227,18 @@ data/analysis/date_type_curve_method_comparison/
 data/analysis/speed_class_overall_stats.csv
 data/analysis/speed_class_daily_period_stats.csv
 
+# Generated experiment outputs that should stay local
+results/real_data_global_missingness_setting/masks/
+results/real_data_global_missingness_setting/missing_datasets/
+results/real_data_global_missingness_setting/imputed_datasets/
+results/real_data_structured_missingness_setting/masks/
+results/real_data_structured_missingness_setting/missing_datasets/
+results/real_data_structured_missingness_setting/imputed_datasets/
+results/real_data_structured_missingness_setting/manifests/node_temporal_block_events.csv
+results/real_data_structured_missingness_setting/manifests/node_subset_temporal_outage_events.csv
+results/real_data_structured_missingness_setting/manifests/outage_node_lists/
+.local_backup/
+
 # Allow uploading only the manuscript sections under paper_revision
 paper_revision/*
 !paper_revision/manuscript_sections_zh/
