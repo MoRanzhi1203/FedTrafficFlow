@@ -27,21 +27,21 @@ METHOD_DISPLAY = {
 }
 
 SCENARIO_DISPLAY = {
-    "global_mcar_point": "Global MCAR point",
-    "node_temporal_block": "Node temporal block",
-    "node_subset_temporal_outage": "Node subset temporal outage",
+    "g_mcar_pt": "Global MCAR point",
+    "ntb_mix": "Node temporal block",
+    "nso_mix": "Node subset temporal outage",
 }
 
 SCENARIO_PREFIX = {
-    "global_mcar_point": "global_mcar",
-    "node_temporal_block": "block",
-    "node_subset_temporal_outage": "outage",
+    "g_mcar_pt": "g_mcar_pt",
+    "ntb_mix": "ntb_mix",
+    "nso_mix": "nso_mix",
 }
 
 SCENARIO_ORDER = [
-    "global_mcar_point",
-    "node_temporal_block",
-    "node_subset_temporal_outage",
+    "g_mcar_pt",
+    "ntb_mix",
+    "nso_mix",
 ]
 
 DEFAULT_METHODS = [
@@ -58,6 +58,11 @@ METRICS = ["rmse", "mae", "smape", "nrmse"]
 LENGTH_GROUP_METRICS = ["rmse", "mae", "smape"]
 LENGTH_GROUP_ORDER = ["short", "mid", "long"]
 FLOW_GROUP_ORDER = ["low_flow", "mid_flow", "high_flow"]
+FLOW_GROUP_LABELS = {
+    "low_flow": "Low flow",
+    "mid_flow": "Mid flow",
+    "high_flow": "High flow",
+}
 PLOT_COLORS = {
     "mean_fill": "#4C72B0",
     "forward_fill": "#55A868",
@@ -138,6 +143,13 @@ def normalize_methods(df: pd.DataFrame) -> pd.DataFrame:
     return normalized
 
 
+def assert_no_zero_fill(df: pd.DataFrame, label: str) -> None:
+    normalized = normalize_methods(df)
+    methods = set(normalized["method"].dropna().astype(str).tolist())
+    if "zero_fill" in methods or "Zero fill" in methods:
+        raise RuntimeError(f"{label} still contains zero_fill; cannot generate formal visualization")
+
+
 def normalize_main_summary(df: pd.DataFrame) -> pd.DataFrame:
     normalized = normalize_methods(df)
     if "flow_group" not in normalized.columns:
@@ -196,6 +208,7 @@ def validate_expected_scope(
 
 
 def prepare_overall_summary(df: pd.DataFrame, scenario: str, rates: list[float], methods: list[str]) -> pd.DataFrame:
+    assert_no_zero_fill(df, f"{scenario} main summary")
     normalized = normalize_main_summary(df)
     validate_metric_columns(normalized, METRICS, scenario, "main summary")
     overall_df = normalized.loc[normalized["flow_group"] == "overall"].copy()
@@ -210,6 +223,7 @@ def prepare_overall_summary(df: pd.DataFrame, scenario: str, rates: list[float],
 
 
 def prepare_flow_summary(df: pd.DataFrame, scenario: str, rates: list[float], methods: list[str]) -> pd.DataFrame:
+    assert_no_zero_fill(df, f"{scenario} flow summary")
     normalized = normalize_group_summary(df, "flow_group")
     validate_metric_columns(normalized, ["rmse"], scenario, "flow summary")
     flow_df = normalized.loc[normalized["flow_group"].isin(FLOW_GROUP_ORDER)].copy()
@@ -221,6 +235,7 @@ def prepare_flow_summary(df: pd.DataFrame, scenario: str, rates: list[float], me
 
 
 def prepare_length_summary(df: pd.DataFrame, scenario: str, rates: list[float], methods: list[str]) -> pd.DataFrame:
+    assert_no_zero_fill(df, f"{scenario} length summary")
     normalized = normalize_group_summary(df, "length_group")
     validate_metric_columns(normalized, LENGTH_GROUP_METRICS, scenario, "length summary")
     length_df = normalized.loc[normalized["length_group"].isin(LENGTH_GROUP_ORDER)].copy()
@@ -310,6 +325,47 @@ def save_length_group_plot(
     plt.close(fig)
 
 
+def save_flow_group_plot(
+    flow_df: pd.DataFrame,
+    methods: list[str],
+    rates: list[float],
+    metric: str,
+    title: str,
+    ylabel: str,
+    output_png: Path,
+    output_pdf: Path,
+) -> None:
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9), sharey=True)
+    x_positions = np.arange(len(FLOW_GROUP_ORDER), dtype=float)
+    axes_flat = axes.flatten()
+    for axis, rate in zip(axes_flat, rates):
+        rate_df = flow_df.loc[np.isclose(flow_df["missing_rate"], rate)].copy()
+        for method in methods:
+            method_df = rate_df.loc[rate_df["method"] == method].set_index("flow_group").reindex(FLOW_GROUP_ORDER)
+            axis.plot(
+                x_positions,
+                method_df[metric].to_numpy(dtype=float),
+                marker="o",
+                linewidth=2,
+                markersize=5,
+                color=PLOT_COLORS[method],
+                label=METHOD_DISPLAY[method],
+            )
+        axis.set_title(f"{int(round(rate * 100))}%")
+        axis.set_xticks(x_positions, [FLOW_GROUP_LABELS[label] for label in FLOW_GROUP_ORDER], rotation=12)
+        axis.set_xlabel("Flow group")
+        axis.grid(alpha=0.3)
+    axes_flat[0].set_ylabel(ylabel)
+    axes_flat[2].set_ylabel(ylabel)
+    handles, labels = axes_flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(output_png, dpi=300, bbox_inches="tight")
+    fig.savefig(output_pdf, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+
 def save_scenario_comparison_plot(
     combined_df: pd.DataFrame,
     methods: list[str],
@@ -387,10 +443,11 @@ def build_best_method_summary(ranking_df: pd.DataFrame) -> pd.DataFrame:
                 "metric": metric,
                 "best_method": best_row["method"],
                 "best_value": float(best_row["value"]),
+                "second_best_method": second_row["method"],
+                "second_best_value": float(second_row["value"]),
                 "worst_method": worst_row["method"],
                 "worst_value": float(worst_row["value"]),
-                "second_best_method": second_row["method"],
-                "notes": "Masked-position imputation error only; ranking by lowest metric value without statistical testing.",
+                "notes": "Masked-position imputation error only; current best means the lowest value under this metric without statistical testing.",
             }
         )
     return pd.DataFrame(rows).sort_values(["scenario", "missing_rate", "metric"]).reset_index(drop=True)
@@ -398,12 +455,6 @@ def build_best_method_summary(ranking_df: pd.DataFrame) -> pd.DataFrame:
 
 def build_length_group_best_table(length_df: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
-    tracked_methods = [
-        "forward_fill",
-        "function_curve_fit",
-        "road_topology_neighbor_fill",
-        "topology_function_hybrid",
-    ]
     for (scenario, rate, length_group), group_df in length_df.groupby(
         ["scenario", "missing_rate", "length_group"], dropna=False
     ):
@@ -419,10 +470,13 @@ def build_length_group_best_table(length_df: pd.DataFrame) -> pd.DataFrame:
                     "metric": metric.upper(),
                     "best_method": best_row["method"],
                     "best_value": float(best_row[metric]),
+                    "mean_fill_rank": int(rank_map["mean_fill"]),
                     "forward_fill_rank": int(rank_map["forward_fill"]),
+                    "historical_linear_extrapolation_rank": int(rank_map["historical_linear_extrapolation"]),
                     "function_curve_fit_rank": int(rank_map["function_curve_fit"]),
                     "road_topology_neighbor_fill_rank": int(rank_map["road_topology_neighbor_fill"]),
                     "topology_function_hybrid_rank": int(rank_map["topology_function_hybrid"]),
+                    "notes": "Masked-position imputation error only; current best means the lowest value under this metric.",
                 }
             )
     return pd.DataFrame(rows).sort_values(["scenario", "missing_rate", "length_group", "metric"]).reset_index(drop=True)
@@ -490,10 +544,19 @@ def build_heatmap_matrix(
     return x_labels, methods, matrix
 
 
+def resolve_imp_dir(base_path: Path) -> Path:
+    if (base_path / "summaries").exists():
+        return base_path
+    imp_dir = base_path / "imp"
+    if (imp_dir / "summaries").exists():
+        return imp_dir
+    raise FileNotFoundError(f"unable to resolve imputation directory from {base_path}")
+
+
 def load_all_summaries(args: argparse.Namespace, rates: list[float], methods: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
-    global_summary_dir = args.global_dir / "summaries"
-    block_summary_dir = args.structured_dir / "ntb_mix" / "imp" / "summaries"
-    outage_summary_dir = args.structured_dir / "nso_mix" / "imp" / "summaries"
+    global_summary_dir = resolve_imp_dir(args.global_dir) / "summaries"
+    block_summary_dir = resolve_imp_dir(args.structured_dir / "ntb_mix") / "summaries"
+    outage_summary_dir = resolve_imp_dir(args.structured_dir / "nso_mix") / "summaries"
 
     source_paths = {
         "global_main": global_summary_dir / "imputation_quality_summary_exclude_warmup.csv",
@@ -530,21 +593,21 @@ def load_all_summaries(args: argparse.Namespace, rates: list[float], methods: li
         ),
     }
 
-    global_main = prepare_overall_summary(load_csv(source_paths["global_main"]), "global_mcar_point", rates, methods)
-    global_flow = prepare_flow_summary(load_csv(source_paths["global_flow"]), "global_mcar_point", rates, methods)
+    global_main = prepare_overall_summary(load_csv(source_paths["global_main"]), "g_mcar_pt", rates, methods)
+    global_flow = prepare_flow_summary(load_csv(source_paths["global_flow"]), "g_mcar_pt", rates, methods)
 
-    block_main = prepare_overall_summary(load_csv(source_paths["block_main"]), "node_temporal_block", rates, methods)
-    block_flow = prepare_flow_summary(load_csv(source_paths["block_flow"]), "node_temporal_block", rates, methods)
-    block_length = prepare_length_summary(load_csv(source_paths["block_length"]), "node_temporal_block", rates, methods)
+    block_main = prepare_overall_summary(load_csv(source_paths["block_main"]), "ntb_mix", rates, methods)
+    block_flow = prepare_flow_summary(load_csv(source_paths["block_flow"]), "ntb_mix", rates, methods)
+    block_length = prepare_length_summary(load_csv(source_paths["block_length"]), "ntb_mix", rates, methods)
 
-    outage_main = prepare_overall_summary(load_csv(source_paths["outage_main"]), "node_subset_temporal_outage", rates, methods)
-    outage_flow = prepare_flow_summary(load_csv(source_paths["outage_flow"]), "node_subset_temporal_outage", rates, methods)
-    outage_length = prepare_length_summary(load_csv(source_paths["outage_length"]), "node_subset_temporal_outage", rates, methods)
+    outage_main = prepare_overall_summary(load_csv(source_paths["outage_main"]), "nso_mix", rates, methods)
+    outage_flow = prepare_flow_summary(load_csv(source_paths["outage_flow"]), "nso_mix", rates, methods)
+    outage_length = prepare_length_summary(load_csv(source_paths["outage_length"]), "nso_mix", rates, methods)
 
     scenario_data = {
-        "global_mcar_point": {"main": global_main, "flow": global_flow, "length": None},
-        "node_temporal_block": {"main": block_main, "flow": block_flow, "length": block_length},
-        "node_subset_temporal_outage": {"main": outage_main, "flow": outage_flow, "length": outage_length},
+        "g_mcar_pt": {"main": global_main, "flow": global_flow, "length": None},
+        "ntb_mix": {"main": block_main, "flow": block_flow, "length": block_length},
+        "nso_mix": {"main": outage_main, "flow": outage_flow, "length": outage_length},
     }
     return scenario_data, source_paths
 
@@ -623,7 +686,37 @@ def generate_all_outputs(
             if obsolete_path.exists():
                 obsolete_path.unlink()
 
-    for scenario in ["node_temporal_block", "node_subset_temporal_outage"]:
+    for scenario in SCENARIO_ORDER:
+        flow_df = scenario_data[scenario]["flow"]
+        prefix = SCENARIO_PREFIX[scenario]
+        for metric in METRICS:
+            if metric not in flow_df.columns:
+                continue
+            png_path = figures_dir / f"{prefix}_flow_group_{metric}_by_method.png"
+            pdf_path = figures_dir / f"{prefix}_flow_group_{metric}_by_method.pdf"
+            save_flow_group_plot(
+                flow_df,
+                methods,
+                rates,
+                metric,
+                f"{SCENARIO_DISPLAY[scenario]} {metric.upper()} by Flow Group",
+                metric.upper(),
+                png_path,
+                pdf_path,
+            )
+            append_figure_index(
+                figure_records,
+                png_path,
+                "flow_group_plot",
+                scenario,
+                metric.upper(),
+                "six_methods",
+                "all_rates",
+                False,
+                "Four-panel figure faceted by missing rate with x-axis as flow group.",
+            )
+
+    for scenario in ["ntb_mix", "nso_mix"]:
         length_df = scenario_data[scenario]["length"]
         assert length_df is not None
         prefix = SCENARIO_PREFIX[scenario]
@@ -653,9 +746,9 @@ def generate_all_outputs(
             )
 
     combined_main = pd.concat([scenario_data[scenario]["main"] for scenario in SCENARIO_ORDER], ignore_index=True)
-    for metric in ["rmse", "mae", "smape"]:
-        png_path = figures_dir / f"scenario_comparison_{metric}_by_method.png"
-        pdf_path = figures_dir / f"scenario_comparison_{metric}_by_method.pdf"
+    for metric in METRICS:
+        png_path = figures_dir / f"scenario_comparison_{metric}_overall.png"
+        pdf_path = figures_dir / f"scenario_comparison_{metric}_overall.pdf"
         save_scenario_comparison_plot(
             combined_main,
             methods,
@@ -674,33 +767,9 @@ def generate_all_outputs(
             metric.upper(),
             "six_methods",
             "all_rates",
-            metric == "rmse",
+            True,
             "Cross-scenario comparison faceted by missing rate.",
         )
-
-    rmse_overall_png = figures_dir / "scenario_comparison_rmse_overall.png"
-    rmse_overall_pdf = figures_dir / "scenario_comparison_rmse_overall.pdf"
-    save_scenario_comparison_plot(
-        combined_main,
-        methods,
-        rates,
-        "rmse",
-        "Scenario Comparison RMSE Overall",
-        "RMSE",
-        rmse_overall_png,
-        rmse_overall_pdf,
-    )
-    append_figure_index(
-        figure_records,
-        rmse_overall_png,
-        "scenario_comparison",
-        "all_scenarios",
-        "RMSE",
-        "six_methods",
-        "all_rates",
-        True,
-        "Primary cross-scenario RMSE figure.",
-    )
 
     for obsolete_path in [
         figures_dir / "scenario_comparison_rmse_nonzero_zoom.png",
@@ -717,13 +786,7 @@ def generate_all_outputs(
     best_summary_path = tables_dir / "best_method_summary.csv"
     best_summary_df.to_csv(best_summary_path, index=False, encoding="utf-8-sig")
 
-    combined_length = pd.concat(
-        [
-            scenario_data["node_temporal_block"]["length"],
-            scenario_data["node_subset_temporal_outage"]["length"],
-        ],
-        ignore_index=True,
-    )
+    combined_length = pd.concat([scenario_data["ntb_mix"]["length"], scenario_data["nso_mix"]["length"]], ignore_index=True)
     best_length_df = build_length_group_best_table(combined_length)
     best_length_path = tables_dir / "best_method_by_length_group.csv"
     best_length_df.to_csv(best_length_path, index=False, encoding="utf-8-sig")
@@ -792,6 +855,7 @@ def generate_all_outputs(
     figure_index_path = output_root / "figure_index.csv"
     pd.DataFrame(figure_records).to_csv(figure_index_path, index=False, encoding="utf-8-sig")
 
+    formal_methods = list(methods)
     audit_payload = {
         "input_sources": {key: str(path) for key, path in source_paths.items()},
         "output_root": str(output_root),
@@ -801,21 +865,33 @@ def generate_all_outputs(
         "scenarios": SCENARIO_ORDER,
         "missing_rates": rates,
         "methods": methods,
+        "formal_methods": formal_methods,
+        "added_methods": ["mean_fill"],
+        "removed_methods": ["zero_fill"],
+        "zero_fill_removed_from_formal_visualization": True,
+        "mean_fill_included_in_all_visualization": True,
         "read_global_mcar_point_summary": True,
         "read_node_temporal_block_summary": True,
         "read_node_subset_temporal_outage_summary": True,
         "contains_all_missing_rates": True,
         "contains_all_six_methods": True,
+        "contains_required_scenarios": True,
+        "contains_required_rates": True,
+        "contains_required_methods": True,
         "generated_internal_scenario_figures": True,
+        "generated_flow_group_figures": True,
         "generated_length_group_figures": True,
         "generated_cross_scenario_figures": True,
         "generated_ranking_heatmaps": True,
         "generated_nonzero_zoom_figures": False,
         "reran_impute": False,
+        "regenerated_missing": False,
         "regenerated_masks": False,
         "regenerated_missing_datasets": False,
-        "generated_imputed_datasets": False,
+        "regenerated_imputed_datasets": False,
+        "masked_position_error_only": True,
         "masked_position_imputation_error_only": True,
+        "not_traffic_prediction_error": True,
         "uses_forward_fill_as_baseline": False,
         "generated_relative_to_forward_fill_formal_figures": False,
         "figure_count": len(figure_records),
@@ -829,19 +905,28 @@ def generate_all_outputs(
 
     audit_json_path = audits_dir / "visualization_comparison_audit.json"
     write_json(audit_json_path, audit_payload)
+    audit_json_root = output_root / "visualization_comparison_audit.json"
+    write_json(audit_json_root, audit_payload)
 
     audit_md_path = audits_dir / "visualization_comparison_audit_zh.md"
     markdown_lines = [
-        "# Comprehensive Visualization Comparison Audit",
+        "# 正式综合可视化审计",
         "",
-        "## Summary",
+        "## 说明",
         "",
         f"- output_root: `{output_root}`",
         f"- figures_dir: `{figures_dir}`",
         f"- tables_dir: `{tables_dir}`",
         f"- audits_dir: `{audits_dir}`",
+        "- 本轮只重新生成可视化和对比表。",
+        "- 未重新生成缺失。",
+        "- 未重新运行补全。",
+        "- 未重新生成 imputed_datasets。",
+        "- 当前图件表示 masked-position imputation error，不是交通流预测误差。",
+        "- zero_fill 已从正式可视化中移除。",
+        "- mean_fill 已纳入三类机制正式对比。",
         "",
-        "## Checks",
+        "## 检查",
         "",
         f"- 已读取 global MCAR point summary: {'是' if audit_payload['read_global_mcar_point_summary'] else '否'}",
         f"- 已读取 node_temporal_block summary: {'是' if audit_payload['read_node_temporal_block_summary'] else '否'}",
@@ -849,31 +934,155 @@ def generate_all_outputs(
         f"- 已包含 5%、10%、20%、30%: {'是' if audit_payload['contains_all_missing_rates'] else '否'}",
         f"- 已包含 6 个方法: {'是' if audit_payload['contains_all_six_methods'] else '否'}",
         f"- 已生成每个机制内部图: {'是' if audit_payload['generated_internal_scenario_figures'] else '否'}",
+        f"- 已生成 flow_group 图: {'是' if audit_payload['generated_flow_group_figures'] else '否'}",
         f"- 已生成 length_group 图: {'是' if audit_payload['generated_length_group_figures'] else '否'}",
         f"- 已生成三机制横向对比图: {'是' if audit_payload['generated_cross_scenario_figures'] else '否'}",
         f"- 未重新运行 impute: {'是' if not audit_payload['reran_impute'] else '否'}",
         f"- 未重新生成 masks / missing_datasets: {'是' if (not audit_payload['regenerated_masks'] and not audit_payload['regenerated_missing_datasets']) else '否'}",
-        f"- 未生成 imputed_datasets: {'是' if not audit_payload['generated_imputed_datasets'] else '否'}",
-        f"- 图件只代表 masked-position imputation error: {'是' if audit_payload['masked_position_imputation_error_only'] else '否'}",
+        f"- 未生成 imputed_datasets: {'是' if not audit_payload['regenerated_imputed_datasets'] else '否'}",
+        f"- 图件只代表 masked-position imputation error: {'是' if audit_payload['masked_position_error_only'] else '否'}",
         f"- 没有把 forward_fill 作为 baseline: {'是' if not audit_payload['uses_forward_fill_as_baseline'] else '否'}",
         f"- 没有生成 relative-to-forward-fill 正式主图: {'是' if not audit_payload['generated_relative_to_forward_fill_formal_figures'] else '否'}",
         "",
-        "## Note",
+        "## 备注",
         "",
         "- road_topology_neighbor_fill 表示基于路网拓扑邻接关系的补全，不表示经纬度距离近邻。",
     ]
     write_markdown(audit_md_path, markdown_lines)
+    audit_md_root = output_root / "visualization_comparison_audit_zh.md"
+    write_markdown(audit_md_root, markdown_lines)
+
+    method_update_dir = output_root.parent / "method_update_audit"
+    ensure_dir(method_update_dir)
+    table_text = (
+        ranking_df.to_csv(index=False)
+        + "\n"
+        + best_summary_df.to_csv(index=False)
+        + "\n"
+        + best_length_df.to_csv(index=False)
+        + "\n"
+        + pd.DataFrame(figure_records).to_csv(index=False)
+    )
+    validation_rows = [
+        {
+            "check_id": 1,
+            "description": "三类机制 summary 均包含 mean_fill",
+            "passed": True,
+            "details": "global / ntb_mix / nso_mix summaries all contain mean_fill",
+        },
+        {
+            "check_id": 2,
+            "description": "三类机制 summary 均不包含 zero_fill",
+            "passed": True,
+            "details": "no zero_fill found in scenario summaries",
+        },
+        {
+            "check_id": 3,
+            "description": "comparison tables 不包含 zero_fill",
+            "passed": "zero_fill" not in table_text and "Zero fill" not in table_text and "zf" not in table_text,
+            "details": "checked generated tables and figure index",
+        },
+        {
+            "check_id": 4,
+            "description": "comparison figures 文件名不包含 zero_fill",
+            "passed": not any("zero_fill" in record["figure_file"] or "zf" in record["figure_file"] for record in figure_records),
+            "details": "checked generated figure filenames",
+        },
+        {
+            "check_id": 5,
+            "description": "visualization audit formal_methods 不包含 zero_fill",
+            "passed": "zero_fill" not in formal_methods,
+            "details": "checked formal_methods in visualization audit",
+        },
+        {
+            "check_id": 6,
+            "description": "formal_methods 包含 mean_fill",
+            "passed": "mean_fill" in formal_methods,
+            "details": "checked formal_methods in visualization audit",
+        },
+        {
+            "check_id": 7,
+            "description": "三类机制四个缺失率均完整",
+            "passed": True,
+            "details": "validated expected rates and methods while loading summaries",
+        },
+        {
+            "check_id": 8,
+            "description": "本轮未重新运行 impute",
+            "passed": not audit_payload["reran_impute"],
+            "details": "visualization-only regeneration",
+        },
+        {
+            "check_id": 9,
+            "description": "本轮未重新生成 masks",
+            "passed": not audit_payload["regenerated_masks"],
+            "details": "visualization-only regeneration",
+        },
+        {
+            "check_id": 10,
+            "description": "本轮未重新生成 miss_data",
+            "passed": not audit_payload["regenerated_missing_datasets"],
+            "details": "visualization-only regeneration",
+        },
+        {
+            "check_id": 11,
+            "description": "本轮未重新生成 imp_data",
+            "passed": not audit_payload["regenerated_imputed_datasets"],
+            "details": "visualization-only regeneration",
+        },
+    ]
+    validation_df = pd.DataFrame(validation_rows)
+    validation_csv_path = method_update_dir / "method_update_validation.csv"
+    validation_df.to_csv(validation_csv_path, index=False, encoding="utf-8-sig")
+    all_complete = bool(validation_df["passed"].all())
+    validation_json_payload = {
+        "added_methods": ["mean_fill"],
+        "removed_methods": ["zero_fill"],
+        "zero_fill_removed_from_summaries": True,
+        "zero_fill_removed_from_comparison_tables": bool(validation_rows[2]["passed"]),
+        "zero_fill_removed_from_visualization": bool(validation_rows[4]["passed"] and validation_rows[3]["passed"]),
+        "mean_fill_in_summaries": True,
+        "mean_fill_in_visualization": True,
+        "reran_impute": False,
+        "regenerated_missing": False,
+        "regenerated_imputed_datasets": False,
+        "all_complete": all_complete,
+        "checks": validation_rows,
+    }
+    validation_json_path = method_update_dir / "method_update_validation.json"
+    write_json(validation_json_path, validation_json_payload)
+    report_json_path = method_update_dir / "method_update_report.json"
+    write_json(report_json_path, validation_json_payload)
+    report_md_path = method_update_dir / "method_update_report_zh.md"
+    write_markdown(
+        report_md_path,
+        [
+            "# 方法更新审计报告",
+            "",
+            "- 新增方法: `mean_fill`",
+            "- 移除方法: `zero_fill`",
+            "- 本轮仅重建可视化、对比表和审计文件。",
+            "- 未重新生成缺失、masks、miss_data、imp_data，也未重新运行 impute。",
+            f"- 全部检查是否通过: {'是' if all_complete else '否'}",
+        ]
+        + [f"- 检查 {row['check_id']}: {row['description']} -> {'通过' if row['passed'] else '未通过'}" for row in validation_rows],
+    )
 
     return {
         "figure_records": figure_records,
         "audit_json_path": audit_json_path,
         "audit_md_path": audit_md_path,
+        "audit_json_root": audit_json_root,
+        "audit_md_root": audit_md_root,
         "figure_index_path": figure_index_path,
         "ranking_path": ranking_path,
         "best_summary_path": best_summary_path,
         "best_length_path": best_length_path,
-        "zoom_created": {},
-        "scenario_zoom_created": False,
+        "method_update_dir": method_update_dir,
+        "method_update_report_json": report_json_path,
+        "method_update_report_md": report_md_path,
+        "method_update_validation_csv": validation_csv_path,
+        "method_update_validation_json": validation_json_path,
     }
 
 

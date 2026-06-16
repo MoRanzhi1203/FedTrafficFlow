@@ -1,31 +1,39 @@
 ﻿figure_file,figure_type,scenario_scope,metric,method_scope,rate_scope,is_formal_main_figure,notes
-figures\global_mcar_rmse_by_method.png,line_plot,g_mcar_pt,RMSE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\global_mcar_mae_by_method.png,line_plot,g_mcar_pt,MAE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\global_mcar_smape_by_method.png,line_plot,g_mcar_pt,SMAPE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\global_mcar_nrmse_by_method.png,line_plot,g_mcar_pt,NRMSE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\global_mcar_rmse_nonzero_zoom.png,zoom_line_plot,g_mcar_pt,RMSE,nonzero_methods,all_rates,False,Zoom figure excludes zero fill and is only for observing non-zero-fill methods.
-figures\block_rmse_by_method.png,line_plot,node_temporal_block,RMSE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\block_mae_by_method.png,line_plot,node_temporal_block,MAE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\block_smape_by_method.png,line_plot,node_temporal_block,SMAPE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\block_nrmse_by_method.png,line_plot,node_temporal_block,NRMSE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\block_rmse_nonzero_zoom.png,zoom_line_plot,node_temporal_block,RMSE,nonzero_methods,all_rates,False,Zoom figure excludes zero fill and is only for observing non-zero-fill methods.
-figures\outage_rmse_by_method.png,line_plot,node_subset_temporal_outage,RMSE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\outage_mae_by_method.png,line_plot,node_subset_temporal_outage,MAE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\outage_smape_by_method.png,line_plot,node_subset_temporal_outage,SMAPE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\outage_nrmse_by_method.png,line_plot,node_subset_temporal_outage,NRMSE,six_methods,all_rates,True,Masked-position imp error; formal six-method direct comparison.
-figures\outage_rmse_nonzero_zoom.png,zoom_line_plot,node_subset_temporal_outage,RMSE,nonzero_methods,all_rates,False,Zoom figure excludes zero fill and is only for observing non-zero-fill methods.
-figures\block_length_group_rmse_by_method.png,length_group_plot,node_temporal_block,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
-figures\block_length_group_mae_by_method.png,length_group_plot,node_temporal_block,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
-figures\block_length_group_smape_by_method.png,length_group_plot,node_temporal_block,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
-figures\outage_length_group_rmse_by_method.png,length_group_plot,node_subset_temporal_outage,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
-figures\outage_length_group_mae_by_method.png,length_group_plot,node_subset_temporal_outage,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
-figures\outage_length_group_smape_by_method.png,length_group_plot,node_subset_temporal_outage,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
-figures\scenario_comparison_rmse_by_method.png,scenario_comparison,all_scenarios,RMSE,six_methods,all_rates,True,Cross-scenario comparison faceted by missing rate.
-figures\scenario_comparison_mae_by_method.png,scenario_comparison,all_scenarios,MAE,six_methods,all_rates,False,Cross-scenario comparison faceted by missing rate.
-figures\scenario_comparison_smape_by_method.png,scenario_comparison,all_scenarios,SMAPE,six_methods,all_rates,False,Cross-scenario comparison faceted by missing rate.
-figures\scenario_comparison_rmse_overall.png,scenario_comparison,all_scenarios,RMSE,six_methods,all_rates,True,Primary cross-scenario RMSE figure.
-figures\scenario_comparison_rmse_nonzero_zoom.png,scenario_comparison_zoom,all_scenarios,RMSE,nonzero_methods,all_rates,False,Zoom figure excludes zero fill and does not replace the formal six-method figure.
-figures\rank_heatmap_global_mcar_rmse.png,rank_heatmap,g_mcar_pt,RMSE,six_methods,all_rates,False,Auxiliary ranking heatmap.
-figures\rank_heatmap_block_rmse.png,rank_heatmap,node_temporal_block,RMSE,six_methods,all_rates,False,Auxiliary ranking heatmap.
-figures\rank_heatmap_outage_rmse.png,rank_heatmap,node_subset_temporal_outage,RMSE,six_methods,all_rates,False,Auxiliary ranking heatmap.
+figures\g_mcar_pt_rmse_by_method.png,line_plot,g_mcar_pt,RMSE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\g_mcar_pt_mae_by_method.png,line_plot,g_mcar_pt,MAE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\g_mcar_pt_smape_by_method.png,line_plot,g_mcar_pt,SMAPE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\g_mcar_pt_nrmse_by_method.png,line_plot,g_mcar_pt,NRMSE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\ntb_mix_rmse_by_method.png,line_plot,ntb_mix,RMSE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\ntb_mix_mae_by_method.png,line_plot,ntb_mix,MAE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\ntb_mix_smape_by_method.png,line_plot,ntb_mix,SMAPE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\ntb_mix_nrmse_by_method.png,line_plot,ntb_mix,NRMSE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\nso_mix_rmse_by_method.png,line_plot,nso_mix,RMSE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\nso_mix_mae_by_method.png,line_plot,nso_mix,MAE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\nso_mix_smape_by_method.png,line_plot,nso_mix,SMAPE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\nso_mix_nrmse_by_method.png,line_plot,nso_mix,NRMSE,six_methods,all_rates,True,Masked-position imputation error; formal six-method direct comparison.
+figures\g_mcar_pt_flow_group_rmse_by_method.png,flow_group_plot,g_mcar_pt,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\g_mcar_pt_flow_group_mae_by_method.png,flow_group_plot,g_mcar_pt,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\g_mcar_pt_flow_group_smape_by_method.png,flow_group_plot,g_mcar_pt,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\g_mcar_pt_flow_group_nrmse_by_method.png,flow_group_plot,g_mcar_pt,NRMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\ntb_mix_flow_group_rmse_by_method.png,flow_group_plot,ntb_mix,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\ntb_mix_flow_group_mae_by_method.png,flow_group_plot,ntb_mix,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\ntb_mix_flow_group_smape_by_method.png,flow_group_plot,ntb_mix,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\ntb_mix_flow_group_nrmse_by_method.png,flow_group_plot,ntb_mix,NRMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\nso_mix_flow_group_rmse_by_method.png,flow_group_plot,nso_mix,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\nso_mix_flow_group_mae_by_method.png,flow_group_plot,nso_mix,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\nso_mix_flow_group_smape_by_method.png,flow_group_plot,nso_mix,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\nso_mix_flow_group_nrmse_by_method.png,flow_group_plot,nso_mix,NRMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as flow group.
+figures\ntb_mix_length_group_rmse_by_method.png,length_group_plot,ntb_mix,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
+figures\ntb_mix_length_group_mae_by_method.png,length_group_plot,ntb_mix,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
+figures\ntb_mix_length_group_smape_by_method.png,length_group_plot,ntb_mix,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
+figures\nso_mix_length_group_rmse_by_method.png,length_group_plot,nso_mix,RMSE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
+figures\nso_mix_length_group_mae_by_method.png,length_group_plot,nso_mix,MAE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
+figures\nso_mix_length_group_smape_by_method.png,length_group_plot,nso_mix,SMAPE,six_methods,all_rates,False,Four-panel figure faceted by missing rate with x-axis as length group.
+figures\scenario_comparison_rmse_overall.png,scenario_comparison,all_scenarios,RMSE,six_methods,all_rates,True,Cross-scenario comparison faceted by missing rate.
+figures\scenario_comparison_mae_overall.png,scenario_comparison,all_scenarios,MAE,six_methods,all_rates,True,Cross-scenario comparison faceted by missing rate.
+figures\scenario_comparison_smape_overall.png,scenario_comparison,all_scenarios,SMAPE,six_methods,all_rates,True,Cross-scenario comparison faceted by missing rate.
+figures\scenario_comparison_nrmse_overall.png,scenario_comparison,all_scenarios,NRMSE,six_methods,all_rates,True,Cross-scenario comparison faceted by missing rate.
+figures\rank_heatmap_g_mcar_pt_rmse.png,rank_heatmap,g_mcar_pt,RMSE,six_methods,all_rates,False,Auxiliary ranking heatmap.
+figures\rank_heatmap_ntb_mix_rmse.png,rank_heatmap,ntb_mix,RMSE,six_methods,all_rates,False,Auxiliary ranking heatmap.
+figures\rank_heatmap_nso_mix_rmse.png,rank_heatmap,nso_mix,RMSE,six_methods,all_rates,False,Auxiliary ranking heatmap.
 figures\rank_heatmap_scenario_method_rmse.png,rank_heatmap,all_scenarios,RMSE,six_methods,all_rates,False,Auxiliary cross-scenario ranking heatmap.

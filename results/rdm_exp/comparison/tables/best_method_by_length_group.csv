@@ -1,73 +1,73 @@
-﻿scenario,missing_rate,length_group,metric,best_method,best_value,forward_fill_rank,function_curve_fit_rank,road_topology_neighbor_fill_rank,topology_function_hybrid_rank
-node_subset_temporal_outage,0.05,long,MAE,function_curve_fit,133.56559313822223,3,1,5,4
-node_subset_temporal_outage,0.05,long,RMSE,function_curve_fit,256.24312400474986,3,1,5,4
-node_subset_temporal_outage,0.05,long,SMAPE,function_curve_fit,0.0724881515743434,3,1,5,4
-node_subset_temporal_outage,0.05,mid,MAE,function_curve_fit,134.91304014096465,2,1,5,4
-node_subset_temporal_outage,0.05,mid,RMSE,function_curve_fit,255.5926739894717,3,1,5,4
-node_subset_temporal_outage,0.05,mid,SMAPE,function_curve_fit,0.0758630852905646,2,1,5,4
-node_subset_temporal_outage,0.05,short,MAE,forward_fill,89.44859937282641,1,2,5,4
-node_subset_temporal_outage,0.05,short,RMSE,forward_fill,187.04757424381137,1,2,5,4
-node_subset_temporal_outage,0.05,short,SMAPE,forward_fill,0.0500834921167605,1,2,5,4
-node_subset_temporal_outage,0.1,long,MAE,function_curve_fit,142.15460675791118,3,1,5,4
-node_subset_temporal_outage,0.1,long,RMSE,function_curve_fit,270.77933073458365,3,1,5,4
-node_subset_temporal_outage,0.1,long,SMAPE,function_curve_fit,0.0792533920320165,3,1,5,4
-node_subset_temporal_outage,0.1,mid,MAE,function_curve_fit,134.54245249593808,2,1,5,4
-node_subset_temporal_outage,0.1,mid,RMSE,function_curve_fit,256.16553277481967,3,1,5,4
-node_subset_temporal_outage,0.1,mid,SMAPE,function_curve_fit,0.0746392252341732,2,1,5,4
-node_subset_temporal_outage,0.1,short,MAE,forward_fill,90.58878344090736,1,2,5,4
-node_subset_temporal_outage,0.1,short,RMSE,forward_fill,189.17027659670384,1,2,5,4
-node_subset_temporal_outage,0.1,short,SMAPE,forward_fill,0.0505742283546585,1,2,5,4
-node_subset_temporal_outage,0.2,long,MAE,function_curve_fit,136.6822035170178,3,1,5,4
-node_subset_temporal_outage,0.2,long,RMSE,function_curve_fit,260.0625238636859,3,1,5,4
-node_subset_temporal_outage,0.2,long,SMAPE,function_curve_fit,0.0754861146886198,3,1,5,4
-node_subset_temporal_outage,0.2,mid,MAE,function_curve_fit,136.84475931233263,2,1,5,4
-node_subset_temporal_outage,0.2,mid,RMSE,function_curve_fit,260.2735877484623,3,1,5,4
-node_subset_temporal_outage,0.2,mid,SMAPE,function_curve_fit,0.0761625790893466,2,1,5,4
-node_subset_temporal_outage,0.2,short,MAE,forward_fill,95.52858487588334,1,2,5,4
-node_subset_temporal_outage,0.2,short,RMSE,forward_fill,200.4262305728083,1,2,5,4
-node_subset_temporal_outage,0.2,short,SMAPE,forward_fill,0.0530573171055557,1,2,5,4
-node_subset_temporal_outage,0.3,long,MAE,function_curve_fit,141.05314738583573,3,1,5,4
-node_subset_temporal_outage,0.3,long,RMSE,function_curve_fit,267.58414203684777,3,1,5,4
-node_subset_temporal_outage,0.3,long,SMAPE,function_curve_fit,0.0782455583560636,3,1,5,4
-node_subset_temporal_outage,0.3,mid,MAE,function_curve_fit,137.0337942803156,2,1,5,4
-node_subset_temporal_outage,0.3,mid,RMSE,function_curve_fit,261.3963942172176,2,1,5,4
-node_subset_temporal_outage,0.3,mid,SMAPE,function_curve_fit,0.075916995976709,2,1,5,4
-node_subset_temporal_outage,0.3,short,MAE,forward_fill,101.44731751146026,1,2,5,4
-node_subset_temporal_outage,0.3,short,RMSE,forward_fill,213.33248268858196,1,2,5,4
-node_subset_temporal_outage,0.3,short,SMAPE,forward_fill,0.0560033784364116,1,2,5,4
-node_temporal_block,0.05,long,MAE,function_curve_fit,135.5769471010426,3,1,5,4
-node_temporal_block,0.05,long,RMSE,function_curve_fit,257.9169021985977,3,1,5,4
-node_temporal_block,0.05,long,SMAPE,function_curve_fit,0.0756521565791632,3,1,5,4
-node_temporal_block,0.05,mid,MAE,function_curve_fit,135.4923753325646,2,1,5,4
-node_temporal_block,0.05,mid,RMSE,function_curve_fit,257.67959960784765,3,1,5,4
-node_temporal_block,0.05,mid,SMAPE,function_curve_fit,0.0756705574409382,2,1,5,4
-node_temporal_block,0.05,short,MAE,forward_fill,120.58139187874288,1,2,5,4
-node_temporal_block,0.05,short,RMSE,forward_fill,251.5455290356232,1,2,5,4
-node_temporal_block,0.05,short,SMAPE,forward_fill,0.065734854677206,1,2,5,4
-node_temporal_block,0.1,long,MAE,function_curve_fit,135.4623128541697,3,1,5,4
-node_temporal_block,0.1,long,RMSE,function_curve_fit,257.2800801832132,3,1,5,4
-node_temporal_block,0.1,long,SMAPE,function_curve_fit,0.0754244587484544,3,1,5,4
-node_temporal_block,0.1,mid,MAE,function_curve_fit,136.0978407675179,2,1,5,4
-node_temporal_block,0.1,mid,RMSE,function_curve_fit,258.9755558514961,3,1,5,4
-node_temporal_block,0.1,mid,SMAPE,function_curve_fit,0.0756691035449879,2,1,5,4
-node_temporal_block,0.1,short,MAE,forward_fill,120.40180089120707,1,2,5,4
-node_temporal_block,0.1,short,RMSE,forward_fill,250.1295170239259,1,2,5,4
-node_temporal_block,0.1,short,SMAPE,forward_fill,0.0651878823694585,1,2,5,4
-node_temporal_block,0.2,long,MAE,function_curve_fit,139.14238152355625,3,1,5,4
-node_temporal_block,0.2,long,RMSE,function_curve_fit,266.2606015558055,3,1,5,4
-node_temporal_block,0.2,long,SMAPE,function_curve_fit,0.0762952382742388,3,1,5,4
-node_temporal_block,0.2,mid,MAE,function_curve_fit,137.46332570830864,2,1,5,4
-node_temporal_block,0.2,mid,RMSE,function_curve_fit,261.90357719750307,2,1,5,4
-node_temporal_block,0.2,mid,SMAPE,function_curve_fit,0.0758952756861361,2,1,5,4
-node_temporal_block,0.2,short,MAE,forward_fill,119.72046493067135,1,2,5,4
-node_temporal_block,0.2,short,RMSE,forward_fill,249.30114828426989,1,2,5,4
-node_temporal_block,0.2,short,SMAPE,forward_fill,0.0650754470852574,1,2,5,4
-node_temporal_block,0.3,long,MAE,function_curve_fit,139.3577888501488,3,1,5,4
-node_temporal_block,0.3,long,RMSE,function_curve_fit,265.9112145702853,3,1,5,4
-node_temporal_block,0.3,long,SMAPE,function_curve_fit,0.0760969065317414,3,1,5,4
-node_temporal_block,0.3,mid,MAE,function_curve_fit,137.90923100509525,2,1,5,4
-node_temporal_block,0.3,mid,RMSE,function_curve_fit,262.3448555514628,2,1,5,4
-node_temporal_block,0.3,mid,SMAPE,function_curve_fit,0.0762014883099098,2,1,5,4
-node_temporal_block,0.3,short,MAE,forward_fill,120.1843443655386,1,2,5,4
-node_temporal_block,0.3,short,RMSE,forward_fill,250.2517383251023,1,2,5,4
-node_temporal_block,0.3,short,SMAPE,forward_fill,0.0654297630919183,1,2,5,4
+﻿scenario,missing_rate,length_group,metric,best_method,best_value,mean_fill_rank,forward_fill_rank,historical_linear_extrapolation_rank,function_curve_fit_rank,road_topology_neighbor_fill_rank,topology_function_hybrid_rank,notes
+nso_mix,0.05,long,MAE,mean_fill,126.26480005667128,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,long,RMSE,mean_fill,247.71069521329835,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,long,SMAPE,mean_fill,0.0663918114591764,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,mid,MAE,mean_fill,129.11673346117047,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,mid,RMSE,mean_fill,249.83993722115076,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,mid,SMAPE,mean_fill,0.0701791085514693,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,short,MAE,forward_fill,89.44859937282641,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,short,RMSE,forward_fill,187.04757424381137,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.05,short,SMAPE,forward_fill,0.0500834921167605,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,long,MAE,mean_fill,135.75444294490794,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,long,RMSE,mean_fill,263.93050481909086,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,long,SMAPE,mean_fill,0.0732842746406775,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,mid,MAE,mean_fill,129.72190908013735,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,mid,RMSE,mean_fill,251.6503940910536,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,mid,SMAPE,mean_fill,0.0696678462531569,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,short,MAE,forward_fill,90.58878344090736,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,short,RMSE,forward_fill,189.17027659670384,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.1,short,SMAPE,forward_fill,0.0505742283546585,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,long,MAE,mean_fill,132.76933391153537,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,long,RMSE,mean_fill,258.1238093901202,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,long,SMAPE,mean_fill,0.0709088687955491,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,mid,MAE,mean_fill,131.72610055767848,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,mid,RMSE,mean_fill,256.68910066846576,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,mid,SMAPE,mean_fill,0.0711024773520278,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,short,MAE,forward_fill,95.52858487588334,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,short,RMSE,forward_fill,200.4262305728083,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.2,short,SMAPE,forward_fill,0.0530573171055557,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,long,MAE,mean_fill,137.21263661278283,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,long,RMSE,mean_fill,265.753611894639,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,long,SMAPE,mean_fill,0.0739301130717905,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,mid,MAE,mean_fill,133.29917578019115,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,mid,RMSE,mean_fill,260.00115269921304,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,mid,SMAPE,mean_fill,0.0709773823840754,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,short,MAE,forward_fill,101.44731751146026,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,short,RMSE,forward_fill,213.33248268858196,3,1,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+nso_mix,0.3,short,SMAPE,forward_fill,0.0560033784364116,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,long,MAE,mean_fill,129.1988780593655,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,long,RMSE,mean_fill,250.68055925803557,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,long,SMAPE,mean_fill,0.0696936012490179,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,mid,MAE,mean_fill,129.21761481128368,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,mid,RMSE,mean_fill,250.58280488968515,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,mid,SMAPE,mean_fill,0.0697597120708819,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,short,MAE,forward_fill,120.58139187874288,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,short,RMSE,mean_fill,250.3660544596604,1,2,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.05,short,SMAPE,forward_fill,0.065734854677206,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,long,MAE,mean_fill,129.6746876123073,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,long,RMSE,mean_fill,251.368768060133,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,long,SMAPE,mean_fill,0.0698729340367519,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,mid,MAE,mean_fill,130.1485579539074,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,mid,RMSE,mean_fill,252.80958124941515,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,mid,SMAPE,mean_fill,0.0699988270000817,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,short,MAE,forward_fill,120.40180089120707,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,short,RMSE,forward_fill,250.1295170239259,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.1,short,SMAPE,forward_fill,0.0651878823694585,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,long,MAE,mean_fill,133.95251794384285,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,long,RMSE,mean_fill,262.32024392035567,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,long,SMAPE,mean_fill,0.0708465192675265,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,mid,MAE,mean_fill,132.58537904759274,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,mid,RMSE,mean_fill,258.1379005644915,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,mid,SMAPE,mean_fill,0.0707518952477108,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,short,MAE,forward_fill,119.72046493067135,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,short,RMSE,forward_fill,249.30114828426989,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.2,short,SMAPE,forward_fill,0.0650754470852574,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,long,MAE,mean_fill,135.68802463948265,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,long,RMSE,mean_fill,265.44779928096085,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,long,SMAPE,mean_fill,0.0715306150462042,1,4,3,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,mid,MAE,mean_fill,134.57642962570844,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,mid,RMSE,function_curve_fit,262.3448555514628,2,3,4,1,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,mid,SMAPE,mean_fill,0.0715645977881937,1,3,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,short,MAE,forward_fill,120.1843443655386,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,short,RMSE,forward_fill,250.2517383251023,3,1,4,2,6,5,Masked-position imputation error only; current best means the lowest value under this metric.
+ntb_mix,0.3,short,SMAPE,forward_fill,0.0654297630919183,2,1,4,3,6,5,Masked-position imputation error only; current best means the lowest value under this metric.

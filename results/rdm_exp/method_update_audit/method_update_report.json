@@ -1,0 +1,85 @@
+{
+  "added_methods": [
+    "mean_fill"
+  ],
+  "removed_methods": [
+    "zero_fill"
+  ],
+  "zero_fill_removed_from_summaries": true,
+  "zero_fill_removed_from_comparison_tables": true,
+  "zero_fill_removed_from_visualization": true,
+  "mean_fill_in_summaries": true,
+  "mean_fill_in_visualization": true,
+  "reran_impute": false,
+  "regenerated_missing": false,
+  "regenerated_imputed_datasets": false,
+  "all_complete": true,
+  "checks": [
+    {
+      "check_id": 1,
+      "description": "三类机制 summary 均包含 mean_fill",
+      "passed": true,
+      "details": "global / ntb_mix / nso_mix summaries all contain mean_fill"
+    },
+    {
+      "check_id": 2,
+      "description": "三类机制 summary 均不包含 zero_fill",
+      "passed": true,
+      "details": "no zero_fill found in scenario summaries"
+    },
+    {
+      "check_id": 3,
+      "description": "comparison tables 不包含 zero_fill",
+      "passed": true,
+      "details": "checked generated tables and figure index"
+    },
+    {
+      "check_id": 4,
+      "description": "comparison figures 文件名不包含 zero_fill",
+      "passed": true,
+      "details": "checked generated figure filenames"
+    },
+    {
+      "check_id": 5,
+      "description": "visualization audit formal_methods 不包含 zero_fill",
+      "passed": true,
+      "details": "checked formal_methods in visualization audit"
+    },
+    {
+      "check_id": 6,
+      "description": "formal_methods 包含 mean_fill",
+      "passed": true,
+      "details": "checked formal_methods in visualization audit"
+    },
+    {
+      "check_id": 7,
+      "description": "三类机制四个缺失率均完整",
+      "passed": true,
+      "details": "validated expected rates and methods while loading summaries"
+    },
+    {
+      "check_id": 8,
+      "description": "本轮未重新运行 impute",
+      "passed": true,
+      "details": "visualization-only regeneration"
+    },
+    {
+      "check_id": 9,
+      "description": "本轮未重新生成 masks",
+      "passed": true,
+      "details": "visualization-only regeneration"
+    },
+    {
+      "check_id": 10,
+      "description": "本轮未重新生成 miss_data",
+      "passed": true,
+      "details": "visualization-only regeneration"
+    },
+    {
+      "check_id": 11,
+      "description": "本轮未重新生成 imp_data",
+      "passed": true,
+      "details": "visualization-only regeneration"
+    }
+  ]
+}

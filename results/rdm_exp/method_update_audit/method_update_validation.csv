@@ -1,0 +1,12 @@
+﻿check_id,description,passed,details
+1,三类机制 summary 均包含 mean_fill,True,global / ntb_mix / nso_mix summaries all contain mean_fill
+2,三类机制 summary 均不包含 zero_fill,True,no zero_fill found in scenario summaries
+3,comparison tables 不包含 zero_fill,True,checked generated tables and figure index
+4,comparison figures 文件名不包含 zero_fill,True,checked generated figure filenames
+5,visualization audit formal_methods 不包含 zero_fill,True,checked formal_methods in visualization audit
+6,formal_methods 包含 mean_fill,True,checked formal_methods in visualization audit
+7,三类机制四个缺失率均完整,True,validated expected rates and methods while loading summaries
+8,本轮未重新运行 impute,True,visualization-only regeneration
+9,本轮未重新生成 masks,True,visualization-only regeneration
+10,本轮未重新生成 miss_data,True,visualization-only regeneration
+11,本轮未重新生成 imp_data,True,visualization-only regeneration

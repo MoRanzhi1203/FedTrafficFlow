@@ -1,22 +1,22 @@
 {
   "input_sources": {
-    "global_main": "results\\real_data_global_missingness_setting\\summaries\\imputation_quality_summary_exclude_warmup.csv",
-    "global_flow": "results\\real_data_global_missingness_setting\\summaries\\imputation_quality_by_flow_group.csv",
-    "block_main": "results\\real_data_structured_missingness_setting\\summaries\\structured_imputation_quality_summary_exclude_warmup.csv",
-    "block_flow": "results\\real_data_structured_missingness_setting\\summaries\\structured_imputation_quality_by_flow_group.csv",
-    "block_length": "results\\real_data_structured_missingness_setting\\summaries\\structured_imputation_quality_by_length_group.csv",
-    "outage_main": "results\\real_data_structured_missingness_setting\\summaries\\outage_imputation_quality_summary_exclude_warmup.csv",
-    "outage_flow": "results\\real_data_structured_missingness_setting\\summaries\\outage_imputation_quality_by_flow_group.csv",
-    "outage_length": "results\\real_data_structured_missingness_setting\\summaries\\outage_imputation_quality_by_length_group.csv"
+    "global_main": "results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries\\imputation_quality_summary_exclude_warmup.csv",
+    "global_flow": "results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries\\imputation_quality_by_flow_group.csv",
+    "block_main": "results\\rdm_exp\\scenarios\\ntb_mix\\imp\\summaries\\structured_imputation_quality_summary_exclude_warmup.csv",
+    "block_flow": "results\\rdm_exp\\scenarios\\ntb_mix\\imp\\summaries\\structured_imputation_quality_by_flow_group.csv",
+    "block_length": "results\\rdm_exp\\scenarios\\ntb_mix\\imp\\summaries\\structured_imputation_quality_by_length_group.csv",
+    "outage_main": "results\\rdm_exp\\scenarios\\nso_mix\\imp\\summaries\\outage_imputation_quality_summary_exclude_warmup.csv",
+    "outage_flow": "results\\rdm_exp\\scenarios\\nso_mix\\imp\\summaries\\outage_imputation_quality_by_flow_group.csv",
+    "outage_length": "results\\rdm_exp\\scenarios\\nso_mix\\imp\\summaries\\outage_imputation_quality_by_length_group.csv"
   },
-  "output_root": "results\\real_data_missingness_visual_comparison",
-  "figures_dir": "results\\real_data_missingness_visual_comparison\\figures",
-  "tables_dir": "results\\real_data_missingness_visual_comparison\\tables",
-  "audits_dir": "results\\real_data_missingness_visual_comparison\\audits",
+  "output_root": "results\\rdm_exp\\comparison",
+  "figures_dir": "results\\rdm_exp\\comparison\\figures",
+  "tables_dir": "results\\rdm_exp\\comparison\\tables",
+  "audits_dir": "results\\rdm_exp\\comparison\\audits",
   "scenarios": [
     "g_mcar_pt",
-    "node_temporal_block",
-    "node_subset_temporal_outage"
+    "ntb_mix",
+    "nso_mix"
   ],
   "missing_rates": [
     0.05,
@@ -25,36 +25,58 @@
     0.3
   ],
   "methods": [
-    "zero_fill",
+    "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
     "topology_function_hybrid"
   ],
+  "formal_methods": [
+    "mean_fill",
+    "forward_fill",
+    "historical_linear_extrapolation",
+    "road_topology_neighbor_fill",
+    "function_curve_fit",
+    "topology_function_hybrid"
+  ],
+  "added_methods": [
+    "mean_fill"
+  ],
+  "removed_methods": [
+    "zero_fill"
+  ],
+  "zero_fill_removed_from_formal_visualization": true,
+  "mean_fill_included_in_all_visualization": true,
   "read_global_mcar_point_summary": true,
   "read_node_temporal_block_summary": true,
   "read_node_subset_temporal_outage_summary": true,
   "contains_all_missing_rates": true,
   "contains_all_six_methods": true,
+  "contains_required_scenarios": true,
+  "contains_required_rates": true,
+  "contains_required_methods": true,
   "generated_internal_scenario_figures": true,
+  "generated_flow_group_figures": true,
   "generated_length_group_figures": true,
   "generated_cross_scenario_figures": true,
   "generated_ranking_heatmaps": true,
-  "generated_nonzero_zoom_figures": true,
+  "generated_nonzero_zoom_figures": false,
   "reran_impute": false,
+  "regenerated_missing": false,
   "regenerated_masks": false,
   "regenerated_missing_datasets": false,
-  "generated_imputed_datasets": false,
+  "regenerated_imputed_datasets": false,
+  "masked_position_error_only": true,
   "masked_position_imputation_error_only": true,
+  "not_traffic_prediction_error": true,
   "uses_forward_fill_as_baseline": false,
   "generated_relative_to_forward_fill_formal_figures": false,
-  "zero_fill_zoom_note": "Zoom figures exclude zero fill only to reveal differences among non-zero-fill methods and do not replace the formal six-method figures.",
-  "figure_count": 30,
+  "figure_count": 38,
   "table_outputs": {
-    "method_ranking_by_scenario_rate_metric": "results\\real_data_missingness_visual_comparison\\tables\\method_ranking_by_scenario_rate_metric.csv",
-    "best_method_summary": "results\\real_data_missingness_visual_comparison\\tables\\best_method_summary.csv",
-    "best_method_by_length_group": "results\\real_data_missingness_visual_comparison\\tables\\best_method_by_length_group.csv",
-    "figure_index": "results\\real_data_missingness_visual_comparison\\figure_index.csv"
+    "method_ranking_by_scenario_rate_metric": "results\\rdm_exp\\comparison\\tables\\method_ranking_by_scenario_rate_metric.csv",
+    "best_method_summary": "results\\rdm_exp\\comparison\\tables\\best_method_summary.csv",
+    "best_method_by_length_group": "results\\rdm_exp\\comparison\\tables\\best_method_by_length_group.csv",
+    "figure_index": "results\\rdm_exp\\comparison\\figure_index.csv"
   }
 }
