@@ -1,0 +1,47 @@
+﻿check_name,passed,detail
+target_root_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp
+comparison_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\comparison
+experiment_registry_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\experiment_registry.json
+path_aliases_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\path_aliases.json
+g_mcar_pt_scenario_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt
+g_mcar_pt_miss_set_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set
+g_mcar_pt_imp_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\imp
+g_mcar_pt_r05_mcar_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r05_mcar_s42
+g_mcar_pt_r10_mcar_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r10_mcar_s42
+g_mcar_pt_r20_mcar_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r20_mcar_s42
+g_mcar_pt_r30_mcar_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r30_mcar_s42
+g_mcar_pt_imp_summaries,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\imp\summaries
+g_mcar_pt_imp_manifests,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\imp\manifests
+g_mcar_pt_imp_audits,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\imp\audits
+g_mcar_pt_miss_manifests,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\manifests
+g_mcar_pt_miss_audits,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\audits
+ntb_mix_scenario_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix
+ntb_mix_miss_set_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set
+ntb_mix_imp_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\imp
+ntb_mix_ntb_r05_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set\masks\ntb_r05_mix_s42
+ntb_mix_ntb_r10_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set\masks\ntb_r10_mix_s42
+ntb_mix_ntb_r20_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set\masks\ntb_r20_mix_s42
+ntb_mix_ntb_r30_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set\masks\ntb_r30_mix_s42
+ntb_mix_imp_summaries,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\imp\summaries
+ntb_mix_imp_manifests,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\imp\manifests
+ntb_mix_imp_audits,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\imp\audits
+ntb_mix_miss_manifests,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set\manifests
+ntb_mix_miss_audits,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\miss_set\audits
+nso_mix_scenario_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix
+nso_mix_miss_set_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set
+nso_mix_imp_exists,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\imp
+nso_mix_nso_r05_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set\masks\nso_r05_mix_s42
+nso_mix_nso_r10_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set\masks\nso_r10_mix_s42
+nso_mix_nso_r20_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set\masks\nso_r20_mix_s42
+nso_mix_nso_r30_mix_s42_mask_dir,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set\masks\nso_r30_mix_s42
+nso_mix_imp_summaries,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\imp\summaries
+nso_mix_imp_manifests,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\imp\manifests
+nso_mix_imp_audits,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\imp\audits
+nso_mix_miss_manifests,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set\manifests
+nso_mix_miss_audits,true,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\miss_set\audits
+old_root_reference_count_small,true,count=0
+python_changes_path_only,true,changed_rows=66
+no_parquet_duplication,true,"before=6087, after=6087"
+new_longest_path_shorter,true,"before=310, after=195"
+high_risk_reduced,true,"before=10802, after=0"
+medium_risk_reduced_or_equal,true,"before=378, after=8"

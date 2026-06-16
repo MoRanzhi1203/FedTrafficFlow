@@ -1,0 +1,248 @@
+{
+  "input_missingness_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set",
+  "output_imputation_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\imp_data",
+  "missing_rates": [
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "methods": [
+    "mean_fill",
+    "forward_fill",
+    "historical_linear_extrapolation",
+    "road_topology_neighbor_fill",
+    "function_curve_fit",
+    "topology_function_hybrid"
+  ],
+  "added_methods": [
+    "mean_fill"
+  ],
+  "removed_methods": [
+    "zero_fill"
+  ],
+  "causal_history_only": true,
+  "history_days": 7,
+  "context_days_before": 7,
+  "context_days_after": 0,
+  "uses_future_days": false,
+  "uses_same_day_future_slots": false,
+  "uses_bfill": false,
+  "uses_bidirectional_interpolation": false,
+  "warmup_days": 7,
+  "main_metrics_exclude_warmup": true,
+  "fallback_policy": {
+    "mean_fill": "same_slot_7day_mean -> node_7day_mean -> slot_7day_mean -> global_7day_mean -> current_day_forward_fill",
+    "forward_fill": "use_previous_slot_or_previous_day_last_slot_then_global_safe_fallback_zero",
+    "historical_linear_extrapolation": "fallback_to_current_day_forward_fill_when_history_is_insufficient",
+    "road_topology_neighbor_fill": "fallback_to_current_day_forward_fill_when_no_topology_history_is_available",
+    "function_curve_fit": "fallback_to_current_day_forward_fill_when_no_history_profile_is_available",
+    "topology_function_hybrid": "blend_topology_and_function_primary_predictions_or_fallback_to_current_day_forward_fill"
+  },
+  "non_mask_positions_preserved": true,
+  "evaluation_only_on_mask_positions": true,
+  "completeness": [
+    {
+      "missing_rate": 0.05,
+      "method": "mean_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "forward_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "historical_linear_extrapolation",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "road_topology_neighbor_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "function_curve_fit",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "topology_function_hybrid",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "mean_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "forward_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "historical_linear_extrapolation",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "road_topology_neighbor_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "function_curve_fit",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "topology_function_hybrid",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "mean_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "forward_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "historical_linear_extrapolation",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "road_topology_neighbor_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "function_curve_fit",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "topology_function_hybrid",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "mean_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "forward_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "historical_linear_extrapolation",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "road_topology_neighbor_fill",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "function_curve_fit",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "topology_function_hybrid",
+      "imputed_chunk_count": 61,
+      "expected_chunk_count": 61,
+      "is_complete": true,
+      "non_mask_positions_preserved": true
+    }
+  ],
+  "output_files": {
+    "imputed_chunk_status": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\manifests\\imputed_chunk_status.csv",
+    "chunk_runtime_state_log": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\manifests\\imputed_chunk_runtime_state.jsonl",
+    "resume_scan": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\manifests\\imputed_resume_scan.csv",
+    "detail_summary": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries\\imputation_quality_detail.csv",
+    "summary_all_days": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries\\imputation_quality_summary_all_days.csv",
+    "summary_exclude_warmup": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries\\imputation_quality_summary_exclude_warmup.csv",
+    "summary_by_flow_group": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries\\imputation_quality_by_flow_group.csv"
+  },
+  "resume_mode": "status_snapshot_only"
+}

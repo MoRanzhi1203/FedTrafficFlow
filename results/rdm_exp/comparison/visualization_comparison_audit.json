@@ -1,0 +1,60 @@
+{
+  "input_sources": {
+    "global_main": "results\\real_data_global_missingness_setting\\summaries\\imputation_quality_summary_exclude_warmup.csv",
+    "global_flow": "results\\real_data_global_missingness_setting\\summaries\\imputation_quality_by_flow_group.csv",
+    "block_main": "results\\real_data_structured_missingness_setting\\summaries\\structured_imputation_quality_summary_exclude_warmup.csv",
+    "block_flow": "results\\real_data_structured_missingness_setting\\summaries\\structured_imputation_quality_by_flow_group.csv",
+    "block_length": "results\\real_data_structured_missingness_setting\\summaries\\structured_imputation_quality_by_length_group.csv",
+    "outage_main": "results\\real_data_structured_missingness_setting\\summaries\\outage_imputation_quality_summary_exclude_warmup.csv",
+    "outage_flow": "results\\real_data_structured_missingness_setting\\summaries\\outage_imputation_quality_by_flow_group.csv",
+    "outage_length": "results\\real_data_structured_missingness_setting\\summaries\\outage_imputation_quality_by_length_group.csv"
+  },
+  "output_root": "results\\real_data_missingness_visual_comparison",
+  "figures_dir": "results\\real_data_missingness_visual_comparison\\figures",
+  "tables_dir": "results\\real_data_missingness_visual_comparison\\tables",
+  "audits_dir": "results\\real_data_missingness_visual_comparison\\audits",
+  "scenarios": [
+    "g_mcar_pt",
+    "node_temporal_block",
+    "node_subset_temporal_outage"
+  ],
+  "missing_rates": [
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "methods": [
+    "zero_fill",
+    "forward_fill",
+    "historical_linear_extrapolation",
+    "road_topology_neighbor_fill",
+    "function_curve_fit",
+    "topology_function_hybrid"
+  ],
+  "read_global_mcar_point_summary": true,
+  "read_node_temporal_block_summary": true,
+  "read_node_subset_temporal_outage_summary": true,
+  "contains_all_missing_rates": true,
+  "contains_all_six_methods": true,
+  "generated_internal_scenario_figures": true,
+  "generated_length_group_figures": true,
+  "generated_cross_scenario_figures": true,
+  "generated_ranking_heatmaps": true,
+  "generated_nonzero_zoom_figures": true,
+  "reran_impute": false,
+  "regenerated_masks": false,
+  "regenerated_missing_datasets": false,
+  "generated_imputed_datasets": false,
+  "masked_position_imputation_error_only": true,
+  "uses_forward_fill_as_baseline": false,
+  "generated_relative_to_forward_fill_formal_figures": false,
+  "zero_fill_zoom_note": "Zoom figures exclude zero fill only to reveal differences among non-zero-fill methods and do not replace the formal six-method figures.",
+  "figure_count": 30,
+  "table_outputs": {
+    "method_ranking_by_scenario_rate_metric": "results\\real_data_missingness_visual_comparison\\tables\\method_ranking_by_scenario_rate_metric.csv",
+    "best_method_summary": "results\\real_data_missingness_visual_comparison\\tables\\best_method_summary.csv",
+    "best_method_by_length_group": "results\\real_data_missingness_visual_comparison\\tables\\best_method_by_length_group.csv",
+    "figure_index": "results\\real_data_missingness_visual_comparison\\figure_index.csv"
+  }
+}

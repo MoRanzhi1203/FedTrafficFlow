@@ -1,0 +1,67 @@
+﻿file,changed_line_number,old_line,new_line,is_path_only_change,is_allowed,notes
+analysis_scripts\missingness_experiment_paths.py,7,"DEFAULT_EXPERIMENT_ROOT = Path(""results/real_data_missingness_experiments"")","DEFAULT_EXPERIMENT_ROOT = Path(""results/rdm_exp"")",true,true,path string replacement only
+analysis_scripts\missingness_experiment_paths.py,9,"    ""g_mcar_pt"",","    ""g_mcar_pt"",",true,true,path string replacement only
+analysis_scripts\missingness_experiment_paths.py,10,"    ""ntb_mix"",","    ""ntb_mix"",",true,true,path string replacement only
+analysis_scripts\missingness_experiment_paths.py,11,"    ""nso_mix"",","    ""nso_mix"",",true,true,path string replacement only
+analysis_scripts\missingness_experiment_paths.py,67,"    ) / ""miss_set""","    ) / ""miss_set""",true,true,path string replacement only
+analysis_scripts\missingness_experiment_paths.py,79,"    ) / ""imp""","    ) / ""imp""",true,true,path string replacement only
+analysis_scripts\global_missingness_setting_pipeline.py,81,"        missing_datasets_dir=output_dir / ""miss_data"",","        missing_datasets_dir=output_dir / ""miss_data"",",true,true,path string replacement only
+analysis_scripts\global_missingness_setting_pipeline.py,307,"    return paths.masks_dir / f""rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}""","    return paths.masks_dir / f""r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}""",true,true,path string replacement only
+analysis_scripts\global_missingness_setting_pipeline.py,311,"    return paths.missing_datasets_dir / f""rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}""","    return paths.missing_datasets_dir / f""r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}""",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,39,,METHOD_DIR_ABBREVIATIONS = {,true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,40,,"    ""zero_fill"": ""zf"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,41,,"    ""forward_fill"": ""ff"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,42,,"    ""historical_linear_extrapolation"": ""hle"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,43,,"    ""road_topology_neighbor_fill"": ""rtn"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,44,,"    ""function_curve_fit"": ""fcf"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,45,,"    ""topology_function_hybrid"": ""tfh"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,46,,},true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,204,"        imputed_datasets_dir=output_dir / ""imp_data"",","        imputed_datasets_dir=output_dir / ""imp_data"",",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,284,"    return base_dir / ""miss_data"" / f""rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}""","    return base_dir / ""miss_data"" / f""r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}""",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,288,"    return base_dir / ""masks"" / f""rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}""","    return base_dir / ""masks"" / f""r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}""",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,292,"    return base_dir / ""imp_data"" / (","    return base_dir / ""imp_data"" / (",true,true,path string replacement only
+analysis_scripts\global_missingness_imputation_pipeline.py,293,"        f""rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}__method_{method}""","        f""r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}_m_{METHOD_DIR_ABBREVIATIONS[method]}""",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,246,"        missing_datasets_dir=output_dir / ""miss_data"",","        missing_datasets_dir=output_dir / ""miss_data"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,453,    return paths.masks_dir / scenario.scenario_tag,    return paths.masks_dir / scenario_output_name(scenario),true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,457,    return paths.missing_datasets_dir / scenario.scenario_tag,    return paths.missing_datasets_dir / scenario_output_name(scenario),true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,462,"    return paths.manifests_dir / f""{event_stem}__{scenario.scenario_tag}.csv""","    return paths.manifests_dir / f""{event_stem}__{scenario_output_name(scenario)}.csv""",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,469,,,true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,470,,,true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,471,,def scenario_output_name(scenario: ScenarioDefinition) -> str:,true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,472,,"    seed_match = re.search(r""__seed_(\d+)$"", scenario.scenario_tag)",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,473,,"    seed_text = seed_match.group(1) if seed_match else ""42""",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,474,,"    prefix = ""ntb"" if scenario.mechanism == NODE_TEMPORAL_BLOCK else ""nso""",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,475,,"    return f""{prefix}_r{format_rate_tag(scenario.missing_rate).replace('0p', '')}_mix_s{seed_text}""",true,true,path string replacement only
+analysis_scripts\structured_missingness_setting_pipeline.py,486,"        ""1. 已有 `results\\real_data_global_missingness_setting` 继续保留为 global MCAR point 随机点缺失基准。"",","        ""1. 已有 `results\\rdm_exp\\scenarios\\g_mcar_pt` 作为 global MCAR point 随机点缺失基准。"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,75,,METHOD_DIR_ABBREVIATIONS = {,true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,76,,"    ""zero_fill"": ""zf"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,77,,"    ""forward_fill"": ""ff"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,78,,"    ""historical_linear_extrapolation"": ""hle"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,79,,"    ""road_topology_neighbor_fill"": ""rtn"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,80,,"    ""function_curve_fit"": ""fcf"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,81,,"    ""topology_function_hybrid"": ""tfh"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,82,,},true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,260,"        imputed_datasets_dir=output_dir / ""imp_data"",","        imputed_datasets_dir=output_dir / ""imp_data"",",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,351,"    return f""mechanism_{mechanism}__rate_{format_rate_tag(rate)}__{scenario_tag}__seed_{seed}""","    prefix = ""ntb"" if mechanism == ""node_temporal_block"" else ""nso""",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,352,,"    return f""{prefix}_r{format_rate_tag(rate).replace('0p', '')}_mix_s{seed}""",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,356,"    return base_dir / ""miss_data"" / scenario_dir_name(rate, mechanism, scenario_tag, seed)","    return base_dir / ""miss_data"" / scenario_dir_name(rate, mechanism, scenario_tag, seed)",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,364,"    return base_dir / ""imp_data"" / (","    return base_dir / ""imp_data"" / (",true,true,path string replacement only
+analysis_scripts\structured_missingness_imputation_pipeline.py,365,"        f""{scenario_dir_name(rate, mechanism, scenario_tag, seed)}__method_{method}""","        f""{scenario_dir_name(rate, mechanism, scenario_tag, seed)}_m_{METHOD_DIR_ABBREVIATIONS[method]}""",true,true,path string replacement only
+analysis_scripts\visualize_global_missingness_imputation.py,53,"        default=Path(""results/real_data_global_missingness_setting""),","        default=Path(""results/rdm_exp/scenarios/g_mcar_pt/imp""),",true,true,path string replacement only
+analysis_scripts\visualize_global_missingness_imputation.py,58,"        default=Path(""results/real_data_global_missingness_setting/summaries""),","        default=Path(""results/rdm_exp/scenarios/g_mcar_pt/imp/summaries""),",true,true,path string replacement only
+analysis_scripts\visualize_global_missingness_imputation.py,63,"        default=Path(""results/real_data_global_missingness_setting/figures""),","        default=Path(""results/rdm_exp/scenarios/g_mcar_pt/imp/figures""),",true,true,path string replacement only
+analysis_scripts\visualize_global_missingness_imputation.py,68,"        default=Path(""results/real_data_global_missingness_setting/audits""),","        default=Path(""results/rdm_exp/scenarios/g_mcar_pt/imp/audits""),",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,78,"        default=Path(""results/real_data_global_missingness_setting""),","        default=Path(""results/rdm_exp/scenarios/g_mcar_pt/imp""),",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,83,"        default=Path(""results/real_data_structured_missingness_setting""),","        default=Path(""results/rdm_exp/scenarios""),",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,88,"        default=Path(""results/real_data_missingness_visual_comparison""),","        default=Path(""results/rdm_exp/comparison""),",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,533,"    structured_summary_dir = args.structured_dir / ""summaries""","    block_summary_dir = args.structured_dir / ""ntb_mix"" / ""imp"" / ""summaries""",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,534,,"    outage_summary_dir = args.structured_dir / ""nso_mix"" / ""imp"" / ""summaries""",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,540,"            structured_summary_dir,","            block_summary_dir,",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,545,"            structured_summary_dir,","            block_summary_dir,",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,550,"            structured_summary_dir,","            block_summary_dir,",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,555,"            structured_summary_dir,","            outage_summary_dir,",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,560,"            structured_summary_dir,","            outage_summary_dir,",true,true,path string replacement only
+analysis_scripts\visualize_all_missingness_imputation_results.py,565,"            structured_summary_dir,","            outage_summary_dir,",true,true,path string replacement only
+analysis_scripts\analyze_structured_missingness_distribution.py,23,"        default=Path(""results/real_data_structured_missingness_setting""),","        default=Path(""results/rdm_exp/scenarios/ntb_mix/miss_set""),",true,true,path string replacement only
+analysis_scripts\reorganize_missingness_experiment_layout.py,70,"    ""本目录结果已迁移至 results\\real_data_missingness_experiments。\n""","    ""本目录结果已迁移至 results\\rdm_exp。\n""",true,true,path string replacement only
+analysis_scripts\reorganize_missingness_experiment_layout.py,184,"        default=Path(""results/real_data_missingness_experiments""),","        default=Path(""results/rdm_exp""),",true,true,path string replacement only

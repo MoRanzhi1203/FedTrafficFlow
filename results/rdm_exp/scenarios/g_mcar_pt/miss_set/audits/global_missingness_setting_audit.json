@@ -1,0 +1,91 @@
+{
+  "input_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\analysis\\node_intersection_flow_parquet",
+  "output_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting",
+  "target_col": "路口车流量",
+  "node_col": "节点ID",
+  "time_col": "时间段",
+  "chunk_count": 61,
+  "global_eligible_count": 246133536,
+  "missing_rates": [
+    0.0,
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "mask_scope": "global",
+  "mechanism": "mcar_point",
+  "seed": 42,
+  "allocation_method": "sequential_hypergeometric_global_without_replacement",
+  "missing_unit": "node_time_observation",
+  "mask_uses_row_index": true,
+  "drops_entire_time_slot": false,
+  "drops_all_nodes_at_same_time": false,
+  "creates_temporal_blocks": false,
+  "forces_non_contiguous_missing": false,
+  "missingness_type": "g_mcar_pt",
+  "rate_summaries": [
+    {
+      "missing_rate_target": 0.0,
+      "global_missing_count": 0,
+      "observed_global_missing_rate": 0.0,
+      "per_day_missing_rate_min": 0.0,
+      "per_day_missing_rate_max": 0.0,
+      "per_day_missing_rate_mean": 0.0,
+      "per_day_missing_rate_std": 0.0,
+      "sum_allocated_missing_count": 0,
+      "is_global_count_exact": true,
+      "is_day_stratified_like": true
+    },
+    {
+      "missing_rate_target": 0.05,
+      "global_missing_count": 12306677,
+      "observed_global_missing_rate": 0.050000000812567044,
+      "per_day_missing_rate_min": 0.0497903828919924,
+      "per_day_missing_rate_max": 0.0502664699864385,
+      "per_day_missing_rate_mean": 0.050000000812567,
+      "per_day_missing_rate_std": 0.00012266055907151052,
+      "sum_allocated_missing_count": 12306677,
+      "is_global_count_exact": true,
+      "is_day_stratified_like": false
+    },
+    {
+      "missing_rate_target": 0.1,
+      "global_missing_count": 24613354,
+      "observed_global_missing_rate": 0.10000000162513409,
+      "per_day_missing_rate_min": 0.0997069127548714,
+      "per_day_missing_rate_max": 0.1003113773167424,
+      "per_day_missing_rate_mean": 0.10000000162513403,
+      "per_day_missing_rate_std": 0.00013000668168094517,
+      "sum_allocated_missing_count": 24613354,
+      "is_global_count_exact": true,
+      "is_day_stratified_like": false
+    },
+    {
+      "missing_rate_target": 0.2,
+      "global_missing_count": 49226707,
+      "observed_global_missing_rate": 0.19999999918743294,
+      "per_day_missing_rate_min": 0.1995635166107555,
+      "per_day_missing_rate_max": 0.2004351450913215,
+      "per_day_missing_rate_mean": 0.1999999991874329,
+      "per_day_missing_rate_std": 0.00018972111217604692,
+      "sum_allocated_missing_count": 49226707,
+      "is_global_count_exact": true,
+      "is_day_stratified_like": false
+    },
+    {
+      "missing_rate_target": 0.3,
+      "global_missing_count": 73840061,
+      "observed_global_missing_rate": 0.30000000081256706,
+      "per_day_missing_rate_min": 0.2994458950933041,
+      "per_day_missing_rate_max": 0.300744787577423,
+      "per_day_missing_rate_mean": 0.300000000812567,
+      "per_day_missing_rate_std": 0.00025037082912518645,
+      "sum_allocated_missing_count": 73840061,
+      "is_global_count_exact": true,
+      "is_day_stratified_like": false
+    }
+  ],
+  "control_group_note_en": "0% is treated as no-missing control. No mask positions are generated. No missing dataset copy is written. No imp metrics are applicable.",
+  "control_group_note_zh": "0% 作为无缺失对照组，不生成大体积缺失数据副本，不参与缺失位置补全误差计算。"
+}

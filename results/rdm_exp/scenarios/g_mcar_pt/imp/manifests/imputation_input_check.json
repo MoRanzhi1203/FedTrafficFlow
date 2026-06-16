@@ -1,0 +1,70 @@
+{
+  "input_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\analysis\\node_intersection_flow_parquet",
+  "missingness_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set",
+  "missing_rates": [
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "chunk_count_expected": 61,
+  "mask_scope": "global",
+  "missing_unit": "node_time_observation",
+  "mask_uses_row_index": true,
+  "sample_mask_file": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r05_mcar_s42\\node_flow_chunk_000_mask.parquet",
+  "sample_mask_columns": [
+    "row_index",
+    "节点ID",
+    "时间段",
+    "day_index",
+    "global_time_index",
+    "is_missing"
+  ],
+  "checks": [
+    {
+      "missing_rate": 0.05,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r05_mcar_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\miss_data\\r05_mcar_s42",
+      "missing_dataset_chunk_count": 61,
+      "mask_scope": "global",
+      "missing_unit": "node_time_observation",
+      "mask_uses_row_index": true,
+      "chunk_count_expected": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r10_mcar_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\miss_data\\r10_mcar_s42",
+      "missing_dataset_chunk_count": 61,
+      "mask_scope": "global",
+      "missing_unit": "node_time_observation",
+      "mask_uses_row_index": true,
+      "chunk_count_expected": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r20_mcar_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\miss_data\\r20_mcar_s42",
+      "missing_dataset_chunk_count": 61,
+      "mask_scope": "global",
+      "missing_unit": "node_time_observation",
+      "mask_uses_row_index": true,
+      "chunk_count_expected": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r30_mcar_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\miss_data\\r30_mcar_s42",
+      "missing_dataset_chunk_count": 61,
+      "mask_scope": "global",
+      "missing_unit": "node_time_observation",
+      "mask_uses_row_index": true,
+      "chunk_count_expected": 61
+    }
+  ],
+  "control_group_note_zh": "0% control 不要求存在 missing_datasets 副本，也不参与 masked-position 补全误差计算。"
+}

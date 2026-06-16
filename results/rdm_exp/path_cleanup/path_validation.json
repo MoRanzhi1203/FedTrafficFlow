@@ -1,0 +1,250 @@
+{
+  "all_complete": true,
+  "python_changes_path_only": true,
+  "algorithm_logic_modified": false,
+  "missing_generation_logic_modified": false,
+  "imputation_logic_modified": false,
+  "metric_logic_modified": false,
+  "visualization_logic_modified": false,
+  "old_longest_path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation\\node_flow_chunk_000.parquet",
+  "new_longest_path": "data\\analysis\\date_type_curve_method_comparison\\function_cluster_visualization\\M2_shape_normalized_weighted_curve_normalized_residual_distribution_by_cluster.png",
+  "old_longest_path_length": 310,
+  "new_longest_path_length": 195,
+  "high_risk_before": 10802,
+  "high_risk_after": 0,
+  "medium_risk_before": 378,
+  "medium_risk_after": 8,
+  "old_root_reference_count": 0,
+  "checks": [
+    {
+      "check_name": "target_root_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp"
+    },
+    {
+      "check_name": "comparison_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\comparison"
+    },
+    {
+      "check_name": "experiment_registry_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\experiment_registry.json"
+    },
+    {
+      "check_name": "path_aliases_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\path_aliases.json"
+    },
+    {
+      "check_name": "g_mcar_pt_scenario_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt"
+    },
+    {
+      "check_name": "g_mcar_pt_miss_set_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set"
+    },
+    {
+      "check_name": "g_mcar_pt_imp_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp"
+    },
+    {
+      "check_name": "g_mcar_pt_r05_mcar_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r05_mcar_s42"
+    },
+    {
+      "check_name": "g_mcar_pt_r10_mcar_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r10_mcar_s42"
+    },
+    {
+      "check_name": "g_mcar_pt_r20_mcar_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r20_mcar_s42"
+    },
+    {
+      "check_name": "g_mcar_pt_r30_mcar_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\masks\\r30_mcar_s42"
+    },
+    {
+      "check_name": "g_mcar_pt_imp_summaries",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\summaries"
+    },
+    {
+      "check_name": "g_mcar_pt_imp_manifests",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\manifests"
+    },
+    {
+      "check_name": "g_mcar_pt_imp_audits",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\imp\\audits"
+    },
+    {
+      "check_name": "g_mcar_pt_miss_manifests",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\manifests"
+    },
+    {
+      "check_name": "g_mcar_pt_miss_audits",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\g_mcar_pt\\miss_set\\audits"
+    },
+    {
+      "check_name": "ntb_mix_scenario_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix"
+    },
+    {
+      "check_name": "ntb_mix_miss_set_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set"
+    },
+    {
+      "check_name": "ntb_mix_imp_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\imp"
+    },
+    {
+      "check_name": "ntb_mix_ntb_r05_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r05_mix_s42"
+    },
+    {
+      "check_name": "ntb_mix_ntb_r10_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r10_mix_s42"
+    },
+    {
+      "check_name": "ntb_mix_ntb_r20_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r20_mix_s42"
+    },
+    {
+      "check_name": "ntb_mix_ntb_r30_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r30_mix_s42"
+    },
+    {
+      "check_name": "ntb_mix_imp_summaries",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\imp\\summaries"
+    },
+    {
+      "check_name": "ntb_mix_imp_manifests",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\imp\\manifests"
+    },
+    {
+      "check_name": "ntb_mix_imp_audits",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\imp\\audits"
+    },
+    {
+      "check_name": "ntb_mix_miss_manifests",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\manifests"
+    },
+    {
+      "check_name": "ntb_mix_miss_audits",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\audits"
+    },
+    {
+      "check_name": "nso_mix_scenario_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix"
+    },
+    {
+      "check_name": "nso_mix_miss_set_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set"
+    },
+    {
+      "check_name": "nso_mix_imp_exists",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\imp"
+    },
+    {
+      "check_name": "nso_mix_nso_r05_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set\\masks\\nso_r05_mix_s42"
+    },
+    {
+      "check_name": "nso_mix_nso_r10_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set\\masks\\nso_r10_mix_s42"
+    },
+    {
+      "check_name": "nso_mix_nso_r20_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set\\masks\\nso_r20_mix_s42"
+    },
+    {
+      "check_name": "nso_mix_nso_r30_mix_s42_mask_dir",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set\\masks\\nso_r30_mix_s42"
+    },
+    {
+      "check_name": "nso_mix_imp_summaries",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\imp\\summaries"
+    },
+    {
+      "check_name": "nso_mix_imp_manifests",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\imp\\manifests"
+    },
+    {
+      "check_name": "nso_mix_imp_audits",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\imp\\audits"
+    },
+    {
+      "check_name": "nso_mix_miss_manifests",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set\\manifests"
+    },
+    {
+      "check_name": "nso_mix_miss_audits",
+      "passed": "true",
+      "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set\\audits"
+    },
+    {
+      "check_name": "old_root_reference_count_small",
+      "passed": "true",
+      "detail": "count=0"
+    },
+    {
+      "check_name": "python_changes_path_only",
+      "passed": "true",
+      "detail": "changed_rows=66"
+    },
+    {
+      "check_name": "no_parquet_duplication",
+      "passed": "true",
+      "detail": "before=6087, after=6087"
+    },
+    {
+      "check_name": "new_longest_path_shorter",
+      "passed": "true",
+      "detail": "before=310, after=195"
+    },
+    {
+      "check_name": "high_risk_reduced",
+      "passed": "true",
+      "detail": "before=10802, after=0"
+    },
+    {
+      "check_name": "medium_risk_reduced_or_equal",
+      "passed": "true",
+      "detail": "before=378, after=8"
+    }
+  ]
+}

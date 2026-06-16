@@ -1,0 +1,30 @@
+{
+  "reason": "Shorten Windows path length and remove long scenario/method directory names.",
+  "old_longest_path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation\\node_flow_chunk_000.parquet",
+  "old_longest_path_length": 310,
+  "new_longest_path": "data\\analysis\\date_type_curve_method_comparison\\function_cluster_visualization\\M2_shape_normalized_weighted_curve_normalized_residual_distribution_by_cluster.png",
+  "new_longest_path_length": 195,
+  "shorten_ratio": 0.370968,
+  "renamed_item_count": 394,
+  "scenario_paths": {
+    "g_mcar_pt": "results\\rdm_exp\\scenarios\\g_mcar_pt",
+    "ntb_mix": "results\\rdm_exp\\scenarios\\ntb_mix",
+    "nso_mix": "results\\rdm_exp\\scenarios\\nso_mix"
+  },
+  "method_abbreviations": {
+    "zero_fill": "zf",
+    "forward_fill": "ff",
+    "historical_linear_extrapolation": "hle",
+    "road_topology_neighbor_fill": "rtn",
+    "function_curve_fit": "fcf",
+    "topology_function_hybrid": "tfh"
+  },
+  "code_path_reference_updated": true,
+  "document_path_reference_updated": true,
+  "algorithm_logic_modified": false,
+  "missing_generation_logic_modified": false,
+  "imputation_logic_modified": false,
+  "metric_logic_modified": false,
+  "visualization_logic_modified": false,
+  "validation_passed": true
+}

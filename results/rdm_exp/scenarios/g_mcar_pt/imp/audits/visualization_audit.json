@@ -1,0 +1,53 @@
+{
+  "experiment_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting",
+  "summary_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting\\summaries",
+  "figure_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting\\figures",
+  "audit_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting\\audits",
+  "data_sources": {
+    "main_summary": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting\\summaries\\imputation_quality_summary_exclude_warmup.csv",
+    "flow_group_summary": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting\\summaries\\imputation_quality_by_flow_group.csv"
+  },
+  "uses_exclude_warmup_main_summary": true,
+  "missing_rates": [
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "contains_required_rates": true,
+  "contains_required_methods": true,
+  "methods": [
+    "zero_fill",
+    "forward_fill",
+    "historical_linear_extrapolation",
+    "road_topology_neighbor_fill",
+    "function_curve_fit",
+    "topology_function_hybrid"
+  ],
+  "metric_choice_for_percentage_plot": "sMAPE",
+  "has_rmse": true,
+  "has_mae": true,
+  "has_percentage_metric": true,
+  "has_nrmse": true,
+  "masked_position_error_only": true,
+  "includes_zero_percent_control_in_main_plots": false,
+  "uses_relative_to_forward_fill_main_plot": false,
+  "forward_fill_only_one_method": true,
+  "reran_impute": false,
+  "regenerated_masks": false,
+  "regenerated_missing_datasets": false,
+  "regenerated_imputed_datasets": false,
+  "generated_figures": {
+    "multirate_rmse_by_method": true,
+    "multirate_mae_by_method": true,
+    "multirate_smape_or_mape_by_method": true,
+    "multirate_nrmse_by_method": true,
+    "multirate_rmse_by_method_nonzero_zoom": true,
+    "multirate_flow_group_rmse_by_method": true,
+    "method_rank_heatmap_rmse": true,
+    "figure_index_csv": true
+  },
+  "figure_index_csv": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_global_missingness_setting\\figures\\figure_index.csv",
+  "figure_count": 9,
+  "note": "All figures are based on masked-position imp error, not FedAvg or Independent traffic prediction error."
+}

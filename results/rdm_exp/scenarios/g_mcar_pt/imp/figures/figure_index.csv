@@ -1,0 +1,10 @@
+﻿figure_file,figure_type,metric,method_scope,rate_scope,is_formal_main_figure,notes
+figure_index.csv,index,multiple,all_outputs,5_10_20_30,False,Visualization output inventory
+method_rank_heatmap_rmse.png,heatmap,RMSE,all_6_methods,5_10_20_30,False,Auxiliary rank visualization
+method_ranking_by_rate.csv,table,RMSE_MAE_sMAPE,all_6_methods,5_10_20_30,False,Auxiliary ranking table
+multirate_flow_group_rmse_by_method.png,line,RMSE,all_6_methods_by_flow_group,5_10_20_30,True,Flow-group comparison
+multirate_mae_by_method.png,line,MAE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison
+multirate_nrmse_by_method.png,line,NRMSE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison
+multirate_rmse_by_method.png,line,RMSE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison
+multirate_rmse_by_method_nonzero_zoom.png,line,RMSE,nonzero_methods,5_10_20_30,False,Zoom view excluding zero fill
+multirate_smape_by_method.png,line,sMAPE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison

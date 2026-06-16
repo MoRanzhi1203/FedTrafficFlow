@@ -237,6 +237,9 @@ results/real_data_structured_missingness_setting/imputed_datasets/
 results/real_data_structured_missingness_setting/manifests/node_temporal_block_events.csv
 results/real_data_structured_missingness_setting/manifests/node_subset_temporal_outage_events.csv
 results/real_data_structured_missingness_setting/manifests/outage_node_lists/
+results/rdm_exp/**/masks/
+results/rdm_exp/**/miss_data/
+results/rdm_exp/**/imp_data/
 .local_backup/
 
 # Allow uploading only the manuscript sections under paper_revision
