@@ -1,0 +1,100 @@
+{
+  "results\\real_data_global_missingness_setting": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point",
+  "results\\real_data_structured_missingness_setting": "results\\real_data_missingness_experiments\\scenarios",
+  "results\\real_data_missingness_visual_comparison": "results\\real_data_missingness_experiments\\comparison",
+  "results\\real_data_global_missingness_setting\\run_config.json": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\run_config.json",
+  "results\\real_data_global_missingness_setting\\run_commands.txt": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\run_commands.txt",
+  "results\\real_data_global_missingness_setting\\run_config_imputation.json": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\run_config_imputation.json",
+  "results\\real_data_global_missingness_setting\\run_commands_imputation.txt": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\run_commands_imputation.txt",
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_audit.json": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_audit.json",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_audit.json"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_audit_zh.md": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_audit_zh.md",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_audit_zh.md"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_day_profile.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_day_profile.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_day_profile.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_distribution_report.json": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_distribution_report.json",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_distribution_report.json"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_distribution_report_zh.md": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_distribution_report_zh.md",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_distribution_report_zh.md"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_distribution_summary.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_distribution_summary.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_distribution_summary.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_rate_by_chunk.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_rate_by_chunk.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_rate_by_chunk.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_time_slot_profile.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_time_slot_profile.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_time_slot_profile.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\audits\\structured_missingness_top_nodes.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_top_nodes.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_top_nodes.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\manifests\\global_time_index_summary.json": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\manifests\\global_time_index_summary.json",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\manifests\\global_time_index_summary.json"
+  ],
+  "results\\real_data_structured_missingness_setting\\manifests\\node_index.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\manifests\\node_index.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\manifests\\node_index.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\manifests\\structured_missing_chunk_runtime_state.jsonl": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\manifests\\structured_missing_chunk_runtime_state.jsonl",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\manifests\\structured_missing_chunk_runtime_state.jsonl"
+  ],
+  "results\\real_data_structured_missingness_setting\\manifests\\structured_missing_chunk_status.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\manifests\\structured_missing_chunk_status.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\manifests\\structured_missing_chunk_status.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\manifests\\structured_missing_scenario_summary.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\manifests\\structured_missing_scenario_summary.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\manifests\\structured_missing_scenario_summary.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\manifests\\structured_prepare_chunk_summary.csv": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\manifests\\structured_prepare_chunk_summary.csv",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\manifests\\structured_prepare_chunk_summary.csv"
+  ],
+  "results\\real_data_structured_missingness_setting\\figures\\structured_missingness_length_group_ratio.png": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_length_group_ratio.png",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_length_group_ratio.png"
+  ],
+  "results\\real_data_structured_missingness_setting\\figures\\structured_missingness_observed_rate.png": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_observed_rate.png",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_observed_rate.png"
+  ],
+  "results\\real_data_structured_missingness_setting\\figures\\structured_missingness_time_slot_heatmap.png": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_time_slot_heatmap.png",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_time_slot_heatmap.png"
+  ],
+  "results\\real_data_structured_missingness_setting\\structured_missingness_design_zh.md": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_design_zh.md",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\audits\\structured_missingness_design_zh.md"
+  ],
+  "results\\real_data_structured_missingness_setting\\run_config.json": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\run_config.json",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\run_config.json"
+  ],
+  "results\\real_data_structured_missingness_setting\\run_commands.txt": [
+    "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\run_commands.txt",
+    "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\run_commands.txt"
+  ],
+  "results\\real_data_structured_missingness_setting\\run_config_imputation.json": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\run_config_imputation.json",
+  "results\\real_data_structured_missingness_setting\\run_commands_imputation.txt": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\run_commands_imputation.txt",
+  "results\\real_data_structured_missingness_setting\\run_config_imputation_outage.json": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\run_config_imputation.json",
+  "results\\real_data_structured_missingness_setting\\run_commands_imputation_outage.txt": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\run_commands_imputation.txt",
+  "results\\real_data_missingness_visual_comparison\\figure_index.csv": "results\\real_data_missingness_experiments\\comparison\\figure_index.csv",
+  "results\\real_data_missingness_visual_comparison\\audits\\visualization_comparison_audit.json": "results\\real_data_missingness_experiments\\comparison\\visualization_comparison_audit.json",
+  "results\\real_data_missingness_visual_comparison\\audits\\visualization_comparison_audit_zh.md": "results\\real_data_missingness_experiments\\comparison\\visualization_comparison_audit_zh.md"
+}

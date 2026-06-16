@@ -1,0 +1,1348 @@
+{
+  "summary": {
+    "all_complete": true,
+    "row_count": 134
+  },
+  "rows": [
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting",
+      "notes": "Scenario missingness_setting directory."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation",
+      "notes": "Scenario imputation directory."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_rate_dirs",
+      "expected_count": 4,
+      "observed_count": 4,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\masks",
+      "notes": "Expected 4 global mask rate directories."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_rate_dirs",
+      "expected_count": 4,
+      "observed_count": 4,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\missing_datasets",
+      "notes": "Expected 4 global missing dataset rate directories."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p05",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\masks\\rate_0p05__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p05",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\missing_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p05",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets",
+      "notes": "Expected 6 method directories per rate."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p05__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p10",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\masks\\rate_0p10__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p10",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\missing_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p10",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets",
+      "notes": "Expected 6 method directories per rate."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p10__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p20",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\masks\\rate_0p20__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p20",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\missing_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p20",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets",
+      "notes": "Expected 6 method directories per rate."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p20__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p30",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\masks\\rate_0p30__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p30",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\missingness_setting\\missing_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p30",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets",
+      "notes": "Expected 6 method directories per rate."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\imputed_datasets\\rate_0p30__mechanism_mcar_point__scope_global__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_main",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\summaries\\imputation_quality_summary_exclude_warmup.csv",
+      "notes": "Main summary file must exist."
+    },
+    {
+      "scenario_id": "global_mcar_point",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_by_flow_group",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\global_mcar_point\\imputation\\summaries\\imputation_quality_by_flow_group.csv",
+      "notes": "Flow-group summary file must exist."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting",
+      "notes": "Scenario missingness_setting directory."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation",
+      "notes": "Scenario imputation directory."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_rate_dirs",
+      "expected_count": 4,
+      "observed_count": 4,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\masks",
+      "notes": "Expected 4 structured mask rate directories."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_rate_dirs",
+      "expected_count": 4,
+      "observed_count": 4,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\missing_datasets",
+      "notes": "Expected 4 structured missing-dataset rate directories."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs",
+      "expected_count": 24,
+      "observed_count": 24,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 24 structured imputed method directories."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p05",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p05",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p05",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p10",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p10",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p10",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p20",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p20",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p20",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p20__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p30",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p30",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p30",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_temporal_block__rate_0p30__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_main",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\summaries\\structured_imputation_quality_summary_exclude_warmup.csv",
+      "notes": "Main summary file must exist."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_by_flow_group",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\summaries\\structured_imputation_quality_by_flow_group.csv",
+      "notes": "Flow-group summary file must exist."
+    },
+    {
+      "scenario_id": "node_temporal_block_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_by_length_group",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_temporal_block_mixed_short_mid_long\\imputation\\summaries\\structured_imputation_quality_by_length_group.csv",
+      "notes": "Length-group summary file must exist."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting",
+      "notes": "Scenario missingness_setting directory."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation",
+      "notes": "Scenario imputation directory."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_rate_dirs",
+      "expected_count": 4,
+      "observed_count": 4,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\masks",
+      "notes": "Expected 4 structured mask rate directories."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_rate_dirs",
+      "expected_count": 4,
+      "observed_count": 4,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\missing_datasets",
+      "notes": "Expected 4 structured missing-dataset rate directories."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs",
+      "expected_count": 24,
+      "observed_count": 24,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 24 structured imputed method directories."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p05",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p05",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p05",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p05_mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p05__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p10",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p10",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p10",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p10_mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p10__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p20",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p20",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p20",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p20_mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p20__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "mask_chunks_0p30",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\masks\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 mask parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "missingness_setting",
+      "artifact_type": "missing_dataset_chunks_0p30",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\missingness_setting\\missing_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42",
+      "notes": "Expected 61 missing-dataset parquet chunks."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_rate_method_dirs_0p30",
+      "expected_count": 6,
+      "observed_count": 6,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets",
+      "notes": "Expected 6 imputed method directories per rate."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_forward_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_forward_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_function_curve_fit",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_historical_linear_extrapolation",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_road_topology_neighbor_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_topology_function_hybrid",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "imputed_chunks_0p30_mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_zero_fill",
+      "expected_count": 61,
+      "observed_count": 61,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\imputed_datasets\\mechanism_node_subset_temporal_outage__rate_0p30__mixed_short_mid_long__seed_42__method_zero_fill",
+      "notes": "Expected 61 imputed parquet chunks per method."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_main",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\summaries\\outage_imputation_quality_summary_exclude_warmup.csv",
+      "notes": "Main summary file must exist."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_by_flow_group",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\summaries\\outage_imputation_quality_by_flow_group.csv",
+      "notes": "Flow-group summary file must exist."
+    },
+    {
+      "scenario_id": "node_subset_temporal_outage_mixed_short_mid_long",
+      "artifact_group": "imputation",
+      "artifact_type": "summary_by_length_group",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\scenarios\\node_subset_temporal_outage_mixed_short_mid_long\\imputation\\summaries\\outage_imputation_quality_by_length_group.csv",
+      "notes": "Length-group summary file must exist."
+    },
+    {
+      "scenario_id": "comparison",
+      "artifact_group": "comparison",
+      "artifact_type": "directory",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\comparison",
+      "notes": "Comparison root must exist."
+    },
+    {
+      "scenario_id": "comparison",
+      "artifact_group": "comparison",
+      "artifact_type": "figure_index",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\comparison\\figure_index.csv",
+      "notes": "Comparison figure_index.csv must exist."
+    },
+    {
+      "scenario_id": "shared",
+      "artifact_group": "shared",
+      "artifact_type": "path_aliases",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\path_aliases.json",
+      "notes": "path_aliases.json must exist."
+    },
+    {
+      "scenario_id": "shared",
+      "artifact_group": "shared",
+      "artifact_type": "readme",
+      "expected_count": 1,
+      "observed_count": 1,
+      "is_complete": true,
+      "path": "results\\real_data_missingness_experiments\\README_zh.md",
+      "notes": "README_zh.md must exist."
+    }
+  ]
+}

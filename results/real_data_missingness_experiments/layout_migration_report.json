@@ -1,0 +1,24 @@
+{
+  "purpose": "Reorganize completed missingness experiment results under a unified root for writing, visualization lookup, and Git hygiene.",
+  "old_directories": {
+    "global_source": "results\\real_data_global_missingness_setting",
+    "structured_source": "results\\real_data_structured_missingness_setting",
+    "comparison_source": "results\\real_data_missingness_visual_comparison"
+  },
+  "new_root": "results\\real_data_missingness_experiments",
+  "scenario_ids": [
+    "global_mcar_point",
+    "node_temporal_block_mixed_short_mid_long",
+    "node_subset_temporal_outage_mixed_short_mid_long"
+  ],
+  "moved_or_resolved_items": 317,
+  "large_data_items": 96,
+  "skipped_items": 0,
+  "kept_legacy_readmes": true,
+  "generated_experiment_registry": true,
+  "generated_path_aliases": true,
+  "validation_passed": true,
+  "follow_up_recommendation": "Use results\\real_data_missingness_experiments as the primary root for future lookup and lightweight Git operations.",
+  "shared_structured_note": "Shared structured missingness audits/manifests were copied into both structured scenarios because the original source covered the whole structured root.",
+  "missing_or_skipped_items": []
+}
