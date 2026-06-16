@@ -21,7 +21,44 @@ from matplotlib import pyplot as plt  # noqa: E402
 
 
 EXPECTED_EXPERIMENT_NAME = "real_data_structured_missingness_setting"
-EXPECTED_MECHANISM = "node_temporal_block"
+SUPPORTED_MECHANISMS = {
+    "node_temporal_block": {
+        "artifact_prefix": "structured",
+        "display_title": "Structured Temporal Block",
+        "run_config_name": "run_config_imputation.json",
+        "run_commands_name": "run_commands_imputation.txt",
+        "input_check_csv_name": "structured_imputation_input_check.csv",
+        "input_check_json_name": "structured_imputation_input_check.json",
+        "chunk_status_name": "structured_imputed_chunk_status.csv",
+        "chunk_state_log_name": "structured_imputed_chunk_runtime_state.jsonl",
+        "resume_scan_name": "structured_imputed_resume_scan.csv",
+        "detail_summary_name": "structured_imputation_quality_detail.csv",
+        "summary_all_days_name": "structured_imputation_quality_summary_all_days.csv",
+        "summary_exclude_warmup_name": "structured_imputation_quality_summary_exclude_warmup.csv",
+        "summary_by_flow_group_name": "structured_imputation_quality_by_flow_group.csv",
+        "summary_by_length_group_name": "structured_imputation_quality_by_length_group.csv",
+        "audit_json_name": "structured_causal_imputation_audit.json",
+        "audit_md_name": "structured_causal_imputation_audit_zh.md",
+    },
+    "node_subset_temporal_outage": {
+        "artifact_prefix": "outage",
+        "display_title": "Structured Node Subset Outage",
+        "run_config_name": "run_config_imputation_outage.json",
+        "run_commands_name": "run_commands_imputation_outage.txt",
+        "input_check_csv_name": "outage_imputation_input_check.csv",
+        "input_check_json_name": "outage_imputation_input_check.json",
+        "chunk_status_name": "outage_imputed_chunk_status.csv",
+        "chunk_state_log_name": "outage_imputed_chunk_runtime_state.jsonl",
+        "resume_scan_name": "outage_imputed_resume_scan.csv",
+        "detail_summary_name": "outage_imputation_quality_detail.csv",
+        "summary_all_days_name": "outage_imputation_quality_summary_all_days.csv",
+        "summary_exclude_warmup_name": "outage_imputation_quality_summary_exclude_warmup.csv",
+        "summary_by_flow_group_name": "outage_imputation_quality_by_flow_group.csv",
+        "summary_by_length_group_name": "outage_imputation_quality_by_length_group.csv",
+        "audit_json_name": "outage_causal_imputation_audit.json",
+        "audit_md_name": "outage_causal_imputation_audit_zh.md",
+    },
+}
 EXPECTED_SCENARIO_TAG = "mixed_short_mid_long"
 METHOD_ALIASES = {
     "geo_neighbor_fill": "road_topology_neighbor_fill",
@@ -48,11 +85,22 @@ class StagePaths:
     summaries_dir: Path
     figures_dir: Path
     imputed_datasets_dir: Path
+    artifact_prefix: str
+    mechanism_title: str
     run_config_path: Path
     run_commands_path: Path
+    input_check_csv_path: Path
+    input_check_json_path: Path
     chunk_status_path: Path
     chunk_state_log_path: Path
     resume_scan_path: Path
+    detail_summary_path: Path
+    summary_all_days_path: Path
+    summary_exclude_warmup_path: Path
+    summary_by_flow_group_path: Path
+    summary_by_length_group_path: Path
+    audit_json_path: Path
+    audit_md_path: Path
 
 
 @dataclass
@@ -94,7 +142,7 @@ class RateScanResult:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="基于已有 structured node_temporal_block 缺失数据执行严格历史因果补全。")
+    parser = argparse.ArgumentParser(description="基于已有 structured missingness 缺失数据执行严格历史因果补全。")
     parser.add_argument("--stage", required=True, choices=["prepare", "impute", "summarize", "validate", "plot", "all"])
     parser.add_argument("--input_dir", required=True, type=Path)
     parser.add_argument("--missingness_dir", required=True, type=Path)
@@ -178,6 +226,12 @@ def to_serializable(value: Any) -> Any:
     return value
 
 
+def mechanism_settings(mechanism: str) -> dict[str, str]:
+    if mechanism not in SUPPORTED_MECHANISMS:
+        raise ValueError(f"unsupported mechanism: {mechanism}")
+    return SUPPORTED_MECHANISMS[mechanism]
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(to_serializable(payload), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -187,7 +241,8 @@ def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(to_serializable(payload), ensure_ascii=False) + "\n")
 
 
-def build_paths(output_dir: Path) -> StagePaths:
+def build_paths(output_dir: Path, mechanism: str) -> StagePaths:
+    settings = mechanism_settings(mechanism)
     return StagePaths(
         root=output_dir,
         manifests_dir=output_dir / "manifests",
@@ -195,11 +250,22 @@ def build_paths(output_dir: Path) -> StagePaths:
         summaries_dir=output_dir / "summaries",
         figures_dir=output_dir / "figures",
         imputed_datasets_dir=output_dir / "imputed_datasets",
-        run_config_path=output_dir / "run_config_imputation.json",
-        run_commands_path=output_dir / "run_commands_imputation.txt",
-        chunk_status_path=output_dir / "manifests" / "structured_imputed_chunk_status.csv",
-        chunk_state_log_path=output_dir / "manifests" / "structured_imputed_chunk_runtime_state.jsonl",
-        resume_scan_path=output_dir / "manifests" / "structured_imputed_resume_scan.csv",
+        artifact_prefix=settings["artifact_prefix"],
+        mechanism_title=settings["display_title"],
+        run_config_path=output_dir / settings["run_config_name"],
+        run_commands_path=output_dir / settings["run_commands_name"],
+        input_check_csv_path=output_dir / "manifests" / settings["input_check_csv_name"],
+        input_check_json_path=output_dir / "manifests" / settings["input_check_json_name"],
+        chunk_status_path=output_dir / "manifests" / settings["chunk_status_name"],
+        chunk_state_log_path=output_dir / "manifests" / settings["chunk_state_log_name"],
+        resume_scan_path=output_dir / "manifests" / settings["resume_scan_name"],
+        detail_summary_path=output_dir / "summaries" / settings["detail_summary_name"],
+        summary_all_days_path=output_dir / "summaries" / settings["summary_all_days_name"],
+        summary_exclude_warmup_path=output_dir / "summaries" / settings["summary_exclude_warmup_name"],
+        summary_by_flow_group_path=output_dir / "summaries" / settings["summary_by_flow_group_name"],
+        summary_by_length_group_path=output_dir / "summaries" / settings["summary_by_length_group_name"],
+        audit_json_path=output_dir / "audits" / settings["audit_json_name"],
+        audit_md_path=output_dir / "audits" / settings["audit_md_name"],
     )
 
 
@@ -245,8 +311,8 @@ def write_run_artifacts(args: argparse.Namespace, paths: StagePaths) -> None:
 
 
 def validate_args(args: argparse.Namespace) -> None:
-    if args.mechanism != EXPECTED_MECHANISM:
-        raise ValueError(f"this pipeline only supports mechanism={EXPECTED_MECHANISM}")
+    if args.mechanism not in SUPPORTED_MECHANISMS:
+        raise ValueError(f"this pipeline only supports mechanisms={sorted(SUPPORTED_MECHANISMS)}")
     if args.scenario_tag != EXPECTED_SCENARIO_TAG:
         raise ValueError(f"this pipeline only supports scenario_tag={EXPECTED_SCENARIO_TAG}")
     if not args.causal_history_only:
@@ -392,6 +458,7 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFra
     clean_files = list_clean_files(args.input_dir)
     chunk_count = len(clean_files)
     rows: list[dict[str, Any]] = []
+    event_manifest_path = paths.manifests_dir / f"{args.mechanism}_events.csv"
 
     for rate in args.missing_rates_parsed:
         mask_dir = mask_subdir(args.missingness_dir, rate, args.mechanism, args.scenario_tag, args.seed)
@@ -402,6 +469,7 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFra
         uses_row_index_mask = False
         has_length_group = False
         has_actual_length = False
+        has_node_subset_event = bool(event_manifest_path.exists()) if args.mechanism == "node_subset_temporal_outage" else True
         if mask_files:
             sample_mask_df = pd.read_parquet(mask_files[0])
             sample_mask_columns = list(sample_mask_df.columns)
@@ -422,14 +490,15 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFra
                 "uses_row_index_mask": bool(uses_row_index_mask),
                 "has_length_group": bool(has_length_group),
                 "has_actual_length": bool(has_actual_length),
+                "has_node_subset_event": bool(has_node_subset_event),
                 "chunk_count_expected": int(chunk_count),
-                "scenario_tag": scenario_dir_name(rate, args.mechanism, args.scenario_tag, args.seed),
+                "scenario_tag": args.scenario_tag,
                 "sample_mask_columns": json.dumps(sample_mask_columns, ensure_ascii=False),
             }
         )
 
     check_df = pd.DataFrame(rows).sort_values("missing_rate").reset_index(drop=True)
-    check_df.to_csv(paths.manifests_dir / "structured_imputation_input_check.csv", index=False, encoding="utf-8-sig")
+    check_df.to_csv(paths.input_check_csv_path, index=False, encoding="utf-8-sig")
     check_json = {
         "input_dir": str(args.input_dir),
         "missingness_dir": str(args.missingness_dir),
@@ -437,22 +506,27 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFra
         "scenario_tag": args.scenario_tag,
         "missing_rates": args.missing_rates_parsed,
         "chunk_count_expected": chunk_count,
+        "node_subset_event_manifest": str(event_manifest_path),
         "checks": check_df.to_dict(orient="records"),
         "notes_zh": [
-            "本轮只检查并补全 node_temporal_block / mixed_short_mid_long。",
+            f"本轮只检查并补全 {args.mechanism} / {args.scenario_tag}。",
             "如果任何缺失率不是 61/61，则不应进入 impute 阶段。",
         ],
     }
-    write_json(paths.manifests_dir / "structured_imputation_input_check.json", check_json)
+    write_json(paths.input_check_json_path, check_json)
     incomplete_df = check_df.loc[
         (~check_df["is_complete"])
         | (~check_df["uses_row_index_mask"])
         | (~(check_df["has_length_group"] | check_df["has_actual_length"]))
+        | (
+            (args.mechanism == "node_subset_temporal_outage")
+            & (~check_df["has_node_subset_event"])
+        )
     ]
     if not incomplete_df.empty:
         raise RuntimeError(
-            "structured node_temporal_block input check failed for one or more missing rates; "
-            "see structured_imputation_input_check.csv/json"
+            f"structured {args.mechanism} input check failed for one or more missing rates; "
+            f"see {paths.input_check_csv_path.name}/{paths.input_check_json_path.name}"
         )
     return check_df, check_json
 
@@ -657,7 +731,7 @@ def persist_detail_snapshot(detail_rows: list[dict[str, Any]], paths: StagePaths
         .sort_values(["missing_rate", "method", "chunk_index", "group_dimension", "flow_group", "length_group"])
         .reset_index(drop=True)
     )
-    detail_df.to_csv(paths.summaries_dir / "structured_imputation_quality_detail.csv", index=False, encoding="utf-8-sig")
+    detail_df.to_csv(paths.detail_summary_path, index=False, encoding="utf-8-sig")
 
 
 def load_output_matrix_from_file(args: argparse.Namespace, prepared: PreparedChunk, output_path: Path) -> np.ndarray:
@@ -671,9 +745,8 @@ def load_existing_progress(paths: StagePaths) -> tuple[pd.DataFrame, pd.DataFram
         status_df = pd.read_csv(paths.chunk_status_path)
     else:
         status_df = pd.DataFrame()
-    detail_path = paths.summaries_dir / "structured_imputation_quality_detail.csv"
-    if detail_path.exists():
-        detail_df = pd.read_csv(detail_path)
+    if paths.detail_summary_path.exists():
+        detail_df = pd.read_csv(paths.detail_summary_path)
     else:
         detail_df = pd.DataFrame()
     return status_df, detail_df
@@ -1193,7 +1266,7 @@ def plot_metric_by_rate(summary_df: pd.DataFrame, metric: str, output_png: Path,
     plt.close()
 
 
-def plot_nonzero_zoom(summary_df: pd.DataFrame, output_png: Path, output_pdf: Path) -> bool:
+def plot_nonzero_zoom(summary_df: pd.DataFrame, output_png: Path, output_pdf: Path, title: str) -> bool:
     overall_df = summary_df.copy()
     zero_df = overall_df.loc[overall_df["method"] == "zero_fill"]
     other_df = overall_df.loc[overall_df["method"] != "zero_fill"]
@@ -1208,7 +1281,7 @@ def plot_nonzero_zoom(summary_df: pd.DataFrame, output_png: Path, output_pdf: Pa
         plt.plot(method_df["missing_rate"], method_df["rmse"], marker="o", linewidth=2, label=method)
     plt.xlabel("Missing Rate")
     plt.ylabel("RMSE")
-    plt.title("Structured Temporal Block RMSE by Method (Non-Zero Methods Only)")
+    plt.title(title)
     plt.xticks(argsort_unique(overall_df["missing_rate"].to_numpy(dtype=float)))
     plt.grid(alpha=0.3)
     plt.legend()
@@ -1242,7 +1315,7 @@ def plot_metric_by_length_group(length_df: pd.DataFrame, metric: str, output_png
     plt.close(fig)
 
 
-def plot_rmse_by_length_group_and_method(length_df: pd.DataFrame, output_png: Path, output_pdf: Path) -> None:
+def plot_rmse_by_length_group_and_method(length_df: pd.DataFrame, output_png: Path, output_pdf: Path, title: str) -> None:
     if length_df.empty:
         raise RuntimeError("cannot plot RMSE by length_group and method because grouped summary is empty")
     x_positions = np.arange(len(LENGTH_GROUP_LABELS), dtype=np.float32)
@@ -1259,7 +1332,7 @@ def plot_rmse_by_length_group_and_method(length_df: pd.DataFrame, output_png: Pa
         plt.bar(offsets, subset.to_numpy(dtype=float), width=width, label=method)
     plt.xticks(x_positions, LENGTH_GROUP_LABELS)
     plt.ylabel("RMSE")
-    plt.title("Structured Temporal Block RMSE by Length Group and Method")
+    plt.title(title)
     plt.grid(axis="y", alpha=0.3)
     plt.legend()
     plt.tight_layout()
@@ -1268,7 +1341,7 @@ def plot_rmse_by_length_group_and_method(length_df: pd.DataFrame, output_png: Pa
     plt.close()
 
 
-def plot_length_group_nonzero_zoom(length_df: pd.DataFrame, output_png: Path, output_pdf: Path) -> bool:
+def plot_length_group_nonzero_zoom(length_df: pd.DataFrame, output_png: Path, output_pdf: Path, title: str) -> bool:
     zero_df = length_df.loc[length_df["method"] == "zero_fill"]
     other_df = length_df.loc[length_df["method"] != "zero_fill"]
     if zero_df.empty or other_df.empty:
@@ -1288,7 +1361,7 @@ def plot_length_group_nonzero_zoom(length_df: pd.DataFrame, output_png: Path, ou
     axes[0].set_ylabel("RMSE")
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(handles, labels, loc="upper center", ncol=3)
-    fig.suptitle("Structured Temporal Block RMSE by Length Group (Non-Zero Methods Only)")
+    fig.suptitle(title)
     fig.tight_layout(rect=(0, 0, 1, 0.92))
     fig.savefig(output_png, dpi=200)
     fig.savefig(output_pdf)
@@ -1402,7 +1475,7 @@ def run_impute(
     input_check_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     if input_check_df is None:
-        input_check_df = pd.read_csv(paths.manifests_dir / "structured_imputation_input_check.csv")
+        input_check_df = pd.read_csv(paths.input_check_csv_path)
 
     clean_files = list_clean_files(args.input_dir)
     ref_node_ids, node_count = prepare_reference_layout(args, clean_files)
@@ -1609,7 +1682,7 @@ def run_impute(
         .sort_values(["missing_rate", "method", "chunk_index"])
         .reset_index(drop=True)
     )
-    detail_df.to_csv(paths.summaries_dir / "structured_imputation_quality_detail.csv", index=False, encoding="utf-8-sig")
+    detail_df.to_csv(paths.detail_summary_path, index=False, encoding="utf-8-sig")
     status_df.to_csv(paths.chunk_status_path, index=False, encoding="utf-8-sig")
     pd.DataFrame(scan_summaries).sort_values(["missing_rate"]).to_csv(
         paths.resume_scan_path,
@@ -1624,49 +1697,32 @@ def run_summarize(
     detail_df: pd.DataFrame | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     if detail_df is None:
-        detail_path = paths.summaries_dir / "structured_imputation_quality_detail.csv"
-        if not detail_path.exists():
-            raise FileNotFoundError("structured_imputation_quality_detail.csv not found; run --stage impute first")
-        detail_df = pd.read_csv(detail_path)
+        if not paths.detail_summary_path.exists():
+            raise FileNotFoundError(f"{paths.detail_summary_path.name} not found; run --stage impute first")
+        detail_df = pd.read_csv(paths.detail_summary_path)
 
     summary_all_days, _, _ = summary_from_detail(detail_df, exclude_warmup=False)
     summary_exclude_warmup, summary_by_flow_group, summary_by_length_group = summary_from_detail(
         detail_df, exclude_warmup=True
     )
 
-    summary_all_days.to_csv(
-        paths.summaries_dir / "structured_imputation_quality_summary_all_days.csv",
-        index=False,
-        encoding="utf-8-sig",
-    )
-    summary_exclude_warmup.to_csv(
-        paths.summaries_dir / "structured_imputation_quality_summary_exclude_warmup.csv",
-        index=False,
-        encoding="utf-8-sig",
-    )
-    summary_by_flow_group.to_csv(
-        paths.summaries_dir / "structured_imputation_quality_by_flow_group.csv",
-        index=False,
-        encoding="utf-8-sig",
-    )
-    summary_by_length_group.to_csv(
-        paths.summaries_dir / "structured_imputation_quality_by_length_group.csv",
-        index=False,
-        encoding="utf-8-sig",
-    )
+    summary_all_days.to_csv(paths.summary_all_days_path, index=False, encoding="utf-8-sig")
+    summary_exclude_warmup.to_csv(paths.summary_exclude_warmup_path, index=False, encoding="utf-8-sig")
+    summary_by_flow_group.to_csv(paths.summary_by_flow_group_path, index=False, encoding="utf-8-sig")
+    summary_by_length_group.to_csv(paths.summary_by_length_group_path, index=False, encoding="utf-8-sig")
     return summary_all_days, summary_exclude_warmup, summary_by_flow_group, summary_by_length_group
 
 
 def run_validate(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
     status_path = paths.chunk_status_path
-    summary_path = paths.summaries_dir / "structured_imputation_quality_summary_exclude_warmup.csv"
-    length_summary_path = paths.summaries_dir / "structured_imputation_quality_by_length_group.csv"
+    summary_path = paths.summary_exclude_warmup_path
+    length_summary_path = paths.summary_by_length_group_path
     if not status_path.exists():
-        raise FileNotFoundError("structured_imputed_chunk_status.csv not found; run --stage impute first")
+        raise FileNotFoundError(f"{status_path.name} not found; run --stage impute first")
     if not summary_path.exists():
-        raise FileNotFoundError("structured_imputation_quality_summary_exclude_warmup.csv not found; run --stage summarize first")
+        raise FileNotFoundError(f"{summary_path.name} not found; run --stage summarize first")
     if not length_summary_path.exists():
-        raise FileNotFoundError("structured_imputation_quality_by_length_group.csv not found; run --stage summarize first")
+        raise FileNotFoundError(f"{length_summary_path.name} not found; run --stage summarize first")
 
     status_df = pd.read_csv(status_path)
     summary_df = pd.read_csv(summary_path)
@@ -1733,32 +1789,35 @@ def run_validate(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
         "length_group_metrics_enabled": True,
         "completeness": completeness_rows,
         "output_files": {
-            "structured_imputed_chunk_status": str(status_path),
+            "chunk_status": str(status_path),
             "chunk_runtime_state_log": str(paths.chunk_state_log_path),
             "resume_scan": str(paths.resume_scan_path),
-            "input_check_csv": str(paths.manifests_dir / "structured_imputation_input_check.csv"),
-            "input_check_json": str(paths.manifests_dir / "structured_imputation_input_check.json"),
-            "detail_summary": str(paths.summaries_dir / "structured_imputation_quality_detail.csv"),
-            "summary_all_days": str(paths.summaries_dir / "structured_imputation_quality_summary_all_days.csv"),
-            "summary_exclude_warmup": str(paths.summaries_dir / "structured_imputation_quality_summary_exclude_warmup.csv"),
-            "summary_by_flow_group": str(paths.summaries_dir / "structured_imputation_quality_by_flow_group.csv"),
-            "summary_by_length_group": str(paths.summaries_dir / "structured_imputation_quality_by_length_group.csv"),
+            "input_check_csv": str(paths.input_check_csv_path),
+            "input_check_json": str(paths.input_check_json_path),
+            "detail_summary": str(paths.detail_summary_path),
+            "summary_all_days": str(paths.summary_all_days_path),
+            "summary_exclude_warmup": str(paths.summary_exclude_warmup_path),
+            "summary_by_flow_group": str(paths.summary_by_flow_group_path),
+            "summary_by_length_group": str(paths.summary_by_length_group_path),
         },
         "resume_mode": "status_snapshot_only",
     }
-    write_json(paths.audits_dir / "structured_causal_imputation_audit.json", audit_payload)
-    write_audit_markdown(paths.audits_dir / "structured_causal_imputation_audit_zh.md", audit_payload)
+    write_json(paths.audit_json_path, audit_payload)
+    write_audit_markdown(paths.audit_md_path, audit_payload)
     return audit_payload
 
 
 def write_audit_markdown(path: Path, audit_payload: dict[str, Any]) -> None:
+    mechanism = str(audit_payload["mechanism"])
+    handled_label = mechanism
+    ignored_label = "node_temporal_block" if mechanism == "node_subset_temporal_outage" else "node_subset_temporal_outage"
     lines = [
         "# 结构化连续缺失补全因果审计报告",
         "",
         "## 1. 范围",
         "",
-        "- 本轮只基于已有 `node_temporal_block` 的 `masks` 与 `missing_datasets` 执行补全。",
-        "- 本轮未处理 `node_subset_temporal_outage`。",
+        f"- 本轮只基于已有 `{handled_label}` 的 `masks` 与 `missing_datasets` 执行补全。",
+        f"- 本轮未处理 `{ignored_label}`。",
         "- 未重新生成缺失设置。",
         "- 未修改原始 `input_dir`。",
         "- 本轮结果只代表缺失值补全误差，不代表交通预测误差。",
@@ -1799,78 +1858,81 @@ def write_audit_markdown(path: Path, audit_payload: dict[str, Any]) -> None:
 
 
 def run_plot(paths: StagePaths) -> dict[str, Any]:
-    summary_path = paths.summaries_dir / "structured_imputation_quality_summary_exclude_warmup.csv"
-    length_summary_path = paths.summaries_dir / "structured_imputation_quality_by_length_group.csv"
+    summary_path = paths.summary_exclude_warmup_path
+    length_summary_path = paths.summary_by_length_group_path
     if not summary_path.exists():
-        raise FileNotFoundError("structured_imputation_quality_summary_exclude_warmup.csv not found; run --stage summarize first")
+        raise FileNotFoundError(f"{summary_path.name} not found; run --stage summarize first")
     if not length_summary_path.exists():
-        raise FileNotFoundError("structured_imputation_quality_by_length_group.csv not found; run --stage summarize first")
+        raise FileNotFoundError(f"{length_summary_path.name} not found; run --stage summarize first")
     summary_df = pd.read_csv(summary_path)
     length_df = pd.read_csv(length_summary_path)
 
     plot_metric_by_rate(
         summary_df,
         metric="rmse",
-        output_png=paths.figures_dir / "structured_multirate_rmse_by_method.png",
-        output_pdf=paths.figures_dir / "structured_multirate_rmse_by_method.pdf",
-        title="Structured Temporal Block RMSE by Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_multirate_rmse_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_multirate_rmse_by_method.pdf",
+        title=f"{paths.mechanism_title} RMSE by Method",
     )
     plot_metric_by_rate(
         summary_df,
         metric="mae",
-        output_png=paths.figures_dir / "structured_multirate_mae_by_method.png",
-        output_pdf=paths.figures_dir / "structured_multirate_mae_by_method.pdf",
-        title="Structured Temporal Block MAE by Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_multirate_mae_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_multirate_mae_by_method.pdf",
+        title=f"{paths.mechanism_title} MAE by Method",
     )
     plot_metric_by_rate(
         summary_df,
         metric="smape",
-        output_png=paths.figures_dir / "structured_multirate_smape_by_method.png",
-        output_pdf=paths.figures_dir / "structured_multirate_smape_by_method.pdf",
-        title="Structured Temporal Block sMAPE by Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_multirate_smape_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_multirate_smape_by_method.pdf",
+        title=f"{paths.mechanism_title} sMAPE by Method",
     )
     plot_metric_by_rate(
         summary_df,
         metric="nrmse",
-        output_png=paths.figures_dir / "structured_multirate_nrmse_by_method.png",
-        output_pdf=paths.figures_dir / "structured_multirate_nrmse_by_method.pdf",
-        title="Structured Temporal Block NRMSE by Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_multirate_nrmse_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_multirate_nrmse_by_method.pdf",
+        title=f"{paths.mechanism_title} NRMSE by Method",
     )
     zoom_created = plot_nonzero_zoom(
         summary_df,
-        output_png=paths.figures_dir / "structured_rmse_by_method_nonzero_zoom.png",
-        output_pdf=paths.figures_dir / "structured_rmse_by_method_nonzero_zoom.pdf",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_method_nonzero_zoom.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_method_nonzero_zoom.pdf",
+        title=f"{paths.mechanism_title} RMSE by Method (Non-Zero Methods Only)",
     )
     plot_metric_by_length_group(
         length_df,
         metric="rmse",
-        output_png=paths.figures_dir / "structured_length_group_rmse_by_method.png",
-        output_pdf=paths.figures_dir / "structured_length_group_rmse_by_method.pdf",
-        title="Structured Temporal Block RMSE by Length Group and Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_by_method.pdf",
+        title=f"{paths.mechanism_title} RMSE by Length Group and Method",
     )
     plot_metric_by_length_group(
         length_df,
         metric="mae",
-        output_png=paths.figures_dir / "structured_length_group_mae_by_method.png",
-        output_pdf=paths.figures_dir / "structured_length_group_mae_by_method.pdf",
-        title="Structured Temporal Block MAE by Length Group and Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_length_group_mae_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_length_group_mae_by_method.pdf",
+        title=f"{paths.mechanism_title} MAE by Length Group and Method",
     )
     plot_metric_by_length_group(
         length_df,
         metric="smape",
-        output_png=paths.figures_dir / "structured_length_group_smape_by_method.png",
-        output_pdf=paths.figures_dir / "structured_length_group_smape_by_method.pdf",
-        title="Structured Temporal Block sMAPE by Length Group and Method",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_length_group_smape_by_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_length_group_smape_by_method.pdf",
+        title=f"{paths.mechanism_title} sMAPE by Length Group and Method",
     )
     plot_rmse_by_length_group_and_method(
         length_df,
-        output_png=paths.figures_dir / "structured_rmse_by_length_group_and_method.png",
-        output_pdf=paths.figures_dir / "structured_rmse_by_length_group_and_method.pdf",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_length_group_and_method.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_length_group_and_method.pdf",
+        title=f"{paths.mechanism_title} RMSE by Length Group and Method",
     )
     length_zoom_created = plot_length_group_nonzero_zoom(
         length_df,
-        output_png=paths.figures_dir / "structured_length_group_rmse_nonzero_zoom.png",
-        output_pdf=paths.figures_dir / "structured_length_group_rmse_nonzero_zoom.pdf",
+        output_png=paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_nonzero_zoom.png",
+        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_nonzero_zoom.pdf",
+        title=f"{paths.mechanism_title} RMSE by Length Group (Non-Zero Methods Only)",
     )
     return {"nonzero_zoom_created": zoom_created, "length_group_nonzero_zoom_created": length_zoom_created}
 
@@ -1887,7 +1949,7 @@ def main() -> None:
     args.exclude_warmup_from_main_metrics = parse_bool(args.exclude_warmup_from_main_metrics)
     validate_args(args)
 
-    paths = build_paths(args.output_dir)
+    paths = build_paths(args.output_dir, args.mechanism)
     mkdirs(paths)
     write_run_artifacts(args, paths)
 
@@ -1898,7 +1960,7 @@ def main() -> None:
         input_check_df, _ = run_prepare(args, paths)
     if args.stage in {"impute", "all"}:
         if input_check_df is None:
-            input_check_df = pd.read_csv(paths.manifests_dir / "structured_imputation_input_check.csv")
+            input_check_df = pd.read_csv(paths.input_check_csv_path)
         detail_df, _ = run_impute(args, paths, input_check_df)
     if args.stage in {"summarize", "all"}:
         run_summarize(paths, detail_df)
