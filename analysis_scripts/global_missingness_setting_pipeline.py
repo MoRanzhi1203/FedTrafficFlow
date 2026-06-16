@@ -78,7 +78,7 @@ def build_paths(output_dir: Path) -> StagePaths:
     return StagePaths(
         root=output_dir,
         masks_dir=output_dir / "masks",
-        missing_datasets_dir=output_dir / "missing_datasets",
+        missing_datasets_dir=output_dir / "miss_data",
         manifests_dir=output_dir / "manifests",
         audits_dir=output_dir / "audits",
         run_config_path=output_dir / "run_config.json",
@@ -304,11 +304,11 @@ def build_allocation_table(counts_df: pd.DataFrame, rates: Iterable[float], seed
 
 
 def mask_subdir(paths: StagePaths, rate: float, mechanism: str, seed: int) -> Path:
-    return paths.masks_dir / f"rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}"
+    return paths.masks_dir / f"r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}"
 
 
 def missing_subdir(paths: StagePaths, rate: float, mechanism: str, seed: int) -> Path:
-    return paths.missing_datasets_dir / f"rate_{format_rate_tag(rate)}__mechanism_{mechanism}__scope_global__seed_{seed}"
+    return paths.missing_datasets_dir / f"r{format_rate_tag(rate).replace('0p', '')}_mcar_s{seed}"
 
 
 def write_allocation_csv(paths: StagePaths, allocation_df: pd.DataFrame) -> None:

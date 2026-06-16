@@ -1,2 +1,0 @@
-Global missingness setting pipeline commands
-python analysis_scripts\global_missingness_setting_pipeline.py --stage all --input_dir data\analysis\node_intersection_flow_parquet --output_dir results\real_data_global_missingness_setting --missing_rates 0,0.05,0.1,0.2,0.3 --mechanism mcar_point --mask_scope global --seed 42 --target_col 路口车流量 --node_col 节点ID --time_col 时间段 --period 96

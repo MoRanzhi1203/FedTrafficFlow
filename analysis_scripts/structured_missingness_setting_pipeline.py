@@ -243,7 +243,7 @@ def build_paths(output_dir: Path) -> StagePaths:
     return StagePaths(
         root=output_dir,
         masks_dir=output_dir / "masks",
-        missing_datasets_dir=output_dir / "missing_datasets",
+        missing_datasets_dir=output_dir / "miss_data",
         manifests_dir=output_dir / "manifests",
         audits_dir=output_dir / "audits",
         outage_node_lists_dir=output_dir / "manifests" / "outage_node_lists",
@@ -450,22 +450,29 @@ def prepare_chunk_layout(
 
 
 def scenario_mask_dir(paths: StagePaths, scenario: ScenarioDefinition) -> Path:
-    return paths.masks_dir / scenario.scenario_tag
+    return paths.masks_dir / scenario_output_name(scenario)
 
 
 def scenario_missing_dir(paths: StagePaths, scenario: ScenarioDefinition) -> Path:
-    return paths.missing_datasets_dir / scenario.scenario_tag
+    return paths.missing_datasets_dir / scenario_output_name(scenario)
 
 
 def scenario_event_path(paths: StagePaths, scenario: ScenarioDefinition) -> Path:
     event_stem = "node_temporal_block_events" if scenario.mechanism == NODE_TEMPORAL_BLOCK else "node_subset_temporal_outage_events"
-    return paths.manifests_dir / f"{event_stem}__{scenario.scenario_tag}.csv"
+    return paths.manifests_dir / f"{event_stem}__{scenario_output_name(scenario)}.csv"
 
 
 def legacy_event_path(paths: StagePaths, scenario: ScenarioDefinition) -> Path:
     if scenario.mechanism == NODE_TEMPORAL_BLOCK:
         return paths.manifests_dir / "node_temporal_block_events.csv"
     return paths.manifests_dir / "node_subset_temporal_outage_events.csv"
+
+
+def scenario_output_name(scenario: ScenarioDefinition) -> str:
+    seed_match = re.search(r"__seed_(\d+)$", scenario.scenario_tag)
+    seed_text = seed_match.group(1) if seed_match else "42"
+    prefix = "ntb" if scenario.mechanism == NODE_TEMPORAL_BLOCK else "nso"
+    return f"{prefix}_r{format_rate_tag(scenario.missing_rate).replace('0p', '')}_mix_s{seed_text}"
 
 
 def write_design_doc(paths: StagePaths, length_config: LengthSamplingConfig) -> None:
@@ -476,7 +483,7 @@ def write_design_doc(paths: StagePaths, length_config: LengthSamplingConfig) -> 
     lines = [
         "# 结构化缺失设计说明",
         "",
-        "1. 已有 `results\\real_data_global_missingness_setting` 继续保留为 global MCAR point 随机点缺失基准。",
+        "1. 已有 `results\\rdm_exp\\scenarios\\g_mcar_pt` 作为 global MCAR point 随机点缺失基准。",
         "2. 本轮新增 `node_temporal_block` 和 `node_subset_temporal_outage` 两类结构化缺失机制。",
         "3. 每个机制、每个缺失率只生成一套结构化缺失数据集，不再按固定长度拆分为多个 block 目录。",
         "4. 连续缺失长度采用事件级随机变量 `mixed_short_mid_long`。",

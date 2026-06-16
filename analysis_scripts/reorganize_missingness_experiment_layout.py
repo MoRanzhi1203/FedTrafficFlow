@@ -67,7 +67,7 @@ SCENARIO_META = {
 
 EXPECTED_RATES = ["0p05", "0p10", "0p20", "0p30"]
 README_TEXT = (
-    "本目录结果已迁移至 results\\real_data_missingness_experiments。\n"
+    "本目录结果已迁移至 results\\rdm_exp。\n"
     "请使用 experiment_registry.json 或 path_aliases.json 查找新路径。\n"
 )
 
@@ -181,7 +181,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--target_root",
         type=Path,
-        default=Path("results/real_data_missingness_experiments"),
+        default=Path("results/rdm_exp"),
     )
     parser.add_argument(
         "--global_source",

@@ -65,13 +65,30 @@ METHOD_ALIASES = {
     "geo_func_hybrid": "topology_function_hybrid",
 }
 METHOD_ORDER = [
-    "zero_fill",
+    "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
     "topology_function_hybrid",
 ]
+REMOVED_METHODS = {"zero_fill"}
+METHOD_DIR_ABBREVIATIONS = {
+    "mean_fill": "mf",
+    "forward_fill": "ff",
+    "historical_linear_extrapolation": "hle",
+    "road_topology_neighbor_fill": "rtn",
+    "function_curve_fit": "fcf",
+    "topology_function_hybrid": "tfh",
+}
+METHOD_FALLBACK_POLICY = {
+    "mean_fill": "same_slot_7day_mean -> node_7day_mean -> slot_7day_mean -> global_7day_mean -> current_day_forward_fill",
+    "forward_fill": "use_previous_slot_or_previous_day_last_slot_then_global_safe_fallback_zero",
+    "historical_linear_extrapolation": "fallback_to_current_day_forward_fill_when_history_is_insufficient",
+    "road_topology_neighbor_fill": "fallback_to_current_day_forward_fill_when_no_topology_history_is_available",
+    "function_curve_fit": "fallback_to_current_day_forward_fill_when_no_history_profile_is_available",
+    "topology_function_hybrid": "blend_topology_and_function_primary_predictions_or_fallback_to_current_day_forward_fill",
+}
 FLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]
 LENGTH_GROUP_LABELS = ["short", "mid", "long"]
 EPSILON = 1e-6
@@ -135,6 +152,7 @@ class RateScanResult:
     valid_status_rows: list[dict[str, Any]]
     valid_detail_rows: list[dict[str, Any]]
     forward_last_state: np.ndarray | None
+    history_observed: deque[np.ndarray]
     history_linear: deque[np.ndarray]
     history_road: deque[np.ndarray]
     history_function: deque[np.ndarray]
@@ -195,6 +213,8 @@ def parse_methods(raw: str) -> list[str]:
     parsed: list[str] = []
     for token in raw.split(","):
         normalized = METHOD_ALIASES.get(token.strip(), token.strip())
+        if normalized in REMOVED_METHODS:
+            raise ValueError(f"unsupported imputation method (removed from formal set): {token}")
         if normalized not in METHOD_ORDER:
             raise ValueError(f"unsupported imputation method: {token}")
         if normalized not in parsed:
@@ -249,7 +269,7 @@ def build_paths(output_dir: Path, mechanism: str) -> StagePaths:
         audits_dir=output_dir / "audits",
         summaries_dir=output_dir / "summaries",
         figures_dir=output_dir / "figures",
-        imputed_datasets_dir=output_dir / "imputed_datasets",
+        imputed_datasets_dir=output_dir / "imp_data",
         artifact_prefix=settings["artifact_prefix"],
         mechanism_title=settings["display_title"],
         run_config_path=output_dir / settings["run_config_name"],
@@ -340,11 +360,12 @@ def extract_day_index(file_name: str) -> int:
 
 
 def scenario_dir_name(rate: float, mechanism: str, scenario_tag: str, seed: int) -> str:
-    return f"mechanism_{mechanism}__rate_{format_rate_tag(rate)}__{scenario_tag}__seed_{seed}"
+    prefix = "ntb" if mechanism == "node_temporal_block" else "nso"
+    return f"{prefix}_r{format_rate_tag(rate).replace('0p', '')}_mix_s{seed}"
 
 
 def missing_subdir(base_dir: Path, rate: float, mechanism: str, scenario_tag: str, seed: int) -> Path:
-    return base_dir / "missing_datasets" / scenario_dir_name(rate, mechanism, scenario_tag, seed)
+    return base_dir / "miss_data" / scenario_dir_name(rate, mechanism, scenario_tag, seed)
 
 
 def mask_subdir(base_dir: Path, rate: float, mechanism: str, scenario_tag: str, seed: int) -> Path:
@@ -352,8 +373,8 @@ def mask_subdir(base_dir: Path, rate: float, mechanism: str, scenario_tag: str, 
 
 
 def imputed_subdir(base_dir: Path, rate: float, mechanism: str, scenario_tag: str, seed: int, method: str) -> Path:
-    return base_dir / "imputed_datasets" / (
-        f"{scenario_dir_name(rate, mechanism, scenario_tag, seed)}__method_{method}"
+    return base_dir / "imp_data" / (
+        f"{scenario_dir_name(rate, mechanism, scenario_tag, seed)}_m_{METHOD_DIR_ABBREVIATIONS[method]}"
     )
 
 
@@ -469,7 +490,7 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFra
         uses_row_index_mask = False
         has_length_group = False
         has_actual_length = False
-        has_node_subset_event = bool(event_manifest_path.exists()) if args.mechanism == "node_subset_temporal_outage" else True
+        has_node_subset_event = True
         if mask_files:
             sample_mask_df = pd.read_parquet(mask_files[0])
             sample_mask_columns = list(sample_mask_df.columns)
@@ -477,6 +498,10 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFra
             has_length_group = "length_group" in sample_mask_columns
             has_actual_length = "actual_length" in sample_mask_columns
             normalize_length_group_series(sample_mask_df)
+            if args.mechanism == "node_subset_temporal_outage":
+                has_node_subset_event = bool(event_manifest_path.exists()) or has_length_group or has_actual_length
+        elif args.mechanism == "node_subset_temporal_outage":
+            has_node_subset_event = bool(event_manifest_path.exists())
 
         rows.append(
             {
@@ -601,6 +626,7 @@ def compute_method_outputs(
     *,
     prepared: PreparedChunk,
     forward_last_state: np.ndarray | None,
+    history_observed: deque[np.ndarray],
     history_linear: deque[np.ndarray],
     history_road: deque[np.ndarray],
     history_function: deque[np.ndarray],
@@ -610,11 +636,16 @@ def compute_method_outputs(
     basis: np.ndarray,
     pseudo_inverse: np.ndarray,
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    zero_imputed, zero_fallback = impute_zero_fill(prepared.missing_sorted, prepared.mask_matrix)
     forward_imputed, forward_fallback = impute_forward_fill(
         prepared.missing_sorted,
         prepared.mask_matrix,
         forward_last_state,
+    )
+    mean_imputed, mean_fallback = impute_mean_fill(
+        prepared.missing_sorted,
+        prepared.mask_matrix,
+        history_observed,
+        forward_imputed,
     )
     linear_imputed, linear_fallback = impute_historical_linear(
         prepared.missing_sorted,
@@ -650,7 +681,7 @@ def compute_method_outputs(
         lam=0.5,
     )
     return {
-        "zero_fill": (zero_imputed, zero_fallback),
+        "mean_fill": (mean_imputed, mean_fallback),
         "forward_fill": (forward_imputed, forward_fallback),
         "historical_linear_extrapolation": (linear_imputed, linear_fallback),
         "road_topology_neighbor_fill": (road_imputed, road_fallback),
@@ -661,13 +692,16 @@ def compute_method_outputs(
 
 def update_histories_from_outputs(
     *,
+    observed_matrix: np.ndarray,
     method_outputs: dict[str, tuple[np.ndarray, np.ndarray]],
+    history_observed: deque[np.ndarray],
     history_linear: deque[np.ndarray],
     history_road: deque[np.ndarray],
     history_function: deque[np.ndarray],
     history_hybrid: deque[np.ndarray],
 ) -> np.ndarray:
     forward_imputed = method_outputs["forward_fill"][0]
+    history_observed.append(observed_matrix.copy())
     history_linear.append(method_outputs["historical_linear_extrapolation"][0].copy())
     history_road.append(method_outputs["road_topology_neighbor_fill"][0].copy())
     history_function.append(method_outputs["function_curve_fit"][0].copy())
@@ -696,6 +730,7 @@ def build_status_row(
     return {
         "missing_rate": missing_rate,
         "method": method,
+        "fallback_policy": METHOD_FALLBACK_POLICY[method],
         "chunk_index": prepared.chunk_index,
         "day_index": prepared.day_index,
         "file_name": prepared.clean_file.name,
@@ -844,10 +879,72 @@ def compute_global_median(history: deque[np.ndarray]) -> float:
     return float(np.median(np.asarray(medians, dtype=np.float32)))
 
 
-def impute_zero_fill(missing_matrix: np.ndarray, mask_matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def impute_mean_fill(
+    missing_matrix: np.ndarray,
+    mask_matrix: np.ndarray,
+    history_observed: deque[np.ndarray],
+    forward_fill_matrix: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
     imputed = missing_matrix.copy()
-    imputed[mask_matrix] = 0.0
-    return imputed, np.zeros_like(mask_matrix, dtype=bool)
+    fallback_mask = np.zeros_like(mask_matrix, dtype=bool)
+    stack = historical_stack(history_observed)
+    if stack is None or stack.shape[0] == 0:
+        imputed[mask_matrix] = forward_fill_matrix[mask_matrix]
+        fallback_mask[mask_matrix] = True
+        return imputed, fallback_mask
+
+    available = np.isfinite(stack)
+    values = np.where(available, stack, 0.0).astype(np.float32, copy=False)
+
+    same_slot_count = available.sum(axis=0)
+    same_slot_sum = values.sum(axis=0, dtype=np.float32)
+    same_slot_mean = np.full_like(missing_matrix, np.nan, dtype=np.float32)
+    np.divide(same_slot_sum, same_slot_count, out=same_slot_mean, where=same_slot_count > 0)
+    use_primary = mask_matrix & (same_slot_count > 0)
+    imputed[use_primary] = same_slot_mean[use_primary]
+
+    remaining = mask_matrix & ~use_primary
+    if not np.any(remaining):
+        return imputed, fallback_mask
+
+    node_count = available.sum(axis=(0, 2))
+    node_sum = values.sum(axis=(0, 2), dtype=np.float32)
+    node_mean = np.full(missing_matrix.shape[0], np.nan, dtype=np.float32)
+    np.divide(node_sum, node_count, out=node_mean, where=node_count > 0)
+    node_available = np.broadcast_to((node_count > 0)[:, None], missing_matrix.shape)
+    node_mean_matrix = np.broadcast_to(node_mean[:, None], missing_matrix.shape)
+    use_node = remaining & node_available
+    imputed[use_node] = node_mean_matrix[use_node]
+
+    remaining = remaining & ~use_node
+    if not np.any(remaining):
+        fallback_mask[mask_matrix & ~use_primary] = True
+        return imputed, fallback_mask
+
+    slot_count = available.sum(axis=(0, 1))
+    slot_sum = values.sum(axis=(0, 1), dtype=np.float32)
+    slot_mean = np.full(missing_matrix.shape[1], np.nan, dtype=np.float32)
+    np.divide(slot_sum, slot_count, out=slot_mean, where=slot_count > 0)
+    slot_available = np.broadcast_to((slot_count > 0)[None, :], missing_matrix.shape)
+    slot_mean_matrix = np.broadcast_to(slot_mean[None, :], missing_matrix.shape)
+    use_slot = remaining & slot_available
+    imputed[use_slot] = slot_mean_matrix[use_slot]
+
+    remaining = remaining & ~use_slot
+    if not np.any(remaining):
+        fallback_mask[mask_matrix & ~use_primary] = True
+        return imputed, fallback_mask
+
+    global_count = int(available.sum())
+    if global_count > 0:
+        global_mean = float(values.sum(dtype=np.float32) / float(global_count))
+        imputed[remaining] = global_mean
+        fallback_mask[mask_matrix & ~use_primary] = True
+        return imputed, fallback_mask
+
+    imputed[remaining] = forward_fill_matrix[remaining]
+    fallback_mask[mask_matrix & ~use_primary] = True
+    return imputed, fallback_mask
 
 
 def impute_forward_fill(
@@ -1266,32 +1363,6 @@ def plot_metric_by_rate(summary_df: pd.DataFrame, metric: str, output_png: Path,
     plt.close()
 
 
-def plot_nonzero_zoom(summary_df: pd.DataFrame, output_png: Path, output_pdf: Path, title: str) -> bool:
-    overall_df = summary_df.copy()
-    zero_df = overall_df.loc[overall_df["method"] == "zero_fill"]
-    other_df = overall_df.loc[overall_df["method"] != "zero_fill"]
-    if zero_df.empty or other_df.empty:
-        return False
-    if float(zero_df["rmse"].max()) <= 1.25 * float(other_df["rmse"].max()):
-        return False
-
-    plt.figure(figsize=(10, 6))
-    for method in [method for method in METHOD_ORDER if method != "zero_fill"]:
-        method_df = overall_df.loc[overall_df["method"] == method].sort_values("missing_rate")
-        plt.plot(method_df["missing_rate"], method_df["rmse"], marker="o", linewidth=2, label=method)
-    plt.xlabel("Missing Rate")
-    plt.ylabel("RMSE")
-    plt.title(title)
-    plt.xticks(argsort_unique(overall_df["missing_rate"].to_numpy(dtype=float)))
-    plt.grid(alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(output_png, dpi=200)
-    plt.savefig(output_pdf)
-    plt.close()
-    return True
-
-
 def plot_metric_by_length_group(length_df: pd.DataFrame, metric: str, output_png: Path, output_pdf: Path, title: str) -> None:
     if length_df.empty:
         raise RuntimeError(f"cannot plot {metric}: length-group summary is empty")
@@ -1341,34 +1412,6 @@ def plot_rmse_by_length_group_and_method(length_df: pd.DataFrame, output_png: Pa
     plt.close()
 
 
-def plot_length_group_nonzero_zoom(length_df: pd.DataFrame, output_png: Path, output_pdf: Path, title: str) -> bool:
-    zero_df = length_df.loc[length_df["method"] == "zero_fill"]
-    other_df = length_df.loc[length_df["method"] != "zero_fill"]
-    if zero_df.empty or other_df.empty:
-        return False
-    if float(zero_df["rmse"].max()) <= 1.25 * float(other_df["rmse"].max()):
-        return False
-    fig, axes = plt.subplots(1, len(LENGTH_GROUP_LABELS), figsize=(18, 5), sharey=True)
-    for axis, group_label in zip(axes, LENGTH_GROUP_LABELS):
-        group_df = length_df.loc[length_df["length_group"] == group_label]
-        for method in [method for method in METHOD_ORDER if method != "zero_fill"]:
-            method_df = group_df.loc[group_df["method"] == method].sort_values("missing_rate")
-            axis.plot(method_df["missing_rate"], method_df["rmse"], marker="o", linewidth=1.8, label=method)
-        axis.set_title(group_label)
-        axis.set_xlabel("Missing Rate")
-        axis.set_xticks(argsort_unique(group_df["missing_rate"].to_numpy(dtype=float)))
-        axis.grid(alpha=0.3)
-    axes[0].set_ylabel("RMSE")
-    handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=3)
-    fig.suptitle(title)
-    fig.tight_layout(rect=(0, 0, 1, 0.92))
-    fig.savefig(output_png, dpi=200)
-    fig.savefig(output_pdf)
-    plt.close(fig)
-    return True
-
-
 def argsort_unique(values: np.ndarray) -> list[float]:
     return sorted(set(float(value) for value in values.tolist()))
 
@@ -1390,6 +1433,7 @@ def scan_existing_outputs_for_rate(
 
     valid_status_rows: list[dict[str, Any]] = []
     valid_detail_rows: list[dict[str, Any]] = []
+    history_observed: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_linear: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_road: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_function: deque[np.ndarray] = deque(maxlen=args.history_days)
@@ -1448,7 +1492,9 @@ def scan_existing_outputs_for_rate(
             ].to_dict(orient="records")
         )
         forward_last_state = update_histories_from_outputs(
+            observed_matrix=prepared.missing_sorted,
             method_outputs=per_method_outputs,
+            history_observed=history_observed,
             history_linear=history_linear,
             history_road=history_road,
             history_function=history_function,
@@ -1462,6 +1508,7 @@ def scan_existing_outputs_for_rate(
         valid_status_rows=valid_status_rows,
         valid_detail_rows=valid_detail_rows,
         forward_last_state=None if forward_last_state is None else forward_last_state.copy(),
+        history_observed=copy_history(history_observed, args.history_days),
         history_linear=copy_history(history_linear, args.history_days),
         history_road=copy_history(history_road, args.history_days),
         history_function=copy_history(history_function, args.history_days),
@@ -1534,6 +1581,7 @@ def run_impute(
             }
         )
 
+        history_observed = copy_history(scan_result.history_observed, args.history_days)
         history_linear = copy_history(scan_result.history_linear, args.history_days)
         history_road = copy_history(scan_result.history_road, args.history_days)
         history_function = copy_history(scan_result.history_function, args.history_days)
@@ -1564,6 +1612,7 @@ def run_impute(
             method_outputs = compute_method_outputs(
                 prepared=prepared,
                 forward_last_state=forward_last_state,
+                history_observed=history_observed,
                 history_linear=history_linear,
                 history_road=history_road,
                 history_function=history_function,
@@ -1644,7 +1693,9 @@ def run_impute(
                 gc.collect()
 
             forward_last_state = update_histories_from_outputs(
+                observed_matrix=prepared.missing_sorted,
                 method_outputs=method_outputs,
+                history_observed=history_observed,
                 history_linear=history_linear,
                 history_road=history_road,
                 history_function=history_function,
@@ -1766,6 +1817,8 @@ def run_validate(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
         "scenario_tag": args.scenario_tag,
         "missing_rates": args.missing_rates_parsed,
         "methods": args.impute_methods_parsed,
+        "added_methods": ["mean_fill"],
+        "removed_methods": ["zero_fill"],
         "causal_history_only": True,
         "context_days_before": args.context_days_before,
         "history_days": args.history_days,
@@ -1776,14 +1829,7 @@ def run_validate(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
         "uses_bidirectional_interpolation": False,
         "warmup_days": args.warmup_days,
         "main_metrics_exclude_warmup": args.exclude_warmup_from_main_metrics,
-        "fallback_policy": {
-            "zero_fill": "direct_zero_fill_no_fallback",
-            "forward_fill": "use_global_safe_fallback_zero_when_no_causal_history_exists",
-            "historical_linear_extrapolation": "fallback_to_current_day_forward_fill_when_history_is_insufficient",
-            "road_topology_neighbor_fill": "fallback_to_current_day_forward_fill_when_no_topology_history_is_available",
-            "function_curve_fit": "fallback_to_current_day_forward_fill_when_no_history_profile_is_available",
-            "topology_function_hybrid": "blend_topology_and_function_primary_predictions_or_fallback_to_current_day_forward_fill",
-        },
+        "fallback_policy": METHOD_FALLBACK_POLICY,
         "non_mask_positions_preserved": True,
         "evaluation_only_on_mask_positions": True,
         "length_group_metrics_enabled": True,
@@ -1844,12 +1890,17 @@ def write_audit_markdown(path: Path, audit_payload: dict[str, Any]) -> None:
         f"- length_group_metrics_enabled: `{audit_payload['length_group_metrics_enabled']}`",
         "- road_topology_neighbor_fill 使用的是 `rnsd_processed.csv` 中的路网拓扑邻接与道路长度权重，不是经纬度距离近邻。",
         "",
-        "## 4. Fallback 策略",
+        "## 4. 方法变更",
+        "",
+        f"- added_methods: `{audit_payload['added_methods']}`",
+        f"- removed_methods: `{audit_payload['removed_methods']}`",
+        "",
+        "## 5. Fallback 策略",
         "",
     ]
     for method, description in audit_payload["fallback_policy"].items():
         lines.append(f"- {method}: `{description}`")
-    lines.extend(["", "## 5. 输出完整性", ""])
+    lines.extend(["", "## 6. 输出完整性", ""])
     for row in audit_payload["completeness"]:
         lines.append(
             f"- rate={row['missing_rate']:.2f}, method={row['method']}, imputed_chunk_count={row['imputed_chunk_count']}, expected={row['expected_chunk_count']}, is_complete={row['is_complete']}"
@@ -1895,12 +1946,12 @@ def run_plot(paths: StagePaths) -> dict[str, Any]:
         output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_multirate_nrmse_by_method.pdf",
         title=f"{paths.mechanism_title} NRMSE by Method",
     )
-    zoom_created = plot_nonzero_zoom(
-        summary_df,
-        output_png=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_method_nonzero_zoom.png",
-        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_method_nonzero_zoom.pdf",
-        title=f"{paths.mechanism_title} RMSE by Method (Non-Zero Methods Only)",
-    )
+    for obsolete_path in [
+        paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_method_nonzero_zoom.png",
+        paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_method_nonzero_zoom.pdf",
+    ]:
+        if obsolete_path.exists():
+            obsolete_path.unlink()
     plot_metric_by_length_group(
         length_df,
         metric="rmse",
@@ -1928,13 +1979,13 @@ def run_plot(paths: StagePaths) -> dict[str, Any]:
         output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_rmse_by_length_group_and_method.pdf",
         title=f"{paths.mechanism_title} RMSE by Length Group and Method",
     )
-    length_zoom_created = plot_length_group_nonzero_zoom(
-        length_df,
-        output_png=paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_nonzero_zoom.png",
-        output_pdf=paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_nonzero_zoom.pdf",
-        title=f"{paths.mechanism_title} RMSE by Length Group (Non-Zero Methods Only)",
-    )
-    return {"nonzero_zoom_created": zoom_created, "length_group_nonzero_zoom_created": length_zoom_created}
+    for obsolete_path in [
+        paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_nonzero_zoom.png",
+        paths.figures_dir / f"{paths.artifact_prefix}_length_group_rmse_nonzero_zoom.pdf",
+    ]:
+        if obsolete_path.exists():
+            obsolete_path.unlink()
+    return {"nonzero_zoom_created": False, "length_group_nonzero_zoom_created": False}
 
 
 def main() -> None:

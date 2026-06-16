@@ -4,11 +4,11 @@ import json
 from pathlib import Path
 from typing import Any
 
-DEFAULT_EXPERIMENT_ROOT = Path("results/real_data_missingness_experiments")
+DEFAULT_EXPERIMENT_ROOT = Path("results/rdm_exp")
 SCENARIO_IDS = [
-    "global_mcar_point",
-    "node_temporal_block_mixed_short_mid_long",
-    "node_subset_temporal_outage_mixed_short_mid_long",
+    "g_mcar_pt",
+    "ntb_mix",
+    "nso_mix",
 ]
 
 
@@ -64,7 +64,7 @@ def get_missingness_setting_dir(
         scenario_id=scenario_id,
         project_root=project_root,
         experiment_root=experiment_root,
-    ) / "missingness_setting"
+    ) / "miss_set"
 
 
 def get_imputation_dir(
@@ -76,7 +76,7 @@ def get_imputation_dir(
         scenario_id=scenario_id,
         project_root=project_root,
         experiment_root=experiment_root,
-    ) / "imputation"
+    ) / "imp"
 
 
 def get_comparison_dir(

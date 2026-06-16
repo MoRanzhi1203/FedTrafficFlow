@@ -18,7 +18,7 @@ METHOD_ALIASES = {
 }
 
 METHOD_DISPLAY = {
-    "zero_fill": "Zero fill",
+    "mean_fill": "Mean fill",
     "forward_fill": "Forward fill",
     "historical_linear_extrapolation": "Historical linear extrapolation",
     "road_topology_neighbor_fill": "Road-topology neighbor",
@@ -45,7 +45,7 @@ SCENARIO_ORDER = [
 ]
 
 DEFAULT_METHODS = [
-    "zero_fill",
+    "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
@@ -59,7 +59,7 @@ LENGTH_GROUP_METRICS = ["rmse", "mae", "smape"]
 LENGTH_GROUP_ORDER = ["short", "mid", "long"]
 FLOW_GROUP_ORDER = ["low_flow", "mid_flow", "high_flow"]
 PLOT_COLORS = {
-    "zero_fill": "#4C72B0",
+    "mean_fill": "#4C72B0",
     "forward_fill": "#55A868",
     "historical_linear_extrapolation": "#C44E52",
     "road_topology_neighbor_fill": "#8172B2",
@@ -75,17 +75,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--global_dir",
         type=Path,
-        default=Path("results/real_data_global_missingness_setting"),
+        default=Path("results/rdm_exp/scenarios/g_mcar_pt/imp"),
     )
     parser.add_argument(
         "--structured_dir",
         type=Path,
-        default=Path("results/real_data_structured_missingness_setting"),
+        default=Path("results/rdm_exp/scenarios"),
     )
     parser.add_argument(
         "--output_dir",
         type=Path,
-        default=Path("results/real_data_missingness_visual_comparison"),
+        default=Path("results/rdm_exp/comparison"),
     )
     parser.add_argument("--missing_rates", type=str, default="0.05,0.10,0.20,0.30")
     parser.add_argument("--methods", type=str, default=",".join(DEFAULT_METHODS))
@@ -102,7 +102,10 @@ def parse_rate_list(raw: str) -> list[float]:
 
 def parse_method_list(raw: str) -> list[str]:
     methods = [item.strip() for item in raw.split(",") if item.strip()]
-    return [METHOD_ALIASES.get(method, method) for method in methods]
+    normalized = [METHOD_ALIASES.get(method, method) for method in methods]
+    if "zero_fill" in normalized:
+        raise ValueError("zero_fill has been removed from the formal method set")
+    return normalized
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -266,45 +269,6 @@ def save_line_plot_by_rate(
     plt.close(fig)
 
 
-def save_nonzero_zoom_by_rate(
-    summary_df: pd.DataFrame,
-    methods: list[str],
-    title: str,
-    output_png: Path,
-    output_pdf: Path,
-) -> bool:
-    zero_df = summary_df.loc[summary_df["method"] == "zero_fill"]
-    other_df = summary_df.loc[summary_df["method"] != "zero_fill"]
-    if zero_df.empty or other_df.empty:
-        return False
-    if float(zero_df["rmse"].max()) <= 1.25 * float(other_df["rmse"].max()):
-        return False
-    fig, axis = plt.subplots(figsize=(10, 6))
-    x_values = sorted(summary_df["missing_rate"].unique().tolist())
-    for method in [method for method in methods if method != "zero_fill"]:
-        method_df = summary_df.loc[summary_df["method"] == method].sort_values("missing_rate")
-        axis.plot(
-            method_df["missing_rate"],
-            method_df["rmse"],
-            marker="o",
-            linewidth=2,
-            markersize=6,
-            color=PLOT_COLORS[method],
-            label=METHOD_DISPLAY[method],
-        )
-    axis.set_title(title)
-    axis.set_xlabel("Missing rate")
-    axis.set_ylabel("RMSE")
-    axis.set_xticks(x_values, pct_labels(x_values))
-    axis.grid(alpha=0.3)
-    axis.legend(loc="center left", bbox_to_anchor=(1.02, 0.5), frameon=False)
-    fig.tight_layout()
-    fig.savefig(output_png, dpi=300, bbox_inches="tight")
-    fig.savefig(output_pdf, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    return True
-
-
 def save_length_group_plot(
     length_df: pd.DataFrame,
     methods: list[str],
@@ -355,15 +319,13 @@ def save_scenario_comparison_plot(
     ylabel: str,
     output_png: Path,
     output_pdf: Path,
-    include_zero: bool,
 ) -> None:
-    plot_methods = methods if include_zero else [method for method in methods if method != "zero_fill"]
     fig, axes = plt.subplots(2, 2, figsize=(14, 9), sharey=True)
     x_positions = np.arange(len(SCENARIO_ORDER), dtype=float)
     axes_flat = axes.flatten()
     for axis, rate in zip(axes_flat, rates):
         rate_df = combined_df.loc[np.isclose(combined_df["missing_rate"], rate)].copy()
-        for method in plot_methods:
+        for method in methods:
             method_df = rate_df.loc[rate_df["method"] == method].set_index("scenario").reindex(SCENARIO_ORDER)
             axis.plot(
                 x_positions,
@@ -530,38 +492,39 @@ def build_heatmap_matrix(
 
 def load_all_summaries(args: argparse.Namespace, rates: list[float], methods: list[str]) -> tuple[dict[str, Any], dict[str, Any]]:
     global_summary_dir = args.global_dir / "summaries"
-    structured_summary_dir = args.structured_dir / "summaries"
+    block_summary_dir = args.structured_dir / "ntb_mix" / "imp" / "summaries"
+    outage_summary_dir = args.structured_dir / "nso_mix" / "imp" / "summaries"
 
     source_paths = {
         "global_main": global_summary_dir / "imputation_quality_summary_exclude_warmup.csv",
         "global_flow": global_summary_dir / "imputation_quality_by_flow_group.csv",
         "block_main": resolve_optional_csv(
-            structured_summary_dir,
+            block_summary_dir,
             "structured_imputation_quality_summary_exclude_warmup.csv",
             "structured_*summary_exclude_warmup*.csv",
         ),
         "block_flow": resolve_optional_csv(
-            structured_summary_dir,
+            block_summary_dir,
             "structured_imputation_quality_by_flow_group.csv",
             "structured_*by_flow_group*.csv",
         ),
         "block_length": resolve_optional_csv(
-            structured_summary_dir,
+            block_summary_dir,
             "structured_imputation_quality_by_length_group.csv",
             "structured_*by_length_group*.csv",
         ),
         "outage_main": resolve_optional_csv(
-            structured_summary_dir,
+            outage_summary_dir,
             "outage_imputation_quality_summary_exclude_warmup.csv",
             "outage_*summary_exclude_warmup*.csv",
         ),
         "outage_flow": resolve_optional_csv(
-            structured_summary_dir,
+            outage_summary_dir,
             "outage_imputation_quality_by_flow_group.csv",
             "outage_*by_flow_group*.csv",
         ),
         "outage_length": resolve_optional_csv(
-            structured_summary_dir,
+            outage_summary_dir,
             "outage_imputation_quality_by_length_group.csv",
             "outage_*by_length_group*.csv",
         ),
@@ -627,8 +590,6 @@ def generate_all_outputs(
     ensure_dir(audits_dir)
 
     figure_records: list[dict[str, Any]] = []
-    zoom_created: dict[str, bool] = {}
-
     for scenario in SCENARIO_ORDER:
         scenario_main = scenario_data[scenario]["main"]
         prefix = SCENARIO_PREFIX[scenario]
@@ -655,27 +616,12 @@ def generate_all_outputs(
                 True,
                 "Masked-position imputation error; formal six-method direct comparison.",
             )
-        zoom_png = figures_dir / f"{prefix}_rmse_nonzero_zoom.png"
-        zoom_pdf = figures_dir / f"{prefix}_rmse_nonzero_zoom.pdf"
-        zoom_created[scenario] = save_nonzero_zoom_by_rate(
-            scenario_main,
-            methods,
-            f"{SCENARIO_DISPLAY[scenario]} RMSE by Method (Non-zero Zoom)",
-            zoom_png,
-            zoom_pdf,
-        )
-        if zoom_created[scenario]:
-            append_figure_index(
-                figure_records,
-                zoom_png,
-                "zoom_line_plot",
-                scenario,
-                "RMSE",
-                "nonzero_methods",
-                "all_rates",
-                False,
-                "Zoom figure excludes zero fill and is only for observing non-zero-fill methods.",
-            )
+        for obsolete_path in [
+            figures_dir / f"{prefix}_rmse_nonzero_zoom.png",
+            figures_dir / f"{prefix}_rmse_nonzero_zoom.pdf",
+        ]:
+            if obsolete_path.exists():
+                obsolete_path.unlink()
 
     for scenario in ["node_temporal_block", "node_subset_temporal_outage"]:
         length_df = scenario_data[scenario]["length"]
@@ -719,7 +665,6 @@ def generate_all_outputs(
             metric.upper(),
             png_path,
             pdf_path,
-            True,
         )
         append_figure_index(
             figure_records,
@@ -744,7 +689,6 @@ def generate_all_outputs(
         "RMSE",
         rmse_overall_png,
         rmse_overall_pdf,
-        True,
     )
     append_figure_index(
         figure_records,
@@ -758,35 +702,12 @@ def generate_all_outputs(
         "Primary cross-scenario RMSE figure.",
     )
 
-    scenario_zoom_png = figures_dir / "scenario_comparison_rmse_nonzero_zoom.png"
-    scenario_zoom_pdf = figures_dir / "scenario_comparison_rmse_nonzero_zoom.pdf"
-    zero_df = combined_main.loc[combined_main["method"] == "zero_fill"]
-    other_df = combined_main.loc[combined_main["method"] != "zero_fill"]
-    scenario_zoom_created = False
-    if not zero_df.empty and not other_df.empty and float(zero_df["rmse"].max()) > 1.25 * float(other_df["rmse"].max()):
-        save_scenario_comparison_plot(
-            combined_main,
-            methods,
-            rates,
-            "rmse",
-            "Scenario Comparison RMSE (Non-zero Zoom)",
-            "RMSE",
-            scenario_zoom_png,
-            scenario_zoom_pdf,
-            False,
-        )
-        append_figure_index(
-            figure_records,
-            scenario_zoom_png,
-            "scenario_comparison_zoom",
-            "all_scenarios",
-            "RMSE",
-            "nonzero_methods",
-            "all_rates",
-            False,
-            "Zoom figure excludes zero fill and does not replace the formal six-method figure.",
-        )
-        scenario_zoom_created = True
+    for obsolete_path in [
+        figures_dir / "scenario_comparison_rmse_nonzero_zoom.png",
+        figures_dir / "scenario_comparison_rmse_nonzero_zoom.pdf",
+    ]:
+        if obsolete_path.exists():
+            obsolete_path.unlink()
 
     ranking_df = build_ranking_table(combined_main)
     ranking_path = tables_dir / "method_ranking_by_scenario_rate_metric.csv"
@@ -889,7 +810,7 @@ def generate_all_outputs(
         "generated_length_group_figures": True,
         "generated_cross_scenario_figures": True,
         "generated_ranking_heatmaps": True,
-        "generated_nonzero_zoom_figures": any(zoom_created.values()) or scenario_zoom_created,
+        "generated_nonzero_zoom_figures": False,
         "reran_impute": False,
         "regenerated_masks": False,
         "regenerated_missing_datasets": False,
@@ -897,7 +818,6 @@ def generate_all_outputs(
         "masked_position_imputation_error_only": True,
         "uses_forward_fill_as_baseline": False,
         "generated_relative_to_forward_fill_formal_figures": False,
-        "zero_fill_zoom_note": "Zoom figures exclude zero fill only to reveal differences among non-zero-fill methods and do not replace the formal six-method figures.",
         "figure_count": len(figure_records),
         "table_outputs": {
             "method_ranking_by_scenario_rate_metric": str(ranking_path),
@@ -940,7 +860,6 @@ def generate_all_outputs(
         "",
         "## Note",
         "",
-        f"- {audit_payload['zero_fill_zoom_note']}",
         "- road_topology_neighbor_fill 表示基于路网拓扑邻接关系的补全，不表示经纬度距离近邻。",
     ]
     write_markdown(audit_md_path, markdown_lines)
@@ -953,8 +872,8 @@ def generate_all_outputs(
         "ranking_path": ranking_path,
         "best_summary_path": best_summary_path,
         "best_length_path": best_length_path,
-        "zoom_created": zoom_created,
-        "scenario_zoom_created": scenario_zoom_created,
+        "zoom_created": {},
+        "scenario_zoom_created": False,
     }
 
 

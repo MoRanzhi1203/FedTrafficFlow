@@ -18,7 +18,7 @@ METHOD_ALIASES = {
 }
 
 METHOD_DISPLAY = {
-    "zero_fill": "Zero fill",
+    "mean_fill": "Mean fill",
     "forward_fill": "Forward fill",
     "historical_linear_extrapolation": "Historical linear extrapolation",
     "road_topology_neighbor_fill": "Road-topology neighbor",
@@ -27,7 +27,7 @@ METHOD_DISPLAY = {
 }
 
 DEFAULT_METHODS = [
-    "zero_fill",
+    "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
@@ -38,7 +38,6 @@ DEFAULT_METHODS = [
 FLOW_GROUPS = ["low_flow", "mid_flow", "high_flow"]
 EXPECTED_RATES = [0.05, 0.10, 0.20, 0.30]
 FORMAL_FIGURE_NOTES = "Formal six-method direct comparison"
-ZOOM_NOTES = "Zoom view excluding zero fill"
 FLOW_GROUP_NOTES = "Flow-group comparison"
 HEATMAP_NOTES = "Auxiliary rank visualization"
 
@@ -50,22 +49,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--experiment_dir",
         type=Path,
-        default=Path("results/real_data_global_missingness_setting"),
+        default=Path("results/rdm_exp/scenarios/g_mcar_pt/imp"),
     )
     parser.add_argument(
         "--summary_dir",
         type=Path,
-        default=Path("results/real_data_global_missingness_setting/summaries"),
+        default=Path("results/rdm_exp/scenarios/g_mcar_pt/imp/summaries"),
     )
     parser.add_argument(
         "--figure_dir",
         type=Path,
-        default=Path("results/real_data_global_missingness_setting/figures"),
+        default=Path("results/rdm_exp/scenarios/g_mcar_pt/imp/figures"),
     )
     parser.add_argument(
         "--audit_dir",
         type=Path,
-        default=Path("results/real_data_global_missingness_setting/audits"),
+        default=Path("results/rdm_exp/scenarios/g_mcar_pt/imp/audits"),
     )
     parser.add_argument("--missing_rates", type=str, default="0.05,0.10,0.20,0.30")
     parser.add_argument("--methods", type=str, default=",".join(DEFAULT_METHODS))
@@ -84,7 +83,10 @@ def parse_float_list(raw: str) -> list[float]:
 
 def parse_method_list(raw: str) -> list[str]:
     methods = [item.strip() for item in raw.split(",") if item.strip()]
-    return [METHOD_ALIASES.get(method, method) for method in methods]
+    normalized = [METHOD_ALIASES.get(method, method) for method in methods]
+    if "zero_fill" in normalized:
+        raise ValueError("zero_fill has been removed from the formal method set")
+    return normalized
 
 
 def load_csv(path: Path) -> pd.DataFrame:
@@ -393,7 +395,6 @@ def write_visualization_markdown(path: Path, audit_payload: dict[str, Any]) -> N
             "",
             "- 当前所有图件均基于 masked-position imputation error，不代表 FedAvg / Independent 交通流预测性能。",
             "- forward_fill 只是 6 个普通方法之一，不作为正式主图 baseline。",
-            "- nonzero zoom 图仅用于观察非 zero_fill 方法间差异，不替代完整六方法主图。",
         ]
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -458,16 +459,12 @@ def main() -> None:
         output_pdf=args.figure_dir / "multirate_nrmse_by_method.pdf",
         methods=methods,
     )
-
-    save_line_plot(
-        overall_df.loc[overall_df["method"] != "zero_fill"].copy(),
-        metric="rmse",
-        ylabel="RMSE",
-        title="RMSE by method excluding zero fill for readability",
-        output_png=args.figure_dir / "multirate_rmse_by_method_nonzero_zoom.png",
-        output_pdf=args.figure_dir / "multirate_rmse_by_method_nonzero_zoom.pdf",
-        methods=[method for method in methods if method != "zero_fill"],
-    )
+    for obsolete_path in [
+        args.figure_dir / "multirate_rmse_by_method_nonzero_zoom.png",
+        args.figure_dir / "multirate_rmse_by_method_nonzero_zoom.pdf",
+    ]:
+        if obsolete_path.exists():
+            obsolete_path.unlink()
     save_flow_group_plot(
         flow_plot_df,
         output_png=args.figure_dir / "multirate_flow_group_rmse_by_method.png",
@@ -523,15 +520,6 @@ def main() -> None:
             "notes": FORMAL_FIGURE_NOTES,
         },
         {
-            "figure_file": "multirate_rmse_by_method_nonzero_zoom.png",
-            "figure_type": "line",
-            "metric": "RMSE",
-            "method_scope": "nonzero_methods",
-            "rate_scope": "5_10_20_30",
-            "is_formal_main_figure": False,
-            "notes": ZOOM_NOTES,
-        },
-        {
             "figure_file": "multirate_flow_group_rmse_by_method.png",
             "figure_type": "line",
             "metric": "RMSE",
@@ -579,7 +567,6 @@ def main() -> None:
         "multirate_mae_by_method": True,
         "multirate_smape_or_mape_by_method": True,
         "multirate_nrmse_by_method": True,
-        "multirate_rmse_by_method_nonzero_zoom": True,
         "multirate_flow_group_rmse_by_method": True,
         "method_rank_heatmap_rmse": True,
         "figure_index_csv": True,

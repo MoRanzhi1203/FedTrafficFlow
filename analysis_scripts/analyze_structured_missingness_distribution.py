@@ -20,7 +20,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--experiment_dir",
         type=Path,
-        default=Path("results/real_data_structured_missingness_setting"),
+        default=Path("results/rdm_exp/scenarios/ntb_mix/miss_set"),
     )
     parser.add_argument(
         "--input_dir",

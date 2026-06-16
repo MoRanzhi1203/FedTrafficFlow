@@ -2,7 +2,7 @@
 
 ## 1. 清理目的
 
-移除项目中所有缺失值设置、缺失注入、mask 生成、missing_datasets、imputed_datasets、插补补全、插补评估和相关运行计划/报告/图件内容，同时保留真实数据预处理、交通流预测主任务、FedAvg / Independent 与仿真实验代码。
+移除项目中所有缺失值设置、缺失注入、mask 生成、miss_data、imp_data、插补补全、插补评估和相关运行计划/报告/图件内容，同时保留真实数据预处理、交通流预测主任务、FedAvg / Independent 与仿真实验代码。
 
 ## 2. 已停止相关进程
 
@@ -77,13 +77,13 @@
 ## 9. 未删除原因
 
 - `analysis_scripts/audit_real_data_preprocessing.py`
-  - 保留原因：真实数据预处理审计脚本，不属于 missingness / imputation 实验流程。
+  - 保留原因：真实数据预处理审计脚本，不属于 missingness / imp 实验流程。
 - `results/real_data_preprocessing/real_data_preprocessing_audit.json`
   - 保留原因：真实数据预处理审计结果，`missing_rate_per_column` 仅表示普通列缺失率统计。
 
 ## 10. 清理验证结论
 
-- missingness / imputation 主流程脚本已移除。
+- missingness / imp 主流程脚本已移除。
 - `MCAR`、`mask_scope`、`generate_missing`、`impute` 等实验入口已从项目主流程中移除。
 - `zero_fill`、`forward_fill`、`geo_neighbor_fill`、`function_curve_fit`、`geo_func_hybrid` 等插补结果目录已删除。
 - 全局搜索后允许的剩余关键词命中仅来自清理计划、清理报告以及普通预处理质量统计。
