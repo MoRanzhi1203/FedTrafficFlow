@@ -1,0 +1,13 @@
+﻿scenario_id,rate_tag,missing_rate,mask_file_count,miss_data_file_count,mask_has_61_files,miss_data_has_61_files,imputed_datasets_deleted,masks_preserved,missing_datasets_preserved,summaries_preserved,audits_preserved,figures_preserved
+g_mcar_pt,r05_mcar_s42,0.05,61,61,True,True,True,True,True,True,True,True
+g_mcar_pt,r10_mcar_s42,0.1,61,61,True,True,True,True,True,True,True,True
+g_mcar_pt,r20_mcar_s42,0.2,61,61,True,True,True,True,True,True,True,True
+g_mcar_pt,r30_mcar_s42,0.3,61,61,True,True,True,True,True,True,True,True
+ntb_mix,ntb_r05_mix_s42,0.05,61,61,True,True,True,True,True,True,True,True
+ntb_mix,ntb_r10_mix_s42,0.1,61,61,True,True,True,True,True,True,True,True
+ntb_mix,ntb_r20_mix_s42,0.2,61,61,True,True,True,True,True,True,True,True
+ntb_mix,ntb_r30_mix_s42,0.3,61,61,True,True,True,True,True,True,True,True
+nso_mix,nso_r05_mix_s42,0.05,61,61,True,True,True,True,True,True,True,True
+nso_mix,nso_r10_mix_s42,0.1,61,61,True,True,True,True,True,True,True,True
+nso_mix,nso_r20_mix_s42,0.2,61,61,True,True,True,True,True,True,True,True
+nso_mix,nso_r30_mix_s42,0.3,61,61,True,True,True,True,True,True,True,True

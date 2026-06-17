@@ -1,0 +1,17 @@
+{
+  "scenarios": [
+    "g_mcar_pt",
+    "ntb_mix",
+    "nso_mix"
+  ],
+  "formal_snh_temp_excluded": true,
+  "missing_datasets_preserved": true,
+  "masks_preserved": true,
+  "imputed_datasets_deleted": true,
+  "summaries_preserved": true,
+  "audits_preserved": true,
+  "figures_preserved": true,
+  "comparison_preserved": true,
+  "no_parquet_staged": true,
+  "all_complete": true
+}

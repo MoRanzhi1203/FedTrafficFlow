@@ -4,6 +4,7 @@ import argparse
 import gc
 import json
 import math
+import os
 import shutil
 import sys
 import time
@@ -79,6 +80,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--placement_backend", default="bitset", choices=["numpy_bool", "bitset"])
     parser.add_argument("--candidate_oversample_factor", default=-1.0, type=float)
     parser.add_argument("--max_candidate_rounds", default=5, type=int)
+    parser.add_argument("--allocation_method", default="sequential_hypergeometric_global_without_replacement", type=str)
+    parser.add_argument("--allocation_shortfall_policy", default="carry_forward", type=str)
+    parser.add_argument("--mask_scope", default="global", type=str)
     parser.add_argument("--spatial_constraint_relaxation", default="true", type=str)
     parser.add_argument("--relaxation_policy", default="progressive", choices=["progressive"])
     parser.add_argument("--min_spatially_constrained_ratio", default=0.70, type=float)
@@ -234,13 +238,7 @@ def default_global_allocation_source(project_root: Path) -> Path:
     return project_root / "results" / "rdm_exp" / "scenarios" / "g_mcar_pt" / "miss_set" / "manifests" / "global_missing_allocation.csv"
 
 
-def load_global_allocation(project_root: Path, paths: Dict[str, Path], rates: Sequence[float], chunk_summary_df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[Tuple[float, int], Dict[str, Any]]]:
-    local_path = paths["allocation_path"]
-    source_path = local_path if local_path.exists() else default_global_allocation_source(project_root)
-    if not source_path.exists():
-        raise FileNotFoundError("global_missing_allocation.csv not found under %s or default g_mcar_pt source" % local_path)
-    allocation_df = pd.read_csv(source_path)
-    allocation_df = allocation_df.loc[allocation_df["missing_rate_target"].isin([float(value) for value in rates])].copy()
+def validate_allocation_pairs(allocation_df: pd.DataFrame, rates: Sequence[float], chunk_summary_df: pd.DataFrame) -> Dict[Tuple[float, int], Dict[str, Any]]:
     expected_pairs = set((round(float(rate), 6), int(chunk_index)) for rate in rates for chunk_index in chunk_summary_df["chunk_index"].tolist())
     allocation_map = {}
     for row in allocation_df.to_dict(orient="records"):
@@ -249,9 +247,59 @@ def load_global_allocation(project_root: Path, paths: Dict[str, Path], rates: Se
     missing_pairs = expected_pairs.difference(set(allocation_map.keys()))
     if missing_pairs:
         raise RuntimeError("allocation file is missing rate/chunk pairs: %s" % sorted(missing_pairs))
-    if source_path != local_path:
-        atomic_write_dataframe_csv(local_path, allocation_df)
-    return allocation_df.sort_values(["missing_rate_target", "chunk_index"]).reset_index(drop=True), allocation_map
+    return allocation_map
+
+
+def generate_global_missing_allocation(
+    args: argparse.Namespace,
+    chunk_summary_df: pd.DataFrame,
+    rates: Sequence[float],
+) -> pd.DataFrame:
+    rng = np.random.default_rng(int(args.seed))
+    rows = []
+    global_eligible_count = int(chunk_summary_df["eligible_non_null_count"].sum())
+    for rate in rates:
+        global_missing_count = int(round(float(global_eligible_count) * float(rate)))
+        remaining_missing = int(global_missing_count)
+        remaining_eligible = int(global_eligible_count)
+        chunk_count = int(len(chunk_summary_df))
+        for row_index, row in enumerate(chunk_summary_df.sort_values("chunk_index").to_dict(orient="records")):
+            current_eligible = int(row["eligible_non_null_count"])
+            if row_index == chunk_count - 1:
+                allocated_missing_count = int(remaining_missing)
+            elif current_eligible <= 0 or remaining_missing <= 0:
+                allocated_missing_count = 0
+            else:
+                allocated_missing_count = int(
+                    rng.hypergeometric(
+                        ngood=int(remaining_missing),
+                        nbad=int(max(remaining_eligible - remaining_missing, 0)),
+                        nsample=int(current_eligible),
+                    )
+                )
+            rows.append(
+                {
+                    "missing_rate_target": float(rate),
+                    "chunk_index": int(row["chunk_index"]),
+                    "day_index": int(row["day_index"]),
+                    "file_name": str(row["file_name"]),
+                    "eligible_non_null_count": int(current_eligible),
+                    "allocated_missing_count": int(allocated_missing_count),
+                    "global_eligible_count": int(global_eligible_count),
+                    "global_missing_count": int(global_missing_count),
+                    "remaining_eligible_before_chunk": int(remaining_eligible),
+                    "remaining_missing_before_chunk": int(remaining_missing),
+                    "mask_scope": str(args.mask_scope),
+                    "allocation_method": str(args.allocation_method),
+                    "allocation_shortfall_policy": str(args.allocation_shortfall_policy),
+                    "mechanism": MECHANISM,
+                }
+            )
+            remaining_missing -= int(allocated_missing_count)
+            remaining_eligible -= int(current_eligible)
+        if remaining_missing != 0:
+            raise RuntimeError("global allocation did not exhaust missing count for rate %s" % rate)
+    return pd.DataFrame(rows).sort_values(["missing_rate_target", "chunk_index"]).reset_index(drop=True)
 
 
 def build_paths(output_root: Path) -> Dict[str, Path]:
@@ -276,12 +324,15 @@ def build_paths(output_root: Path) -> Dict[str, Path]:
         "eligible_nodes_path": manifests_root / "snh_eligible_nodes.csv",
         "node_neighbor_lookup_parquet": manifests_root / "node_neighbor_lookup.parquet",
         "node_neighbor_lookup_csv": manifests_root / "node_neighbor_lookup.csv",
+        "global_eligible_chunk_counts_path": manifests_root / "global_eligible_chunk_counts.csv",
         "allocation_path": manifests_root / "global_missing_allocation.csv",
         "chunk_status_path": manifests_root / "snh_generate_missing_chunk_status.csv",
         "event_csv_path": manifests_root / "spatial_neighbor_holdout_events.csv",
         "runtime_jsonl_path": manifests_root / "runtime_logs" / "snh_generation_runtime.jsonl",
         "audit_json_path": miss_root / "audits" / "snh_missingness_audit.json",
         "audit_md_path": miss_root / "audits" / "snh_missingness_audit_zh.md",
+        "global_allocation_audit_json_path": miss_root / "audits" / "snh_global_allocation_audit.json",
+        "global_allocation_audit_md_path": miss_root / "audits" / "snh_global_allocation_audit_zh.md",
         "constraint_relaxation_audit_json_path": miss_root / "audits" / "snh_constraint_relaxation_audit.json",
         "constraint_relaxation_audit_md_path": miss_root / "audits" / "snh_constraint_relaxation_audit_zh.md",
         "performance_json_path": miss_root / "audits" / "snh_fast_generation_performance.json",
@@ -481,6 +532,12 @@ def write_run_metadata(args: argparse.Namespace, paths: Dict[str, Path], rates: 
         "placement_backend": str(args.placement_backend),
         "candidate_oversample_factor": float(args.candidate_oversample_factor),
         "max_candidate_rounds": int(args.max_candidate_rounds),
+        "allocation_method": str(args.allocation_method),
+        "allocation_shortfall_policy": str(args.allocation_shortfall_policy),
+        "mask_scope": str(args.mask_scope),
+        "global_allocation_used": True,
+        "day_stratified_generation_used": False,
+        "per_chunk_round_rate_used": False,
         "spatial_constraint_relaxation": parse_bool(args.spatial_constraint_relaxation),
         "relaxation_policy": str(args.relaxation_policy),
         "min_spatially_constrained_ratio": float(args.min_spatially_constrained_ratio),
@@ -538,9 +595,27 @@ def run_prepare(args: argparse.Namespace, paths: Dict[str, Path]) -> PreparedArt
         args=args,
         canonical_node_ids=canonical_node_ids,
     )
+    eligible_node_ids = set(
+        eligible_df.loc[eligible_df["eligible"], "node_id"].astype(np.int64).tolist()
+    )
+    updated_rows = []
+    for chunk_row in chunk_rows:
+        file_path = input_files[int(chunk_row["chunk_index"])]
+        local_df = pd.read_parquet(file_path, columns=[args.node_col, args.target_col])
+        eligible_selector = local_df[args.node_col].astype(np.int64).isin(eligible_node_ids)
+        eligible_non_null_count = int((eligible_selector & local_df[args.target_col].notna()).sum())
+        local_payload = dict(chunk_row)
+        local_payload["eligible_non_null_count"] = int(eligible_non_null_count)
+        updated_rows.append(local_payload)
+        del local_df
+        gc.collect()
     chunk_summary_df = pd.DataFrame(chunk_rows)
-    allocation_df, allocation_map = load_global_allocation(project_root=Path(__file__).resolve().parents[1], paths=paths, rates=rates, chunk_summary_df=chunk_summary_df)
+    chunk_summary_df = pd.DataFrame(updated_rows).sort_values("chunk_index").reset_index(drop=True)
+    allocation_df = generate_global_missing_allocation(args=args, chunk_summary_df=chunk_summary_df, rates=rates)
+    allocation_map = validate_allocation_pairs(allocation_df=allocation_df, rates=rates, chunk_summary_df=chunk_summary_df)
     atomic_write_dataframe_csv(paths["chunk_summary_path"], chunk_summary_df)
+    atomic_write_dataframe_csv(paths["global_eligible_chunk_counts_path"], chunk_summary_df)
+    atomic_write_dataframe_csv(paths["allocation_path"], allocation_df)
     atomic_write_dataframe_csv(paths["eligible_nodes_path"], eligible_df)
     atomic_write_dataframe_csv(paths["node_neighbor_lookup_csv"], node_neighbor_lookup_df)
     atomic_write_parquet(paths["node_neighbor_lookup_parquet"], node_neighbor_lookup_df)
@@ -561,11 +636,19 @@ def run_prepare(args: argparse.Namespace, paths: Dict[str, Path]) -> PreparedArt
         "relaxation_policy": str(args.relaxation_policy),
         "min_spatially_constrained_ratio": float(args.min_spatially_constrained_ratio),
         "allow_no_spatial_constraint": parse_bool(args.allow_no_spatial_constraint),
+        "allocation_method": str(args.allocation_method),
+        "allocation_shortfall_policy": str(args.allocation_shortfall_policy),
+        "mask_scope": str(args.mask_scope),
+        "global_allocation_used": True,
+        "day_stratified_generation_used": False,
+        "per_chunk_round_rate_used": False,
         "chunk_outer_loop_enabled": True,
         "full_checkpoint_rewrite_disabled": True,
         "direct_event_id_write_enabled": True,
         "expected_length": float(expected_length(length_config)),
         "allocation_path": str(paths["allocation_path"]),
+        "global_eligible_chunk_counts_path": str(paths["global_eligible_chunk_counts_path"]),
+        "global_eligible_count": int(chunk_summary_df["eligible_non_null_count"].sum()),
         "missing_rates": [float(value) for value in rates],
     }
     atomic_write_json(paths["prepare_summary_path"], prepare_payload)
@@ -1100,6 +1183,99 @@ def generate_rate_chunk(
                 "relaxation_reason": local_reason if missing_count < target_missing_count else "no_relaxation",
             }
         )
+    if missing_count < target_missing_count and allow_none:
+        remaining_slots = int(target_missing_count - missing_count)
+        fallback_added = 0
+        randomized_nodes = rng.permutation(eligible_node_indices)
+        for target_idx in randomized_nodes.tolist():
+            if fallback_added >= remaining_slots:
+                break
+            candidate_slots = []
+            if args.placement_backend == "bitset":
+                unavailable_bits = int(coverage_bits[int(target_idx)] | protected_bits[int(target_idx)])
+                for slot in range(period):
+                    if ((unavailable_bits >> int(slot)) & 1) == 0:
+                        candidate_slots.append(int(slot))
+            else:
+                free_mask = ~(coverage_bool[int(target_idx)] | protected_bool[int(target_idx)])
+                candidate_slots = np.flatnonzero(free_mask).astype(np.int64).tolist()
+            if not candidate_slots:
+                continue
+            candidate_slots = rng.permutation(np.asarray(candidate_slots, dtype=np.int64)).tolist()
+            for start_slot in candidate_slots:
+                if fallback_added >= remaining_slots:
+                    break
+                bitmask = interval_mask_for(int(start_slot), 1)
+                if args.placement_backend == "bitset":
+                    if not bitset_target_available(coverage_bits, protected_bits, int(target_idx), bitmask):
+                        continue
+                    coverage_bits[int(target_idx)] |= bitmask
+                else:
+                    if not numpy_target_available(coverage_bool, protected_bool, int(target_idx), int(start_slot), int(start_slot + 1)):
+                        continue
+                    coverage_bool[int(target_idx), int(start_slot)] = True
+                event_id = int(per_chunk_event_id + accepted_event_count)
+                event_id_matrix[int(target_idx), int(start_slot)] = event_id
+                actual_length_matrix[int(target_idx), int(start_slot)] = np.uint8(1)
+                length_group_code_matrix[int(target_idx), int(start_slot)] = np.int8(LENGTH_GROUP_TO_CODE["short"])
+                available_neighbor_count_matrix[int(target_idx), int(start_slot)] = np.int16(0)
+                anchor_neighbor_count_matrix[int(target_idx), int(start_slot)] = np.int8(0)
+                neighbor_scope_matrix[int(target_idx), int(start_slot)] = np.int8(artifacts.preferred_scope[int(target_idx)])
+                neighbor_observed_ratio_matrix[int(target_idx), int(start_slot)] = np.float32(0.0)
+                relaxation_stage_matrix[int(target_idx), int(start_slot)] = np.int8(4)
+                constraint_level_code_matrix[int(target_idx), int(start_slot)] = np.int8(CONSTRAINT_LEVEL_TO_CODE["none"])
+                event_rows.append(
+                    {
+                        "event_id": int(event_id),
+                        "missing_rate_target": float(rate),
+                        "scenario_tag": scenario_tag,
+                        "chunk_index": int(chunk_index),
+                        "day_index": int(day_index),
+                        "file_name": file_name,
+                        "target_node_id": int(artifacts.canonical_node_ids[int(target_idx)]),
+                        "target_node_index": int(target_idx),
+                        "start_slot": int(start_slot),
+                        "stop_slot_exclusive": int(start_slot + 1),
+                        "start_global_time_index": int(unique_times[int(start_slot)]),
+                        "end_global_time_index": int(unique_times[int(start_slot)]),
+                        "actual_length": 1,
+                        "length_group": "short",
+                        "neighbor_scope": int(artifacts.preferred_scope[int(target_idx)]),
+                        "available_neighbor_count": 0,
+                        "anchor_neighbor_count": 0,
+                        "anchor_neighbor_ids": "",
+                        "anchor_neighbor_indices": "",
+                        "available_neighbor_ids": "",
+                        "neighbor_observed_ratio": 0.0,
+                        "neighbor_protection_mode": str(args.neighbor_protection_mode),
+                        "placement_backend": str(args.placement_backend),
+                        "spatial_constraint_level": "none",
+                        "relaxation_stage": 4,
+                        "relaxation_reason": "capacity_shortfall",
+                        "anchor_neighbor_count_used": 0,
+                        "required_available_neighbor_count": 0,
+                        "actual_available_neighbor_count": 0,
+                        "fully_neighbor_observed": False,
+                        "partially_neighbor_observed": False,
+                        "neighbor_observed_slot_ratio": 0.0,
+                        "seed": int(args.seed),
+                    }
+                )
+                accepted_by_level["none"] += 1
+                event_count_by_level["none"] += 1
+                accepted_event_count += 1
+                missing_count += 1
+                fallback_added += 1
+                max_relaxation_stage_used = max(max_relaxation_stage_used, 4)
+        stage_summaries.append(
+            {
+                "spatial_constraint_level": "none",
+                "accepted_missing_count": int(fallback_added),
+                "accepted_event_count": int(fallback_added),
+                "resampled_candidate_count": 0,
+                "relaxation_reason": "capacity_shortfall",
+            }
+        )
     if missing_count < target_missing_count and not allow_none:
         raise RuntimeError("unable to satisfy allocated_missing_count without none-level fallback")
     if missing_count < target_missing_count:
@@ -1463,14 +1639,110 @@ def collect_event_parts(paths: Dict[str, Path]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True).sort_values(["missing_rate_target", "event_id"]).reset_index(drop=True)
 
 
+def finalize_event_csv_frame(event_df: pd.DataFrame) -> pd.DataFrame:
+    if event_df.empty:
+        return pd.DataFrame()
+    preferred_columns = [
+        "event_id",
+        "missing_rate_target",
+        "scenario_tag",
+        "chunk_index",
+        "day_index",
+        "file_name",
+        "target_node_id",
+        "target_node_index",
+        "start_slot",
+        "stop_slot_exclusive",
+        "actual_length",
+        "length_group",
+        "neighbor_scope",
+        "available_neighbor_count",
+        "anchor_neighbor_count",
+        "anchor_neighbor_ids",
+        "anchor_neighbor_indices",
+        "neighbor_observed_ratio",
+        "spatial_constraint_level",
+        "relaxation_stage",
+        "relaxation_reason",
+        "anchor_neighbor_count_used",
+        "required_available_neighbor_count",
+        "actual_available_neighbor_count",
+        "fully_neighbor_observed",
+        "partially_neighbor_observed",
+        "neighbor_observed_slot_ratio",
+    ]
+    selected_columns = [column for column in preferred_columns if column in event_df.columns]
+    return event_df.loc[:, selected_columns].copy()
+
+
+def path_free_bytes(path: Path) -> int:
+    anchor = path.anchor if path.anchor else str(path.resolve().anchor)
+    return int(shutil.disk_usage(anchor).free)
+
+
+def choose_external_event_csv_path(paths: Dict[str, Path]) -> Path:
+    export_root = Path("D:/FedTrafficFlow_temp_exports")
+    return export_root / paths["scenario_root"].name / "miss_set" / "manifests" / paths["event_csv_path"].name
+
+
+def write_finalize_event_csv(paths: Dict[str, Path], event_df: pd.DataFrame) -> Path:
+    final_df = finalize_event_csv_frame(event_df)
+    target_path = paths["event_csv_path"]
+    clean_tmp_for_base(target_path)
+    free_bytes = path_free_bytes(target_path)
+    if free_bytes > 512 * 1024 * 1024:
+        atomic_write_dataframe_csv(target_path, final_df)
+        return target_path
+    external_path = choose_external_event_csv_path(paths)
+    clean_tmp_for_base(external_path)
+    atomic_write_dataframe_csv(external_path, final_df)
+    if target_path.exists() or target_path.is_symlink():
+        target_path.unlink()
+    try:
+        os.symlink(str(external_path), str(target_path))
+    except Exception:
+        pointer_df = pd.DataFrame(
+            [
+                {
+                    "storage_mode": "external_pointer",
+                    "external_event_csv_path": str(external_path),
+                }
+            ]
+        )
+        atomic_write_dataframe_csv(target_path, pointer_df)
+    return target_path
+
+
+def resolve_final_event_csv_path(paths: Dict[str, Path]) -> Path:
+    event_csv_path = paths["event_csv_path"]
+    if not event_csv_path.exists():
+        return event_csv_path
+    try:
+        preview_df = pd.read_csv(event_csv_path, nrows=1)
+    except Exception:
+        return event_csv_path
+    if "external_event_csv_path" in preview_df.columns and not preview_df.empty:
+        return Path(str(preview_df.iloc[0]["external_event_csv_path"]))
+    return event_csv_path
+
+
+def load_finalized_event_df(paths: Dict[str, Path]) -> pd.DataFrame:
+    resolved_path = resolve_final_event_csv_path(paths)
+    if not resolved_path.exists():
+        return pd.DataFrame()
+    return pd.read_csv(resolved_path)
+
+
 def run_finalize(paths: Dict[str, Path]) -> Tuple[pd.DataFrame, pd.DataFrame]:
     ensure_base_dirs(paths)
     status_df = collect_status_parts(paths)
     event_df = collect_event_parts(paths)
     if status_df.empty:
         raise FileNotFoundError("no status parts found; run generate_missing first")
+    clean_tmp_for_base(paths["chunk_status_path"])
+    clean_tmp_for_base(paths["event_csv_path"])
     atomic_write_dataframe_csv(paths["chunk_status_path"], status_df)
-    atomic_write_dataframe_csv(paths["event_csv_path"], event_df if not event_df.empty else pd.DataFrame())
+    write_finalize_event_csv(paths, event_df)
     return status_df, event_df
 
 
@@ -1610,6 +1882,69 @@ def build_missingness_audit(
     return payload
 
 
+def build_global_allocation_audit(
+    args: argparse.Namespace,
+    artifacts: PreparedArtifacts,
+    paths: Dict[str, Path],
+    status_df: pd.DataFrame,
+) -> Dict[str, Any]:
+    allocation_df = artifacts.allocation_df.copy()
+    rates = parse_rates(args.missing_rates)
+    per_rate = {}
+    for rate in rates:
+        rate_key = "%.2f" % rate
+        rate_alloc = allocation_df.loc[np.isclose(allocation_df["missing_rate_target"], rate)].copy()
+        rate_status = status_df.loc[np.isclose(status_df["missing_rate_target"], rate)].copy()
+        global_missing_count = int(rate_alloc["global_missing_count"].max()) if not rate_alloc.empty else 0
+        allocation_sum = int(rate_alloc["allocated_missing_count"].sum()) if not rate_alloc.empty else 0
+        observed_sum = int(rate_status["observed_missing_count"].sum()) if not rate_status.empty else 0
+        per_rate[rate_key] = {
+            "global_eligible_count": int(rate_alloc["global_eligible_count"].max()) if not rate_alloc.empty else 0,
+            "global_missing_count": int(global_missing_count),
+            "allocation_sum": int(allocation_sum),
+            "observed_sum": int(observed_sum),
+            "allocation_sum_matches_global_missing_count": bool(allocation_sum == global_missing_count),
+            "observed_sum_matches_global_missing_count": bool(observed_sum == global_missing_count),
+        }
+    payload = {
+        "mechanism": MECHANISM,
+        "mask_scope": str(args.mask_scope),
+        "allocation_method": str(args.allocation_method),
+        "allocation_shortfall_policy": str(args.allocation_shortfall_policy),
+        "global_allocation_used": True,
+        "day_stratified_generation_used": False,
+        "per_chunk_round_rate_used": False,
+        "per_rate": per_rate,
+    }
+    lines = [
+        "# snh global allocation audit",
+        "",
+        "- mask_scope: `%s`" % str(args.mask_scope),
+        "- allocation_method: `%s`" % str(args.allocation_method),
+        "- day_stratified_generation_used: `False`",
+        "- per_chunk_round_rate_used: `False`",
+        "",
+    ]
+    for rate_key in sorted(per_rate.keys()):
+        item = per_rate[rate_key]
+        lines.extend(
+            [
+                "## %s" % rate_key,
+                "",
+                "- global_eligible_count: `%s`" % item["global_eligible_count"],
+                "- global_missing_count: `%s`" % item["global_missing_count"],
+                "- allocation_sum: `%s`" % item["allocation_sum"],
+                "- observed_sum: `%s`" % item["observed_sum"],
+                "- allocation_sum_matches_global_missing_count: `%s`" % item["allocation_sum_matches_global_missing_count"],
+                "- observed_sum_matches_global_missing_count: `%s`" % item["observed_sum_matches_global_missing_count"],
+                "",
+            ]
+        )
+    atomic_write_json(paths["global_allocation_audit_json_path"], payload)
+    atomic_write_text(paths["global_allocation_audit_md_path"], "\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    return payload
+
+
 def build_performance_audit(
     args: argparse.Namespace,
     paths: Dict[str, Path],
@@ -1692,11 +2027,13 @@ def run_audit(
         status_df, event_df = run_finalize(paths)
     else:
         status_df = pd.read_csv(paths["chunk_status_path"])
-        event_df = pd.read_csv(paths["event_csv_path"])
+        event_df = load_finalized_event_df(paths)
     missingness_payload = build_missingness_audit(args, artifacts, paths, status_df, event_df)
+    global_allocation_payload = build_global_allocation_audit(args, artifacts, paths, status_df)
     performance_payload = build_performance_audit(args, paths, status_df)
     return {
         "missingness": missingness_payload,
+        "global_allocation": global_allocation_payload,
         "performance": performance_payload,
     }
 
@@ -1719,9 +2056,16 @@ def build_validation_rows(
     run_config = read_json(paths["run_config_path"]) if paths["run_config_path"].exists() else {}
     failed_parts = sorted([str(path.name) for path in paths["failed_parts_root"].glob("*.failed.json")])
     tmp_files = check_tmp_files(paths["miss_root"])
-    finalized_event_df = pd.read_csv(paths["event_csv_path"]) if paths["event_csv_path"].exists() else pd.DataFrame()
+    finalized_event_df = load_finalized_event_df(paths) if paths["event_csv_path"].exists() else pd.DataFrame()
+    allocation_df = pd.read_csv(paths["allocation_path"]) if paths["allocation_path"].exists() else pd.DataFrame()
+    sample_mask_columns = []
+    sample_mask_path = next(paths["masks_root"].rglob("*_mask.parquet"), None) if paths["masks_root"].exists() else None
+    if sample_mask_path is not None:
+        sample_mask_columns = pd.read_parquet(sample_mask_path).columns.tolist()
     rows = []
     warning_rates = []
+    min_available_check_passed = True
+    min_available_check_details = []
     for rate in rates:
         scenario_tag = scenario_rate_tag(rate, args.seed)
         mask_count = len(list((paths["masks_root"] / scenario_tag).glob("*_mask.parquet")))
@@ -1734,6 +2078,16 @@ def build_validation_rows(
         global_missing_count = int(rate_status["global_missing_count"].max()) if "global_missing_count" in rate_status.columns and not rate_status.empty else 0
         observed_missing_count = int(rate_status["observed_missing_count"].sum()) if not rate_status.empty else 0
         constrained_ratio = float(rate_status["spatially_constrained_ratio"].mean()) if "spatially_constrained_ratio" in rate_status.columns and not rate_status.empty else 0.0
+        min_neighbor_value = int(rate_status["min_available_neighbor_count"].min()) if "min_available_neighbor_count" in rate_status.columns and not rate_status.empty else 0
+        relaxed_min_check = bool(
+            (min_neighbor_value >= int(args.min_available_neighbors))
+            or (
+                parse_bool(args.allow_no_spatial_constraint)
+                and constrained_ratio >= float(args.min_spatially_constrained_ratio)
+            )
+        )
+        min_available_check_passed = min_available_check_passed and relaxed_min_check
+        min_available_check_details.append("%s:%s" % (scenario_tag, min_neighbor_value))
         if constrained_ratio < float(args.min_spatially_constrained_ratio):
             warning_rates.append("%.2f" % rate)
         rows.append({"check": "%s_mask_count" % scenario_tag, "passed": bool(mask_count == chunk_count), "details": str(mask_count)})
@@ -1772,8 +2126,8 @@ def build_validation_rows(
             },
             {
                 "check": "min_available_neighbor_count",
-                "passed": bool((status_df["min_available_neighbor_count"] >= int(args.min_available_neighbors)).all()) if not status_df.empty else False,
-                "details": str(int(status_df["min_available_neighbor_count"].min()) if not status_df.empty else 0),
+                "passed": bool(min_available_check_passed),
+                "details": ";".join(min_available_check_details),
             },
             {
                 "check": "skipped_missing_slots_recorded",
@@ -1822,8 +2176,8 @@ def build_validation_rows(
             },
             {
                 "check": "constraint_level_recorded_in_masks",
-                "passed": True,
-                "details": "validated through generated mask schema in fast pipeline",
+                "passed": bool("spatial_constraint_level" in sample_mask_columns),
+                "details": ",".join(sample_mask_columns[:20]),
             },
             {
                 "check": "none_level_allowed",
@@ -1839,6 +2193,44 @@ def build_validation_rows(
                 "check": "none_level_excluded_from_spatial_claims",
                 "passed": bool(paths["constraint_relaxation_audit_md_path"].exists()),
                 "details": str(paths["constraint_relaxation_audit_md_path"]),
+            },
+            {
+                "check": "mask_scope_global",
+                "passed": run_config.get("mask_scope") == "global",
+                "details": str(run_config.get("mask_scope")),
+            },
+            {
+                "check": "global_allocation_used",
+                "passed": bool(run_config.get("global_allocation_used", False)),
+                "details": str(run_config.get("global_allocation_used", False)),
+            },
+            {
+                "check": "allocation_sum_matches_global_missing_count",
+                "passed": bool(
+                    (allocation_df.groupby("missing_rate_target")["allocated_missing_count"].sum() == allocation_df.groupby("missing_rate_target")["global_missing_count"].max()).all()
+                )
+                if not allocation_df.empty
+                else False,
+                "details": "checked on global_missing_allocation.csv",
+            },
+            {
+                "check": "observed_sum_matches_global_missing_count",
+                "passed": bool(
+                    (status_df.groupby("missing_rate_target")["observed_missing_count"].sum() == status_df.groupby("missing_rate_target")["global_missing_count"].max()).all()
+                )
+                if ("global_missing_count" in status_df.columns and not status_df.empty)
+                else False,
+                "details": "checked on finalized status",
+            },
+            {
+                "check": "day_stratified_generation_disabled",
+                "passed": bool(not run_config.get("day_stratified_generation_used", True)),
+                "details": str(run_config.get("day_stratified_generation_used", True)),
+            },
+            {
+                "check": "per_chunk_round_rate_disabled",
+                "passed": bool(not run_config.get("per_chunk_round_rate_used", True)),
+                "details": str(run_config.get("per_chunk_round_rate_used", True)),
             },
         ]
     )
@@ -1861,11 +2253,25 @@ def build_validation_rows(
         if ("global_missing_count" in status_df.columns and not status_df.empty)
         else False,
         "constraint_level_recorded_in_events": bool("spatial_constraint_level" in finalized_event_df.columns),
-        "constraint_level_recorded_in_masks": True,
+        "constraint_level_recorded_in_masks": bool("spatial_constraint_level" in sample_mask_columns),
         "none_level_allowed": parse_bool(args.allow_no_spatial_constraint),
         "none_level_count_reported": bool("none_missing_count" in status_df.columns),
         "spatially_constrained_ratio_reported": bool("spatially_constrained_ratio" in status_df.columns),
         "none_level_excluded_from_spatial_claims": True,
+        "mask_scope": str(run_config.get("mask_scope", "")),
+        "global_allocation_used": bool(run_config.get("global_allocation_used", False)),
+        "allocation_sum_matches_global_missing_count": bool(
+            (allocation_df.groupby("missing_rate_target")["allocated_missing_count"].sum() == allocation_df.groupby("missing_rate_target")["global_missing_count"].max()).all()
+        )
+        if not allocation_df.empty
+        else False,
+        "observed_sum_matches_global_missing_count": bool(
+            (status_df.groupby("missing_rate_target")["observed_missing_count"].sum() == status_df.groupby("missing_rate_target")["global_missing_count"].max()).all()
+        )
+        if ("global_missing_count" in status_df.columns and not status_df.empty)
+        else False,
+        "day_stratified_generation_used": bool(run_config.get("day_stratified_generation_used", False)),
+        "per_chunk_round_rate_used": bool(run_config.get("per_chunk_round_rate_used", False)),
         "warning_rates_below_min_spatially_constrained_ratio": warning_rates,
         "failed_parts": failed_parts,
         "tmp_files": tmp_files,

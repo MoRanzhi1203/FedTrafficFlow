@@ -1,0 +1,4 @@
+﻿target_path,exists_before_cleanup,total_size_bytes,total_size_gb,delete_mode,matched_parquet_files
+E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\imp\imp_data,True,84805397945,78.981182,deleted_reconstructed_from_manifests,1464
+E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\imp\imp_data,True,84798706921,78.97495,deleted_reconstructed_from_manifests,1464
+E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\imp\imp_data,True,84804676581,78.98051,deleted_reconstructed_from_manifests,1464
