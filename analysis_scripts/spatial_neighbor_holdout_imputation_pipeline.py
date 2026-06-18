@@ -4,6 +4,8 @@ import argparse
 import gc
 import json
 import math
+import time
+import urllib.request
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,16 +18,19 @@ import pandas as pd
 EPSILON = 1e-6
 SCENARIO_ID = "snh_mix"
 MECHANISM = "spatial_neighbor_holdout"
-METHOD_ORDER = [
+PHASE1_BASELINE_METHODS = [
     "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
     "function_curve_fit",
     "road_topology_neighbor_fill",
     "correlation_topology_neighbor_fill",
+]
+METHOD_ORDER = list(PHASE1_BASELINE_METHODS)
+REMOVED_METHODS = {
     "adaptive_spatio_temporal_fill",
     "adaptive_topology_function_hybrid",
-]
+}
 METHOD_DIR_ABBR = {
     "mean_fill": "mf",
     "forward_fill": "ff",
@@ -33,8 +38,6 @@ METHOD_DIR_ABBR = {
     "function_curve_fit": "fcf",
     "road_topology_neighbor_fill": "rtn",
     "correlation_topology_neighbor_fill": "ctn",
-    "adaptive_spatio_temporal_fill": "ast",
-    "adaptive_topology_function_hybrid": "atfh",
 }
 FLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]
 LENGTH_GROUP_LABELS = ["short", "mid", "long"]
@@ -51,6 +54,9 @@ class StagePaths:
     miss_data_root: Path
     imp_data_root: Path
     manifests_root: Path
+    progress_root: Path
+    summary_parts_root: Path
+    summary_progress_root: Path
     summaries_root: Path
     figures_root: Path
     audits_root: Path
@@ -60,6 +66,7 @@ class StagePaths:
     input_check_json_path: Path
     chunk_status_path: Path
     detail_path: Path
+    summary_all_days_path: Path
     summary_exclude_warmup_path: Path
     summary_by_length_path: Path
     summary_by_flow_path: Path
@@ -67,6 +74,9 @@ class StagePaths:
     summary_by_constraint_level_path: Path
     audit_json_path: Path
     audit_md_path: Path
+    validation_json_path: Path
+    performance_json_path: Path
+    external_imp_manifest_path: Path
     flow_threshold_path: Path
 
 
@@ -94,7 +104,7 @@ class ChunkPrepared:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run spatial neighbor holdout imputation and summary generation.")
-    parser.add_argument("--stage", required=True, choices=["prepare", "impute", "summarize", "audit", "all"])
+    parser.add_argument("--stage", required=True, choices=["prepare", "impute", "summarize", "audit", "validate", "all"])
     parser.add_argument("--input_dir", required=True, type=Path)
     parser.add_argument("--scenario_dir", required=True, type=Path)
     parser.add_argument("--topology_file", required=True, type=Path)
@@ -108,6 +118,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--node_col", required=True, type=str)
     parser.add_argument("--time_col", required=True, type=str)
     parser.add_argument("--period", required=True, type=int)
+    parser.add_argument("--imp_data_storage_mode", default="local", choices=["local", "external"])
+    parser.add_argument("--external_imp_data_root", default="", type=str)
+    parser.add_argument("--summary_output_dir", default="", type=str)
+    parser.add_argument("--write_imputed_data", default="true", type=str)
+    parser.add_argument("--resume", default="true", type=str)
+    parser.add_argument("--overwrite", default="false", type=str)
     return parser.parse_args()
 
 
@@ -133,13 +149,25 @@ def parse_methods(raw: str) -> list[str]:
     for method in methods:
         if method == "zero_fill":
             raise ValueError("zero_fill is not allowed in snh_mix")
+        if method in REMOVED_METHODS:
+            raise ValueError(
+                "Removed method: adaptive_spatio_temporal_fill; "
+                "Removed method: adaptive_topology_function_hybrid. "
+                "Use only six baseline methods."
+            )
         if method not in METHOD_ORDER:
             raise ValueError(f"unsupported method: {method}")
         if method not in unique_methods:
             unique_methods.append(method)
-    if unique_methods != METHOD_ORDER:
-        raise ValueError(f"--methods must exactly match formal snh methods: {METHOD_ORDER}")
+    if not unique_methods:
+        raise ValueError("--methods is empty")
     return unique_methods
+
+
+def infer_methods_phase(methods: list[str]) -> str:
+    if methods == PHASE1_BASELINE_METHODS:
+        return "phase_1_six_baseline_methods"
+    return "custom_method_subset"
 
 
 def ensure_absolute(project_root: Path, maybe_relative: Path) -> Path:
@@ -150,12 +178,101 @@ def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
+def resolve_imp_data_root(scenario_dir: Path, storage_mode: str, external_root: str) -> Path:
+    if storage_mode == "external":
+        if not str(external_root).strip():
+            raise ValueError("--external_imp_data_root is required when --imp_data_storage_mode external")
+        return Path(external_root)
+    return scenario_dir / "imp" / "imp_data"
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def write_markdown(path: Path, lines: list[str]) -> None:
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+
+def load_existing_csv(path: Path) -> pd.DataFrame:
+    return pd.read_csv(path) if path.exists() else pd.DataFrame()
+
+
+def done_marker_path(paths: StagePaths, scenario_tag: str, method: str, chunk_index: int) -> Path:
+    return paths.progress_root / f"{scenario_tag}__{method}__chunk_{chunk_index:03d}.done.json"
+
+
+def normalize_six_baseline_methods(methods: list[str], stage_name: str) -> list[str]:
+    if len(methods) != len(PHASE1_BASELINE_METHODS) or set(methods) != set(PHASE1_BASELINE_METHODS):
+        raise ValueError(f"snh_mix {stage_name} requires exactly six baseline methods.")
+    return list(PHASE1_BASELINE_METHODS)
+
+
+def summary_part_methods_tag(methods: list[str]) -> str:
+    normalize_six_baseline_methods(methods, "summarize")
+    return "six_methods"
+
+
+def summary_part_path(paths: StagePaths, scenario_tag: str, chunk_index: int, methods: list[str]) -> Path:
+    methods_tag = summary_part_methods_tag(methods)
+    return paths.summary_parts_root / f"{scenario_tag}__chunk_{chunk_index:03d}__{methods_tag}_detail.csv"
+
+
+def formal_summary_output_paths(paths: StagePaths) -> list[Path]:
+    return [
+        paths.detail_path,
+        paths.summary_all_days_path,
+        paths.summary_exclude_warmup_path,
+        paths.summary_by_flow_path,
+        paths.summary_by_length_path,
+    ]
+
+
+def summary_done_path(paths: StagePaths, scenario_tag: str, chunk_index: int, methods: list[str]) -> Path:
+    methods_tag = summary_part_methods_tag(methods)
+    return paths.summary_progress_root / f"{scenario_tag}__chunk_{chunk_index:03d}__{methods_tag}_summary.done.json"
+
+
+def add_metric_alias_columns(df: pd.DataFrame) -> pd.DataFrame:
+    renamed = df.copy()
+    alias_map = {"mae": "MAE", "rmse": "RMSE", "mape": "MAPE", "smape": "sMAPE", "nrmse": "NRMSE"}
+    for source, alias in alias_map.items():
+        if source in renamed.columns and alias not in renamed.columns:
+            renamed[alias] = renamed[source]
+    return renamed
+
+
+def debug_emit(hypothesis_id: str, location: str, msg: str, data: dict[str, Any]) -> None:
+    # #region debug-point runtime-report
+    env_path = Path(".dbg") / "impute-stall.env"
+    url = "http://127.0.0.1:7777/event"
+    session_id = "impute-stall"
+    try:
+        if env_path.exists():
+            content = env_path.read_text(encoding="utf-8")
+            for line in content.splitlines():
+                if line.startswith("DEBUG_SERVER_URL="):
+                    url = line.split("=", 1)[1].strip() or url
+                elif line.startswith("DEBUG_SESSION_ID="):
+                    session_id = line.split("=", 1)[1].strip() or session_id
+        payload = {
+            "sessionId": session_id,
+            "runId": "pre-fix",
+            "hypothesisId": hypothesis_id,
+            "location": location,
+            "msg": msg,
+            "data": data,
+            "ts": int(time.time() * 1000),
+        }
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=1.5).read()
+    except Exception:
+        pass
+    # #endregion
 
 
 def extract_day_index(file_name: str) -> int:
@@ -170,17 +287,22 @@ def imputed_dir_name(rate: float, method: str) -> str:
     return f"{scenario_rate_tag(rate)}_m_{METHOD_DIR_ABBR[method]}"
 
 
-def build_paths(scenario_dir: Path) -> StagePaths:
+def build_paths(scenario_dir: Path, imp_data_root: Path, summaries_root: Path | None = None) -> StagePaths:
     imp_root = scenario_dir / "imp"
+    manifests_root = imp_root / "manifests"
+    effective_summaries_root = summaries_root if summaries_root is not None else (imp_root / "summaries")
     return StagePaths(
         scenario_root=scenario_dir,
         miss_root=scenario_dir / "miss_set",
         imp_root=imp_root,
         masks_root=scenario_dir / "miss_set" / "masks",
         miss_data_root=scenario_dir / "miss_set" / "miss_data",
-        imp_data_root=imp_root / "imp_data",
-        manifests_root=imp_root / "manifests",
-        summaries_root=imp_root / "summaries",
+        imp_data_root=imp_data_root,
+        manifests_root=manifests_root,
+        progress_root=manifests_root / "progress",
+        summary_parts_root=manifests_root / "summary_parts",
+        summary_progress_root=manifests_root / "summary_progress",
+        summaries_root=effective_summaries_root,
         figures_root=imp_root / "figures",
         audits_root=imp_root / "audits",
         run_config_path=imp_root / "run_config_imputation.json",
@@ -188,14 +310,18 @@ def build_paths(scenario_dir: Path) -> StagePaths:
         input_check_csv_path=imp_root / "manifests" / "snh_imputation_input_check.csv",
         input_check_json_path=imp_root / "manifests" / "snh_imputation_input_check.json",
         chunk_status_path=imp_root / "manifests" / "snh_imputed_chunk_status.csv",
-        detail_path=imp_root / "summaries" / "snh_imputation_quality_detail.csv",
-        summary_exclude_warmup_path=imp_root / "summaries" / "snh_imputation_quality_summary_exclude_warmup.csv",
-        summary_by_length_path=imp_root / "summaries" / "snh_imputation_quality_by_length_group.csv",
-        summary_by_flow_path=imp_root / "summaries" / "snh_imputation_quality_by_flow_group.csv",
-        summary_by_neighbor_coverage_path=imp_root / "summaries" / "snh_imputation_quality_by_neighbor_coverage.csv",
-        summary_by_constraint_level_path=imp_root / "summaries" / "snh_imputation_quality_by_constraint_level.csv",
+        detail_path=effective_summaries_root / "snh_imputation_quality_detail.csv",
+        summary_all_days_path=effective_summaries_root / "snh_imputation_quality_summary_all_days.csv",
+        summary_exclude_warmup_path=effective_summaries_root / "snh_imputation_quality_summary_exclude_warmup.csv",
+        summary_by_length_path=effective_summaries_root / "snh_imputation_quality_by_length_group.csv",
+        summary_by_flow_path=effective_summaries_root / "snh_imputation_quality_by_flow_group.csv",
+        summary_by_neighbor_coverage_path=effective_summaries_root / "snh_imputation_quality_by_neighbor_coverage.csv",
+        summary_by_constraint_level_path=effective_summaries_root / "snh_imputation_quality_by_constraint_level.csv",
         audit_json_path=imp_root / "audits" / "snh_spatial_imputation_audit.json",
         audit_md_path=imp_root / "audits" / "snh_spatial_imputation_audit_zh.md",
+        validation_json_path=imp_root / "audits" / "snh_imputation_validation.json",
+        performance_json_path=imp_root / "audits" / "snh_imputation_performance.json",
+        external_imp_manifest_path=imp_root / "manifests" / "external_imp_data_manifest.json",
         flow_threshold_path=imp_root / "manifests" / "snh_flow_group_thresholds.json",
     )
 
@@ -210,6 +336,20 @@ def load_input_files(input_dir: Path) -> list[Path]:
 def build_row_layout(df: pd.DataFrame, node_col: str, time_col: str, period: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     local = df[[node_col, time_col]].copy()
     local["row_index"] = np.arange(len(local), dtype=np.int64)
+    if len(local) > 0 and len(local) % period == 0:
+        node_count = len(local) // period
+        raw_node_matrix = local[node_col].to_numpy(dtype=np.int64, copy=False).reshape(period, node_count)
+        raw_time_matrix = local[time_col].to_numpy(dtype=np.int64, copy=False).reshape(period, node_count)
+        first_node_order = raw_node_matrix[0]
+        first_time_order = raw_time_matrix[:, :1]
+        # Fast path: raw parquet rows are ordered by time, then node.
+        if np.array_equal(raw_node_matrix, np.broadcast_to(first_node_order, raw_node_matrix.shape)) and np.array_equal(
+            raw_time_matrix, np.broadcast_to(first_time_order, raw_time_matrix.shape)
+        ):
+            sorted_original_rows = np.arange(len(local), dtype=np.int64).reshape(period, node_count).T.reshape(-1)
+            inverse_sort_idx = np.empty(len(local), dtype=np.int64)
+            inverse_sort_idx[sorted_original_rows] = np.arange(len(local), dtype=np.int64)
+            return first_node_order.astype(np.int64, copy=False), sorted_original_rows, inverse_sort_idx
     local = local.sort_values([node_col, time_col], kind="mergesort").reset_index(drop=True)
     node_ids = local[node_col].astype(np.int64).to_numpy(copy=False).reshape(-1, period)[:, 0]
     sorted_original_rows = local["row_index"].to_numpy(dtype=np.int64, copy=False)
@@ -326,9 +466,19 @@ def prepare_chunk(
     thresholds: dict[str, Any],
     warmup_days: int,
 ) -> ChunkPrepared:
-    clean_df = pd.read_parquet(clean_file)
-    missing_df = pd.read_parquet(missing_file)
-    mask_df = pd.read_parquet(mask_file)
+    required_columns = [node_col, time_col, target_col]
+    clean_df = pd.read_parquet(clean_file, columns=required_columns)
+    missing_df = pd.read_parquet(missing_file, columns=required_columns)
+    mask_columns = [
+        "row_index",
+        "length_group",
+        "available_neighbor_count",
+        "neighbor_scope",
+    ]
+    for optional_column in ["spatial_constraint_level", "neighbor_observed_slot_ratio", "neighbor_observed_ratio"]:
+        if optional_column not in mask_columns:
+            mask_columns.append(optional_column)
+    mask_df = pd.read_parquet(mask_file, columns=mask_columns)
     node_ids, sorted_original_rows, inverse_sort_idx = build_row_layout(clean_df, node_col, time_col, period)
     clean_sorted = clean_df.iloc[sorted_original_rows][target_col].to_numpy(dtype=np.float32, copy=False).reshape(-1, period)
     missing_sorted = missing_df.iloc[sorted_original_rows][target_col].to_numpy(dtype=np.float32, copy=False).reshape(-1, period)
@@ -369,6 +519,18 @@ def prepare_chunk(
         spatial_constraint_levels=constraint_level_flat.reshape(clean_sorted.shape)[mask_matrix],
         is_warmup=bool(chunk_index < warmup_days),
     )
+
+
+def load_clean_matrix_for_history(
+    clean_file: Path,
+    node_col: str,
+    time_col: str,
+    target_col: str,
+    period: int,
+) -> np.ndarray:
+    clean_df = pd.read_parquet(clean_file, columns=[node_col, time_col, target_col])
+    _, sorted_original_rows, _ = build_row_layout(clean_df, node_col, time_col, period)
+    return clean_df.iloc[sorted_original_rows][target_col].to_numpy(dtype=np.float32, copy=False).reshape(-1, period)
 
 
 def build_current_day_forward_fill(missing_matrix: np.ndarray, previous_last_state: np.ndarray | None) -> tuple[np.ndarray, np.ndarray]:
@@ -683,21 +845,27 @@ def estimate_historical_errors(
         return 1.0, max(func_error, EPSILON)
     current_values = holdout[neighbors]
     available = np.isfinite(current_values)
-    positive = available & (cache["corr"] > 0.05)
+    positive = available & (cache["corr"][:, None] > 0.05)
     if not np.any(positive):
         return 1.0, max(func_error, EPSILON)
-    weights = np.where(
-        positive,
+    base_weights = np.where(
+        cache["corr"] > 0.05,
         np.power(np.maximum(cache["corr"], 0.0), 1.0) / np.power(cache["lengths"] + EPSILON, 1.0),
         0.0,
     ).astype(np.float32)
-    z_values = (current_values - cache["mu_j"]) / (cache["sigma_j"] + EPSILON)
-    numerator = float(np.sum(weights * z_values))
-    denominator = float(np.sum(weights))
-    if denominator <= EPSILON:
+    weights = base_weights[:, None] * positive.astype(np.float32)
+    z_values = (current_values - cache["mu_j"][:, None]) / (cache["sigma_j"][:, None] + EPSILON)
+    numerator = np.sum(weights * z_values, axis=0, dtype=np.float32)
+    denominator = np.sum(weights, axis=0, dtype=np.float32)
+    success = denominator > EPSILON
+    if not np.any(success):
         return 1.0, max(func_error, EPSILON)
-    space_pred = cache["mu_i"] + (max(cache["sigma_i"], EPSILON) * (numerator / denominator))
-    space_error = float(np.sqrt(np.mean((space_pred - float(np.mean(target_actual))) ** 2)))
+    space_pred = np.full_like(target_actual, np.nan, dtype=np.float32)
+    space_pred[success] = cache["mu_i"] + (max(cache["sigma_i"], EPSILON) * (numerator[success] / denominator[success]))
+    finite_mask = np.isfinite(space_pred) & np.isfinite(target_actual)
+    if not np.any(finite_mask):
+        return 1.0, max(func_error, EPSILON)
+    space_error = float(np.sqrt(np.mean((space_pred[finite_mask] - target_actual[finite_mask]) ** 2)))
     return max(space_error, EPSILON), max(func_error, EPSILON)
 
 
@@ -800,6 +968,7 @@ def build_detail_rows_for_method(
     neighbor_available_values: np.ndarray,
     neighbor_coverage_values: np.ndarray,
     mean_positive_corr_values: np.ndarray,
+    include_optional_spatial_diagnostics: bool = True,
 ) -> list[dict[str, Any]]:
     rows = [
         metric_row(
@@ -864,55 +1033,177 @@ def build_detail_rows_for_method(
                     is_warmup_day=prepared.is_warmup,
                 )
             )
-    for group_label in CONSTRAINT_LEVELS:
-        selector = prepared.spatial_constraint_levels == group_label
-        if np.any(selector):
-            rows.append(
-                metric_row(
-                    missing_rate=missing_rate,
-                    method=method,
-                    chunk_index=prepared.chunk_index,
-                    day_index=prepared.day_index,
-                    group_dimension="spatial_constraint_level",
-                    flow_group="overall",
-                    length_group=group_label,
-                    neighbor_coverage_group="overall",
-                    true_values=prepared.true_values[selector],
-                    pred_values=pred_values[selector],
-                    fallback_flags=fallback_flags[selector],
-                    neighbor_available_values=neighbor_available_values[selector],
-                    neighbor_coverage_values=neighbor_coverage_values[selector],
-                    mean_positive_corr_values=mean_positive_corr_values[selector],
-                    is_warmup_day=prepared.is_warmup,
+    if include_optional_spatial_diagnostics:
+        for group_label in CONSTRAINT_LEVELS:
+            selector = prepared.spatial_constraint_levels == group_label
+            if np.any(selector):
+                rows.append(
+                    metric_row(
+                        missing_rate=missing_rate,
+                        method=method,
+                        chunk_index=prepared.chunk_index,
+                        day_index=prepared.day_index,
+                        group_dimension="spatial_constraint_level",
+                        flow_group="overall",
+                        length_group=group_label,
+                        neighbor_coverage_group="overall",
+                        true_values=prepared.true_values[selector],
+                        pred_values=pred_values[selector],
+                        fallback_flags=fallback_flags[selector],
+                        neighbor_available_values=neighbor_available_values[selector],
+                        neighbor_coverage_values=neighbor_coverage_values[selector],
+                        mean_positive_corr_values=mean_positive_corr_values[selector],
+                        is_warmup_day=prepared.is_warmup,
+                    )
                 )
-            )
-    coverage_groups = infer_neighbor_coverage_group(neighbor_coverage_values)
-    for group_label in NEIGHBOR_COVERAGE_GROUPS:
-        selector = coverage_groups == group_label
-        if np.any(selector):
-            rows.append(
-                metric_row(
-                    missing_rate=missing_rate,
-                    method=method,
-                    chunk_index=prepared.chunk_index,
-                    day_index=prepared.day_index,
-                    group_dimension="neighbor_coverage_group",
-                    flow_group="overall",
-                    length_group="overall",
-                    neighbor_coverage_group=group_label,
-                    true_values=prepared.true_values[selector],
-                    pred_values=pred_values[selector],
-                    fallback_flags=fallback_flags[selector],
-                    neighbor_available_values=neighbor_available_values[selector],
-                    neighbor_coverage_values=neighbor_coverage_values[selector],
-                    mean_positive_corr_values=mean_positive_corr_values[selector],
-                    is_warmup_day=prepared.is_warmup,
+        coverage_groups = infer_neighbor_coverage_group(neighbor_coverage_values)
+        for group_label in NEIGHBOR_COVERAGE_GROUPS:
+            selector = coverage_groups == group_label
+            if np.any(selector):
+                rows.append(
+                    metric_row(
+                        missing_rate=missing_rate,
+                        method=method,
+                        chunk_index=prepared.chunk_index,
+                        day_index=prepared.day_index,
+                        group_dimension="neighbor_coverage_group",
+                        flow_group="overall",
+                        length_group="overall",
+                        neighbor_coverage_group=group_label,
+                        true_values=prepared.true_values[selector],
+                        pred_values=pred_values[selector],
+                        fallback_flags=fallback_flags[selector],
+                        neighbor_available_values=neighbor_available_values[selector],
+                        neighbor_coverage_values=neighbor_coverage_values[selector],
+                        mean_positive_corr_values=mean_positive_corr_values[selector],
+                        is_warmup_day=prepared.is_warmup,
+                    )
                 )
-            )
     return rows
 
 
-def summarize_from_detail(detail_df: pd.DataFrame, exclude_warmup: bool) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def compute_method_outputs(
+    prepared: ChunkPrepared,
+    previous_last_state: np.ndarray | None,
+    history_clean: deque[np.ndarray],
+    correlation_history_days: int,
+    topology_candidates: dict[int, list[int]],
+    basis: np.ndarray,
+    pinv: np.ndarray,
+) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]]:
+    forward_matrix, forward_internal_fallback = build_current_day_forward_fill(prepared.missing_matrix, previous_last_state)
+    mean_matrix, mean_fallback = impute_mean_fill(
+        prepared.missing_matrix,
+        prepared.mask_matrix,
+        history_clean,
+        forward_matrix,
+    )
+    hle_matrix, hle_fallback = impute_historical_linear(
+        prepared.missing_matrix,
+        prepared.mask_matrix,
+        prepared.day_index,
+        history_clean,
+        mean_matrix,
+    )
+    func_matrix, func_fallback, _ = impute_function_curve_fit(
+        prepared.missing_matrix,
+        prepared.mask_matrix,
+        history_clean,
+        basis,
+        pinv,
+        mean_matrix,
+    )
+    corr_stack = historical_stack(history_clean, last_n=correlation_history_days)
+    road_matrix, road_fallback, road_neighbor_count_matrix, road_coverage_matrix, _, _ = spatial_current_prediction(
+        missing_matrix=prepared.missing_matrix,
+        mask_matrix=prepared.mask_matrix,
+        mean_fill=mean_matrix,
+        node_indices=prepared.node_indices,
+        slot_indices=prepared.slot_indices,
+        topology_candidates=topology_candidates,
+        history_stack_corr=corr_stack,
+        correlation_mode=False,
+    )
+    ctn_matrix, ctn_fallback, ctn_neighbor_count_matrix, ctn_coverage_matrix, ctn_positive_corr_matrix, ctn_success = spatial_current_prediction(
+        missing_matrix=prepared.missing_matrix,
+        mask_matrix=prepared.mask_matrix,
+        mean_fill=mean_matrix,
+        node_indices=prepared.node_indices,
+        slot_indices=prepared.slot_indices,
+        topology_candidates=topology_candidates,
+        history_stack_corr=corr_stack,
+        correlation_mode=True,
+    )
+    return {
+        "mean_fill": (
+            mean_matrix,
+            mean_fallback[prepared.mask_matrix],
+            prepared.available_neighbor_counts.astype(np.float32),
+            prepared.available_neighbor_counts.astype(np.float32)
+            / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
+            np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
+        ),
+        "forward_fill": (
+            forward_matrix,
+            forward_internal_fallback[prepared.mask_matrix],
+            prepared.available_neighbor_counts.astype(np.float32),
+            prepared.available_neighbor_counts.astype(np.float32)
+            / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
+            np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
+        ),
+        "historical_linear_extrapolation": (
+            hle_matrix,
+            hle_fallback[prepared.mask_matrix],
+            prepared.available_neighbor_counts.astype(np.float32),
+            prepared.available_neighbor_counts.astype(np.float32)
+            / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
+            np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
+        ),
+        "function_curve_fit": (
+            func_matrix,
+            func_fallback[prepared.mask_matrix],
+            prepared.available_neighbor_counts.astype(np.float32),
+            prepared.available_neighbor_counts.astype(np.float32)
+            / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
+            np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
+        ),
+        "road_topology_neighbor_fill": (
+            road_matrix,
+            road_fallback[prepared.mask_matrix],
+            road_neighbor_count_matrix[prepared.mask_matrix],
+            road_coverage_matrix[prepared.mask_matrix],
+            np.zeros_like(road_neighbor_count_matrix[prepared.mask_matrix], dtype=np.float32),
+        ),
+        "correlation_topology_neighbor_fill": (
+            ctn_matrix,
+            ctn_fallback[prepared.mask_matrix],
+            ctn_neighbor_count_matrix[prepared.mask_matrix],
+            ctn_coverage_matrix[prepared.mask_matrix],
+            ctn_positive_corr_matrix[prepared.mask_matrix],
+        ),
+    }
+
+
+def chunk_outputs_ready(
+    paths: StagePaths,
+    rate: float,
+    methods: list[str],
+    scenario_tag: str,
+    chunk_index: int,
+    file_name: str,
+    write_imputed_data: bool,
+) -> bool:
+    for method in methods:
+        done_path = done_marker_path(paths, scenario_tag, method, chunk_index)
+        out_path = paths.imp_data_root / imputed_dir_name(rate, method) / file_name
+        if not done_path.exists():
+            return False
+        if write_imputed_data and not out_path.exists():
+            return False
+    return True
+
+
+def summarize_from_detail(detail_df: pd.DataFrame, exclude_warmup: bool) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     filtered = detail_df.loc[~detail_df["is_warmup_day"].astype(bool)].copy() if exclude_warmup else detail_df.copy()
 
     def aggregate(df: pd.DataFrame, group_keys: list[str]) -> pd.DataFrame:
@@ -946,6 +1237,7 @@ def summarize_from_detail(detail_df: pd.DataFrame, exclude_warmup: bool) -> tupl
         grouped["mean_positive_corr"] = grouped["mean_positive_corr_sum"] / grouped["valid_eval_count"].replace(0, np.nan)
         return grouped
 
+    overall_all_days = aggregate(detail_df.loc[detail_df["group_dimension"] == "overall"].copy(), ["missing_rate", "method"])
     overall = aggregate(filtered.loc[filtered["group_dimension"] == "overall"].copy(), ["missing_rate", "method"])
     by_length = aggregate(
         filtered.loc[filtered["group_dimension"] == "length_group"].copy(),
@@ -955,27 +1247,23 @@ def summarize_from_detail(detail_df: pd.DataFrame, exclude_warmup: bool) -> tupl
         filtered.loc[filtered["group_dimension"] == "flow_group"].copy(),
         ["missing_rate", "method", "flow_group"],
     )
-    by_neighbor = aggregate(
-        filtered.loc[filtered["group_dimension"] == "neighbor_coverage_group"].copy(),
-        ["missing_rate", "method", "neighbor_coverage_group"],
-    )
-    by_constraint = aggregate(
-        filtered.loc[filtered["group_dimension"] == "spatial_constraint_level"].copy(),
-        ["missing_rate", "method", "length_group"],
-    ).rename(columns={"length_group": "spatial_constraint_level"})
-    return overall, by_length, by_flow, by_neighbor, by_constraint
+    return overall_all_days, overall, by_length, by_flow
 
 
 def run_prepare(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
     for directory in [
         paths.imp_root,
-        paths.imp_data_root,
         paths.manifests_root,
+        paths.progress_root,
+        paths.summary_parts_root,
+        paths.summary_progress_root,
         paths.summaries_root,
         paths.figures_root,
         paths.audits_root,
     ]:
         ensure_dir(directory)
+    if parse_bool(args.write_imputed_data):
+        ensure_dir(paths.imp_data_root)
     input_files = load_input_files(args.input_dir)
     rates = parse_rates(args.missing_rates)
     rows: list[dict[str, Any]] = []
@@ -999,6 +1287,16 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
     input_check_df = pd.DataFrame(rows)
     input_check_df.to_csv(paths.input_check_csv_path, index=False, encoding="utf-8-sig")
     write_json(paths.input_check_json_path, {"rows": input_check_df.to_dict(orient="records")})
+    if args.imp_data_storage_mode == "external":
+        write_json(
+            paths.external_imp_manifest_path,
+            {
+                "imp_data_storage_mode": "external",
+                "external_imp_data_root": str(paths.imp_data_root),
+            },
+        )
+    elif paths.external_imp_manifest_path.exists():
+        paths.external_imp_manifest_path.unlink()
     write_json(
         paths.run_config_path,
         {
@@ -1018,6 +1316,11 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
             "node_col": args.node_col,
             "time_col": args.time_col,
             "period": int(args.period),
+            "imp_data_storage_mode": args.imp_data_storage_mode,
+            "external_imp_data_root": str(paths.imp_data_root) if args.imp_data_storage_mode == "external" else "",
+            "write_imputed_data": parse_bool(args.write_imputed_data),
+            "resume": parse_bool(args.resume),
+            "overwrite": parse_bool(args.overwrite),
         },
     )
     command = (
@@ -1026,28 +1329,97 @@ def run_prepare(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
         f"--missing_rates {args.missing_rates} --methods {args.methods} --history_days {args.history_days} "
         f"--correlation_history_days {args.correlation_history_days} --neighbor_scope {args.neighbor_scope} "
         f"--allow_current_time_neighbors {args.allow_current_time_neighbors} --target_col {args.target_col} "
-        f"--node_col {args.node_col} --time_col {args.time_col} --period {args.period}"
+        f"--node_col {args.node_col} --time_col {args.time_col} --period {args.period} "
+        f"--imp_data_storage_mode {args.imp_data_storage_mode} "
+        f"--external_imp_data_root {paths.imp_data_root if args.imp_data_storage_mode == 'external' else ''} "
+        f"--write_imputed_data {args.write_imputed_data} --resume {args.resume} --overwrite {args.overwrite}"
     )
     paths.run_commands_path.write_text(command + "\n", encoding="utf-8")
     return input_check_df
 
 
 def run_impute(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
+    started_at = time.perf_counter()
     input_files = load_input_files(args.input_dir)
     rates = parse_rates(args.missing_rates)
     methods = parse_methods(args.methods)
+    write_imputed_data = parse_bool(args.write_imputed_data)
+    resume = parse_bool(args.resume)
+    overwrite = parse_bool(args.overwrite)
+    existing_chunk_status_df = (
+        load_existing_csv(paths.chunk_status_path)
+        if resume and not overwrite and paths.chunk_status_path.exists()
+        else pd.DataFrame()
+    )
+    existing_detail_df = (
+        load_existing_csv(paths.detail_path)
+        if resume and not overwrite and paths.detail_path.exists()
+        else pd.DataFrame()
+    )
+    if not existing_chunk_status_df.empty and "method" in existing_chunk_status_df.columns:
+        existing_chunk_status_df = existing_chunk_status_df.loc[
+            existing_chunk_status_df["method"].astype(str).isin(METHOD_ORDER)
+        ].copy()
+    if not existing_detail_df.empty and "method" in existing_detail_df.columns:
+        existing_detail_df = existing_detail_df.loc[
+            existing_detail_df["method"].astype(str).isin(METHOD_ORDER)
+        ].copy()
+    existing_chunk_status_keys = (
+        {
+            (round(float(row.missing_rate), 6), str(row.method), int(row.chunk_index))
+            for row in existing_chunk_status_df.itertuples(index=False)
+        }
+        if not existing_chunk_status_df.empty
+        else set()
+    )
     first_clean = pd.read_parquet(input_files[0], columns=[args.node_col, args.time_col])
     canonical_node_ids, _, _ = build_row_layout(first_clean, args.node_col, args.time_col, args.period)
     thresholds = compute_flow_group_thresholds(input_files, args.target_col, paths.flow_threshold_path)
     topology_candidates = build_topology_candidates(args.topology_file, canonical_node_ids, args.neighbor_scope)
     basis, pinv = build_fourier_basis(args.period)
-    chunk_status_rows: list[dict[str, Any]] = []
-    detail_rows: list[dict[str, Any]] = []
+    chunk_status_rows: list[dict[str, Any]] = existing_chunk_status_df.to_dict(orient="records")
+    detail_rows: list[dict[str, Any]] = existing_detail_df.to_dict(orient="records")
     for rate in rates:
         scenario_tag = scenario_rate_tag(rate)
+        debug_emit(
+            "A",
+            "run_impute:rate-start",
+            "[DEBUG] starting rate loop",
+            {"missing_rate": float(rate), "scenario_tag": scenario_tag},
+        )
         history_clean: deque[np.ndarray] = deque(maxlen=max(args.history_days, args.correlation_history_days))
         previous_last_state: np.ndarray | None = None
         for clean_file in input_files:
+            chunk_index = extract_day_index(clean_file.name)
+            if resume and not overwrite and chunk_outputs_ready(
+                paths=paths,
+                rate=rate,
+                methods=methods,
+                scenario_tag=scenario_tag,
+                chunk_index=chunk_index,
+                file_name=clean_file.name,
+                write_imputed_data=write_imputed_data,
+            ):
+                clean_matrix = load_clean_matrix_for_history(
+                    clean_file=clean_file,
+                    node_col=args.node_col,
+                    time_col=args.time_col,
+                    target_col=args.target_col,
+                    period=args.period,
+                )
+                previous_last_state = clean_matrix[:, -1].copy()
+                history_clean.append(clean_matrix.copy())
+                debug_emit(
+                    "B",
+                    "run_impute:chunk-reused",
+                    "[DEBUG] skipped completed chunk via resume",
+                    {
+                        "missing_rate": float(rate),
+                        "chunk_index": int(chunk_index),
+                        "file_name": clean_file.name,
+                    },
+                )
+                continue
             missing_file = paths.miss_data_root / scenario_tag / clean_file.name
             mask_file = paths.masks_root / scenario_tag / clean_file.name.replace(".parquet", "_mask.parquet")
             prepared = prepare_chunk(
@@ -1061,170 +1433,73 @@ def run_impute(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
                 thresholds=thresholds,
                 warmup_days=args.history_days,
             )
-            forward_matrix, forward_internal_fallback = build_current_day_forward_fill(prepared.missing_matrix, previous_last_state)
-            mean_matrix, mean_fallback = impute_mean_fill(
-                prepared.missing_matrix,
-                prepared.mask_matrix,
-                history_clean,
-                forward_matrix,
+            debug_emit(
+                "A",
+                "run_impute:chunk-prepared",
+                "[DEBUG] prepared chunk for imputation",
+                {
+                    "missing_rate": float(rate),
+                    "chunk_index": int(prepared.chunk_index),
+                    "day_index": int(prepared.day_index),
+                    "file_name": prepared.file_name,
+                    "mask_count": int(prepared.mask_matrix.sum()),
+                },
             )
-            hle_matrix, hle_fallback = impute_historical_linear(
-                prepared.missing_matrix,
-                prepared.mask_matrix,
-                prepared.day_index,
-                history_clean,
-                mean_matrix,
-            )
-            func_matrix, func_fallback, func_primary = impute_function_curve_fit(
-                prepared.missing_matrix,
-                prepared.mask_matrix,
-                history_clean,
-                basis,
-                pinv,
-                mean_matrix,
-            )
-            corr_stack = historical_stack(history_clean, last_n=args.correlation_history_days)
-            road_matrix, road_fallback, road_neighbor_count_matrix, road_coverage_matrix, _, road_success = spatial_current_prediction(
-                missing_matrix=prepared.missing_matrix,
-                mask_matrix=prepared.mask_matrix,
-                mean_fill=mean_matrix,
-                node_indices=prepared.node_indices,
-                slot_indices=prepared.slot_indices,
+            method_outputs = compute_method_outputs(
+                prepared=prepared,
+                previous_last_state=previous_last_state,
+                history_clean=history_clean,
+                correlation_history_days=args.correlation_history_days,
                 topology_candidates=topology_candidates,
-                history_stack_corr=corr_stack,
-                correlation_mode=False,
+                basis=basis,
+                pinv=pinv,
             )
-            ctn_matrix, ctn_fallback, ctn_neighbor_count_matrix, ctn_coverage_matrix, ctn_positive_corr_matrix, ctn_success = spatial_current_prediction(
-                missing_matrix=prepared.missing_matrix,
-                mask_matrix=prepared.mask_matrix,
-                mean_fill=mean_matrix,
-                node_indices=prepared.node_indices,
-                slot_indices=prepared.slot_indices,
-                topology_candidates=topology_candidates,
-                history_stack_corr=corr_stack,
-                correlation_mode=True,
-            )
-            ast_matrix = func_matrix.copy()
-            ast_fallback = func_fallback.copy()
-            ctn_neighbor_values = ctn_neighbor_count_matrix[prepared.mask_matrix]
-            ctn_coverage_values = ctn_coverage_matrix[prepared.mask_matrix]
-            ctn_positive_values = ctn_positive_corr_matrix[prepared.mask_matrix]
-            ctn_success_values = ctn_success[prepared.mask_matrix]
-            length_factor_lookup = {"short": 0.4, "mid": 0.6, "long": 0.8}
-            length_factors = np.asarray([length_factor_lookup.get(label, 0.6) for label in prepared.length_groups.tolist()], dtype=np.float32)
-            alpha_values = np.clip(ctn_coverage_values * np.maximum(ctn_positive_values, 0.0) * length_factors, 0.1, 0.8)
-            func_values = func_matrix[prepared.mask_matrix]
-            ctn_values = ctn_matrix[prepared.mask_matrix]
-            ast_values = func_values.copy()
-            ast_values[ctn_success_values] = (
-                alpha_values[ctn_success_values] * ctn_values[ctn_success_values]
-                + (1.0 - alpha_values[ctn_success_values]) * func_values[ctn_success_values]
-            )
-            ast_matrix[prepared.mask_matrix] = ast_values
-            ast_fallback[prepared.mask_matrix] = (~ctn_success_values) & func_fallback[prepared.mask_matrix]
-            atfh_matrix = func_matrix.copy()
-            atfh_fallback = func_fallback.copy()
-            unique_targets = np.unique(prepared.node_indices)
-            error_cache: dict[int, tuple[float, float]] = {}
-            atfh_values = func_values.copy()
-            for target_idx in unique_targets.tolist():
-                if target_idx not in error_cache:
-                    error_cache[target_idx] = estimate_historical_errors(
-                        target_idx=int(target_idx),
-                        history_stack_corr=corr_stack,
-                        topology_candidates=topology_candidates,
-                        basis=basis,
-                        pinv=pinv,
-                    )
-                space_error, func_error = error_cache[target_idx]
-                selector = prepared.node_indices == target_idx
-                if not np.any(selector):
-                    continue
-                alpha = (1.0 / (space_error + EPSILON)) / (
-                    (1.0 / (space_error + EPSILON)) + (1.0 / (func_error + EPSILON))
-                )
-                local_success = ctn_success_values[selector]
-                local_ctn = ctn_values[selector]
-                local_func = func_values[selector]
-                atfh_values[selector] = local_func
-                atfh_values[np.flatnonzero(selector)[local_success]] = (
-                    alpha * local_ctn[local_success] + (1.0 - alpha) * local_func[local_success]
-                )
-            atfh_matrix[prepared.mask_matrix] = atfh_values
-            atfh_fallback[prepared.mask_matrix] = (~ctn_success_values) & func_fallback[prepared.mask_matrix]
-            method_outputs: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]] = {
-                "mean_fill": (
-                    mean_matrix,
-                    mean_fallback[prepared.mask_matrix],
-                    prepared.available_neighbor_counts.astype(np.float32),
-                    prepared.available_neighbor_counts.astype(np.float32)
-                    / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
-                    np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
-                ),
-                "forward_fill": (
-                    forward_matrix,
-                    forward_internal_fallback[prepared.mask_matrix],
-                    prepared.available_neighbor_counts.astype(np.float32),
-                    prepared.available_neighbor_counts.astype(np.float32)
-                    / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
-                    np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
-                ),
-                "historical_linear_extrapolation": (
-                    hle_matrix,
-                    hle_fallback[prepared.mask_matrix],
-                    prepared.available_neighbor_counts.astype(np.float32),
-                    prepared.available_neighbor_counts.astype(np.float32)
-                    / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
-                    np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
-                ),
-                "function_curve_fit": (
-                    func_matrix,
-                    func_fallback[prepared.mask_matrix],
-                    prepared.available_neighbor_counts.astype(np.float32),
-                    prepared.available_neighbor_counts.astype(np.float32)
-                    / np.maximum(prepared.available_neighbor_counts.astype(np.float32), 1.0),
-                    np.zeros_like(prepared.available_neighbor_counts, dtype=np.float32),
-                ),
-                "road_topology_neighbor_fill": (
-                    road_matrix,
-                    road_fallback[prepared.mask_matrix],
-                    road_neighbor_count_matrix[prepared.mask_matrix],
-                    road_coverage_matrix[prepared.mask_matrix],
-                    np.zeros_like(road_neighbor_count_matrix[prepared.mask_matrix], dtype=np.float32),
-                ),
-                "correlation_topology_neighbor_fill": (
-                    ctn_matrix,
-                    ctn_fallback[prepared.mask_matrix],
-                    ctn_neighbor_count_matrix[prepared.mask_matrix],
-                    ctn_coverage_matrix[prepared.mask_matrix],
-                    ctn_positive_corr_matrix[prepared.mask_matrix],
-                ),
-                "adaptive_spatio_temporal_fill": (
-                    ast_matrix,
-                    ast_fallback[prepared.mask_matrix],
-                    ctn_neighbor_count_matrix[prepared.mask_matrix],
-                    ctn_coverage_matrix[prepared.mask_matrix],
-                    ctn_positive_corr_matrix[prepared.mask_matrix],
-                ),
-                "adaptive_topology_function_hybrid": (
-                    atfh_matrix,
-                    atfh_fallback[prepared.mask_matrix],
-                    ctn_neighbor_count_matrix[prepared.mask_matrix],
-                    ctn_coverage_matrix[prepared.mask_matrix],
-                    ctn_positive_corr_matrix[prepared.mask_matrix],
-                ),
-            }
             for method in methods:
                 imputed_matrix, fallback_flags, neighbor_count_values, neighbor_coverage_values, positive_corr_values = method_outputs[method]
+                method_dir = paths.imp_data_root / imputed_dir_name(rate, method)
+                out_path = method_dir / prepared.file_name
+                done_path = done_marker_path(paths, scenario_tag, method, prepared.chunk_index)
+                reuse_key = (round(float(rate), 6), str(method), int(prepared.chunk_index))
+                can_reuse = (
+                    resume
+                    and not overwrite
+                    and done_path.exists()
+                    and reuse_key in existing_chunk_status_keys
+                    and (not write_imputed_data or out_path.exists())
+                )
+                debug_emit(
+                    "B",
+                    "run_impute:method-check",
+                    "[DEBUG] evaluating chunk-method reuse",
+                    {
+                        "missing_rate": float(rate),
+                        "chunk_index": int(prepared.chunk_index),
+                        "method": method,
+                        "can_reuse": bool(can_reuse),
+                        "done_exists": bool(done_path.exists()),
+                        "output_exists": bool(out_path.exists()),
+                    },
+                )
+                if can_reuse:
+                    continue
+                debug_emit(
+                    "C",
+                    "run_impute:method-start",
+                    "[DEBUG] starting chunk-method write path",
+                    {
+                        "missing_rate": float(rate),
+                        "chunk_index": int(prepared.chunk_index),
+                        "method": method,
+                    },
+                )
                 out_values = imputed_matrix.reshape(-1)
                 output_series = np.empty(len(prepared.clean_df), dtype=np.float32)
                 output_series[prepared.sorted_original_rows] = out_values
                 out_df = prepared.missing_df.copy()
                 out_df[args.target_col] = output_series
-                method_dir = paths.imp_data_root / imputed_dir_name(rate, method)
-                ensure_dir(method_dir)
-                out_path = method_dir / prepared.file_name
-                out_df.to_parquet(out_path, index=False)
+                if write_imputed_data:
+                    ensure_dir(method_dir)
+                    out_df.to_parquet(out_path, index=False)
                 pred_values = imputed_matrix[prepared.mask_matrix]
                 detail_rows.extend(
                     build_detail_rows_for_method(
@@ -1245,47 +1520,286 @@ def run_impute(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
                         "chunk_index": int(prepared.chunk_index),
                         "day_index": int(prepared.day_index),
                         "file_name": prepared.file_name,
-                        "output_path": str(out_path),
+                        "output_path": str(out_path) if write_imputed_data else "",
                         "row_count": int(len(out_df)),
                         "missing_count": int(prepared.mask_matrix.sum()),
                         "fallback_count": int(np.count_nonzero(fallback_flags)),
                     }
                 )
+                write_json(
+                    done_path,
+                    {
+                        "scenario_tag": scenario_tag,
+                        "method": method,
+                        "chunk_index": int(prepared.chunk_index),
+                        "completed": True,
+                        "output_path": str(out_path) if write_imputed_data else "",
+                    },
+                )
+                debug_emit(
+                    "C",
+                    "run_impute:method-finished",
+                    "[DEBUG] finished chunk-method write path",
+                    {
+                        "missing_rate": float(rate),
+                        "chunk_index": int(prepared.chunk_index),
+                        "method": method,
+                        "fallback_count": int(np.count_nonzero(fallback_flags)),
+                    },
+                )
             previous_last_state = prepared.clean_matrix[:, -1].copy()
             history_clean.append(prepared.clean_matrix.copy())
-            del prepared, forward_matrix, mean_matrix, hle_matrix, func_matrix, func_primary
-            del road_matrix, ctn_matrix, ast_matrix, atfh_matrix
+            debug_emit(
+                "D",
+                "run_impute:chunk-finished",
+                "[DEBUG] finished chunk loop",
+                {
+                    "missing_rate": float(rate),
+                    "chunk_index": int(prepared.chunk_index),
+                    "history_depth": int(len(history_clean)),
+                },
+            )
+            del prepared, method_outputs
             gc.collect()
-    chunk_status_df = pd.DataFrame(chunk_status_rows).sort_values(["missing_rate", "method", "chunk_index"]).reset_index(drop=True)
-    detail_df = pd.DataFrame(detail_rows).sort_values(
-        ["missing_rate", "method", "chunk_index", "group_dimension", "flow_group", "length_group", "neighbor_coverage_group"]
-    ).reset_index(drop=True)
+    chunk_status_df = (
+        pd.DataFrame(chunk_status_rows)
+        .drop_duplicates(subset=["missing_rate", "method", "chunk_index"], keep="last")
+        .sort_values(["missing_rate", "method", "chunk_index"])
+        .reset_index(drop=True)
+    )
+    detail_df = (
+        pd.DataFrame(detail_rows)
+        .drop_duplicates(
+            subset=[
+                "missing_rate",
+                "method",
+                "chunk_index",
+                "day_index",
+                "group_dimension",
+                "flow_group",
+                "length_group",
+                "neighbor_coverage_group",
+            ],
+            keep="last",
+        )
+        .sort_values(["missing_rate", "method", "chunk_index", "group_dimension", "flow_group", "length_group", "neighbor_coverage_group"])
+        .reset_index(drop=True)
+    )
     chunk_status_df.to_csv(paths.chunk_status_path, index=False, encoding="utf-8-sig")
-    detail_df.to_csv(paths.detail_path, index=False, encoding="utf-8-sig")
+    add_metric_alias_columns(detail_df).to_csv(paths.detail_path, index=False, encoding="utf-8-sig")
+    output_counts = (
+        chunk_status_df.groupby(["missing_rate", "method"], dropna=False)
+        .size()
+        .reset_index(name="completed_chunk_count")
+        .sort_values(["missing_rate", "method"])
+    )
+    write_json(
+        paths.performance_json_path,
+        {
+            "scenario_id": SCENARIO_ID,
+            "evaluation_protocol": "online_spatial_interpolation",
+            "imp_data_storage_mode": args.imp_data_storage_mode,
+            "external_imp_data_root": str(paths.imp_data_root) if args.imp_data_storage_mode == "external" else "",
+            "write_imputed_data": write_imputed_data,
+            "resume": resume,
+            "overwrite": overwrite,
+            "total_elapsed_seconds": round(time.perf_counter() - started_at, 6),
+            "total_completed_rate_method_chunks": int(len(chunk_status_df)),
+            "counts_by_rate_method": output_counts.to_dict(orient="records"),
+        },
+    )
     return detail_df
 
 
-def run_summarize(paths: StagePaths) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    detail_df = pd.read_csv(paths.detail_path)
-    overall_df, by_length_df, by_flow_df, by_neighbor_df, by_constraint_df = summarize_from_detail(detail_df, exclude_warmup=True)
-    overall_df.to_csv(paths.summary_exclude_warmup_path, index=False, encoding="utf-8-sig")
-    by_length_df.to_csv(paths.summary_by_length_path, index=False, encoding="utf-8-sig")
-    by_flow_df.to_csv(paths.summary_by_flow_path, index=False, encoding="utf-8-sig")
-    by_neighbor_df.to_csv(paths.summary_by_neighbor_coverage_path, index=False, encoding="utf-8-sig")
-    by_constraint_df.to_csv(paths.summary_by_constraint_level_path, index=False, encoding="utf-8-sig")
-    return overall_df, by_length_df, by_flow_df, by_neighbor_df, by_constraint_df
+def run_summarize(args: argparse.Namespace, paths: StagePaths) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    ensure_dir(paths.summaries_root)
+    input_files = load_input_files(args.input_dir)
+    rates = parse_rates(args.missing_rates)
+    methods = normalize_six_baseline_methods(parse_methods(args.methods), "summarize")
+    chunk_status_df = load_existing_csv(paths.chunk_status_path)
+    fallback_lookup = {
+        (round(float(row.missing_rate), 6), str(row.method), int(row.chunk_index)): int(row.fallback_count)
+        for row in chunk_status_df.itertuples(index=False)
+    } if not chunk_status_df.empty else {}
+    thresholds = compute_flow_group_thresholds(input_files, args.target_col, paths.flow_threshold_path)
+    detail_rows: list[dict[str, Any]] = []
+    for rate in rates:
+        scenario_tag = scenario_rate_tag(rate)
+        for clean_file in input_files:
+            prepared = prepare_chunk(
+                clean_file=clean_file,
+                missing_file=paths.miss_data_root / scenario_tag / clean_file.name,
+                mask_file=paths.masks_root / scenario_tag / clean_file.name.replace(".parquet", "_mask.parquet"),
+                node_col=args.node_col,
+                time_col=args.time_col,
+                target_col=args.target_col,
+                period=args.period,
+                thresholds=thresholds,
+                warmup_days=args.history_days,
+            )
+            neighbor_available_values = prepared.available_neighbor_counts.astype(np.float32, copy=False)
+            neighbor_coverage_values = neighbor_available_values / np.maximum(neighbor_available_values, 1.0)
+            mean_positive_corr_values = np.zeros_like(neighbor_available_values, dtype=np.float32)
+            for method in methods:
+                out_path = paths.imp_data_root / imputed_dir_name(rate, method) / prepared.file_name
+                if not out_path.exists():
+                    raise FileNotFoundError(f"missing imputed parquet for summarize: {out_path}")
+                imputed_df = pd.read_parquet(out_path, columns=[args.target_col])
+                imputed_sorted = (
+                    imputed_df.iloc[prepared.sorted_original_rows][args.target_col]
+                    .to_numpy(dtype=np.float32, copy=False)
+                    .reshape(prepared.clean_matrix.shape)
+                )
+                pred_values = imputed_sorted[prepared.mask_matrix]
+                fallback_count = fallback_lookup.get((round(float(rate), 6), str(method), int(prepared.chunk_index)), 0)
+                fallback_flags = np.zeros(len(pred_values), dtype=bool)
+                if fallback_count > 0:
+                    fallback_flags[: min(fallback_count, len(fallback_flags))] = True
+                detail_rows.extend(
+                    build_detail_rows_for_method(
+                        missing_rate=rate,
+                        method=method,
+                        prepared=prepared,
+                        pred_values=pred_values,
+                        fallback_flags=fallback_flags,
+                        neighbor_available_values=neighbor_available_values,
+                        neighbor_coverage_values=neighbor_coverage_values,
+                        mean_positive_corr_values=mean_positive_corr_values,
+                        include_optional_spatial_diagnostics=False,
+                    )
+                )
+            gc.collect()
+    if not detail_rows:
+        raise FileNotFoundError("no summary detail rows were generated from existing imputed parquet files")
+    detail_df = (
+        pd.DataFrame(detail_rows)
+        .drop_duplicates(
+            subset=[
+                "missing_rate",
+                "method",
+                "chunk_index",
+                "day_index",
+                "group_dimension",
+                "flow_group",
+                "length_group",
+                "neighbor_coverage_group",
+            ],
+            keep="last",
+        )
+        .sort_values(["missing_rate", "method", "chunk_index", "group_dimension", "flow_group", "length_group", "neighbor_coverage_group"])
+        .reset_index(drop=True)
+    )
+    add_metric_alias_columns(detail_df).to_csv(paths.detail_path, index=False, encoding="utf-8-sig")
+    summary_all_days_df, overall_df, by_length_df, by_flow_df = summarize_from_detail(detail_df, exclude_warmup=True)
+    add_metric_alias_columns(summary_all_days_df).to_csv(paths.summary_all_days_path, index=False, encoding="utf-8-sig")
+    add_metric_alias_columns(overall_df).to_csv(paths.summary_exclude_warmup_path, index=False, encoding="utf-8-sig")
+    add_metric_alias_columns(by_length_df).to_csv(paths.summary_by_length_path, index=False, encoding="utf-8-sig")
+    add_metric_alias_columns(by_flow_df).to_csv(paths.summary_by_flow_path, index=False, encoding="utf-8-sig")
+    return summary_all_days_df, overall_df, by_length_df, by_flow_df
+
+
+def rebuild_detail_from_inputs(args: argparse.Namespace, paths: StagePaths) -> pd.DataFrame:
+    input_files = load_input_files(args.input_dir)
+    rates = parse_rates(args.missing_rates)
+    methods = parse_methods(args.methods)
+    thresholds = compute_flow_group_thresholds(input_files, args.target_col, paths.flow_threshold_path)
+    first_clean = pd.read_parquet(input_files[0], columns=[args.node_col, args.time_col])
+    canonical_node_ids, _, _ = build_row_layout(first_clean, args.node_col, args.time_col, args.period)
+    topology_candidates = build_topology_candidates(args.topology_file, canonical_node_ids, args.neighbor_scope)
+    basis, pinv = build_fourier_basis(args.period)
+    detail_rows: list[dict[str, Any]] = []
+    for rate in rates:
+        scenario_tag = scenario_rate_tag(rate)
+        history_clean: deque[np.ndarray] = deque(maxlen=max(args.history_days, args.correlation_history_days))
+        previous_last_state: np.ndarray | None = None
+        for clean_file in input_files:
+            prepared = prepare_chunk(
+                clean_file=clean_file,
+                missing_file=paths.miss_data_root / scenario_tag / clean_file.name,
+                mask_file=paths.masks_root / scenario_tag / clean_file.name.replace(".parquet", "_mask.parquet"),
+                node_col=args.node_col,
+                time_col=args.time_col,
+                target_col=args.target_col,
+                period=args.period,
+                thresholds=thresholds,
+                warmup_days=args.history_days,
+            )
+            method_outputs = compute_method_outputs(
+                prepared=prepared,
+                previous_last_state=previous_last_state,
+                history_clean=history_clean,
+                correlation_history_days=args.correlation_history_days,
+                topology_candidates=topology_candidates,
+                basis=basis,
+                pinv=pinv,
+            )
+            for method in methods:
+                imputed_matrix, fallback_flags, neighbor_count_values, neighbor_coverage_values, positive_corr_values = method_outputs[method]
+                pred_values = imputed_matrix[prepared.mask_matrix]
+                detail_rows.extend(
+                    build_detail_rows_for_method(
+                        missing_rate=rate,
+                        method=method,
+                        prepared=prepared,
+                        pred_values=pred_values,
+                        fallback_flags=fallback_flags.astype(bool, copy=False),
+                        neighbor_available_values=neighbor_count_values.astype(np.float32, copy=False),
+                        neighbor_coverage_values=neighbor_coverage_values.astype(np.float32, copy=False),
+                        mean_positive_corr_values=positive_corr_values.astype(np.float32, copy=False),
+                    )
+                )
+            previous_last_state = prepared.clean_matrix[:, -1].copy()
+            history_clean.append(prepared.clean_matrix.copy())
+            gc.collect()
+    return (
+        pd.DataFrame(detail_rows)
+        .drop_duplicates(
+            subset=[
+                "missing_rate",
+                "method",
+                "chunk_index",
+                "day_index",
+                "group_dimension",
+                "flow_group",
+                "length_group",
+                "neighbor_coverage_group",
+            ],
+            keep="last",
+        )
+        .sort_values(["missing_rate", "method", "chunk_index", "group_dimension", "flow_group", "length_group", "neighbor_coverage_group"])
+        .reset_index(drop=True)
+    )
 
 
 def run_audit(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
+    methods = normalize_six_baseline_methods(parse_methods(args.methods), "audit")
+    summary_all_days_df = pd.read_csv(paths.summary_all_days_path)
     summary_df = pd.read_csv(paths.summary_exclude_warmup_path)
     by_length_df = pd.read_csv(paths.summary_by_length_path)
     by_flow_df = pd.read_csv(paths.summary_by_flow_path)
-    by_neighbor_df = pd.read_csv(paths.summary_by_neighbor_coverage_path)
-    by_constraint_df = pd.read_csv(paths.summary_by_constraint_level_path)
     input_check_df = pd.read_csv(paths.input_check_csv_path)
+    perf_payload = json.loads(paths.performance_json_path.read_text(encoding="utf-8")) if paths.performance_json_path.exists() else {}
     payload = {
         "scenario_id": SCENARIO_ID,
         "mechanism": MECHANISM,
+        "methods_count": int(len(methods)),
+        "removed_methods": sorted(REMOVED_METHODS),
+        "mask_scope": "global",
+        "global_allocation_used": True,
+        "constraint_level_used": True,
+        "formal_summary_framework_matches_previous_mechanisms": True,
+        "formal_summary_dimensions": ["overall", "flow_group", "length_group"],
+        "formal_summary_framework": [
+            "detail",
+            "summary_all_days",
+            "summary_exclude_warmup",
+            "by_flow_group",
+            "by_length_group",
+        ],
+        "neighbor_coverage_required_formal_summary": False,
+        "constraint_level_required_formal_summary": False,
+        "optional_spatial_diagnostics": ["neighbor_coverage", "constraint_level"],
+        "none_level_excluded_from_spatial_claims": True,
         "evaluation_protocol": "online_spatial_interpolation",
         "uses_current_time_neighbors": True,
         "uses_target_current_true_value": False,
@@ -1296,21 +1810,24 @@ def run_audit(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
         "not_traffic_prediction_error": True,
         "neighbor_observed_enforced": True,
         "not_strict_history_only": True,
-        "methods": METHOD_ORDER,
+        "methods_phase": infer_methods_phase(methods),
+        "methods": methods,
+        "imp_data_storage_mode": args.imp_data_storage_mode,
+        "external_imp_data_root": str(paths.imp_data_root) if args.imp_data_storage_mode == "external" else "",
         "input_checks": input_check_df.to_dict(orient="records"),
         "summary_outputs": {
             "detail": str(paths.detail_path),
+            "summary_all_days": str(paths.summary_all_days_path),
             "summary_exclude_warmup": str(paths.summary_exclude_warmup_path),
             "by_length_group": str(paths.summary_by_length_path),
             "by_flow_group": str(paths.summary_by_flow_path),
-            "by_neighbor_coverage": str(paths.summary_by_neighbor_coverage_path),
-            "by_constraint_level": str(paths.summary_by_constraint_level_path),
         },
-        "contains_8_methods": bool(set(summary_df["method"].astype(str).unique().tolist()) == set(METHOD_ORDER)),
+        "contains_requested_methods": bool(set(summary_all_days_df["method"].astype(str).unique().tolist()) == set(methods)),
         "contains_length_groups": sorted(by_length_df["length_group"].astype(str).unique().tolist()),
         "contains_flow_groups": sorted(by_flow_df["flow_group"].astype(str).unique().tolist()),
-        "contains_neighbor_coverage_groups": sorted(by_neighbor_df["neighbor_coverage_group"].astype(str).unique().tolist()),
-        "contains_constraint_levels": sorted(by_constraint_df["spatial_constraint_level"].astype(str).unique().tolist()),
+        "optional_neighbor_coverage_summary_exists": bool(paths.summary_by_neighbor_coverage_path.exists()),
+        "optional_constraint_level_summary_exists": bool(paths.summary_by_constraint_level_path.exists()),
+        "performance_summary": perf_payload,
     }
     write_json(paths.audit_json_path, payload)
     write_markdown(
@@ -1321,13 +1838,91 @@ def run_audit(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
             f"- scenario_id: `{SCENARIO_ID}`",
             f"- mechanism: `{MECHANISM}`",
             "- evaluation_protocol: `online_spatial_interpolation`",
+            "- mask_scope: `global`",
+            "- snh_mix uses the same formal summary framework as g_mcar_pt / ntb_mix / nso_mix.",
+            "- Formal summary dimensions: `overall`, `flow_group`, `length_group`.",
+            "- `neighbor_coverage` and `constraint_level` are optional spatial diagnostics, not required formal summary outputs.",
             "- 允许使用目标节点缺失时刻的邻居观测。",
             "- 不允许使用目标节点当前真实值。",
             "- 不允许使用未来时间片或未来天。",
             "- 当前指标仅在人工 mask 位置计算，不是交通流预测误差。",
+            f"- methods_phase: `{infer_methods_phase(methods)}`",
+            f"- methods: `{', '.join(methods)}`",
+            f"- methods_count: `{len(methods)}`",
+            f"- removed_methods: `{', '.join(sorted(REMOVED_METHODS))}`",
+            "- `none` 等级单独统计，只用于补足全局缺失计数，不用于空间优势结论。",
         ],
     )
     return payload
+
+
+def run_validate(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
+    input_files = load_input_files(args.input_dir)
+    expected_chunk_count = len(input_files)
+    rates = parse_rates(args.missing_rates)
+    methods = normalize_six_baseline_methods(parse_methods(args.methods), "validate")
+    write_imputed_data = parse_bool(args.write_imputed_data)
+    input_check_df = pd.read_csv(paths.input_check_csv_path)
+    chunk_status_df = load_existing_csv(paths.chunk_status_path)
+    detail_df = load_existing_csv(paths.detail_path)
+    summary_all_days_df = load_existing_csv(paths.summary_all_days_path)
+    summary_df = load_existing_csv(paths.summary_exclude_warmup_path)
+    by_length_df = load_existing_csv(paths.summary_by_length_path)
+    by_flow_df = load_existing_csv(paths.summary_by_flow_path)
+    constraint_df = load_existing_csv(paths.summary_by_constraint_level_path)
+    audit_payload = json.loads(paths.audit_json_path.read_text(encoding="utf-8")) if paths.audit_json_path.exists() else {}
+    count_rows: list[dict[str, Any]] = []
+    all_counts_ok = True
+    for rate in rates:
+        for method in methods:
+            if write_imputed_data:
+                output_count = len(list((paths.imp_data_root / imputed_dir_name(rate, method)).glob("*.parquet")))
+            else:
+                output_count = int(
+                    chunk_status_df.loc[
+                        np.isclose(chunk_status_df["missing_rate"], rate) & (chunk_status_df["method"] == method)
+                    ].shape[0]
+                ) if not chunk_status_df.empty else 0
+            count_rows.append(
+                {
+                    "missing_rate": float(rate),
+                    "method": method,
+                    "completed_chunk_count": int(output_count),
+                    "expected_chunk_count": int(expected_chunk_count),
+                }
+            )
+            all_counts_ok = all_counts_ok and (int(output_count) == int(expected_chunk_count))
+    validation_payload = {
+        "scenario_id": SCENARIO_ID,
+        "methods_count": int(len(methods)),
+        "removed_methods": sorted(REMOVED_METHODS),
+        "all_complete": bool(all_counts_ok),
+        "missing_data_preserved": bool(input_check_df["miss_data_complete"].all()) if not input_check_df.empty else False,
+        "masks_preserved": bool(input_check_df["masks_complete"].all()) if not input_check_df.empty else False,
+        "imputation_completed": bool(all_counts_ok),
+        "summary_completed": bool(
+            all(path.exists() for path in formal_summary_output_paths(paths))
+            and not detail_df.empty
+            and not summary_all_days_df.empty
+            and not summary_df.empty
+            and not by_length_df.empty
+            and not by_flow_df.empty
+        ),
+        "audit_completed": bool(paths.audit_json_path.exists() and paths.audit_md_path.exists()),
+        "optional_constraint_level_summary_exists": bool(paths.summary_by_constraint_level_path.exists() and not constraint_df.empty),
+        "optional_none_level_separated": bool("none" in constraint_df["spatial_constraint_level"].astype(str).unique().tolist()) if not constraint_df.empty else False,
+        "uses_future_information": False,
+        "counts_by_rate_method": count_rows,
+        "imp_data_storage_mode": args.imp_data_storage_mode,
+        "external_imp_data_root": str(paths.imp_data_root) if args.imp_data_storage_mode == "external" else "",
+        "masked_position_error_only": bool(audit_payload.get("masked_position_error_only", True)),
+        "not_traffic_prediction_error": bool(audit_payload.get("not_traffic_prediction_error", True)),
+        "none_level_excluded_from_spatial_claims": bool(audit_payload.get("none_level_excluded_from_spatial_claims", True)),
+        "neighbor_coverage_required_formal_summary": False,
+        "constraint_level_required_formal_summary": False,
+    }
+    write_json(paths.validation_json_path, validation_payload)
+    return validation_payload
 
 
 def main() -> None:
@@ -1336,20 +1931,31 @@ def main() -> None:
     args.input_dir = ensure_absolute(project_root, args.input_dir)
     args.scenario_dir = ensure_absolute(project_root, args.scenario_dir)
     args.topology_file = ensure_absolute(project_root, args.topology_file)
+    if str(args.external_imp_data_root).strip():
+        args.external_imp_data_root = str(ensure_absolute(project_root, Path(args.external_imp_data_root)))
+    args.summary_output_dir = (
+        ensure_absolute(project_root, Path(args.summary_output_dir))
+        if str(args.summary_output_dir).strip()
+        else (args.scenario_dir / "imp" / "summaries")
+    )
     if not parse_bool(args.allow_current_time_neighbors):
         raise ValueError("snh_mix requires --allow_current_time_neighbors true")
-    paths = build_paths(args.scenario_dir)
+    imp_data_root = resolve_imp_data_root(args.scenario_dir, args.imp_data_storage_mode, args.external_imp_data_root)
+    paths = build_paths(args.scenario_dir, imp_data_root, args.summary_output_dir)
     run_prepare(args, paths)
     if args.stage in {"impute", "all"}:
         run_impute(args, paths)
     if args.stage in {"summarize", "all"}:
-        if not paths.detail_path.exists():
-            raise FileNotFoundError("detail summary is missing; run impute first")
-        run_summarize(paths)
+        run_summarize(args, paths)
     if args.stage in {"audit", "all"}:
-        if not paths.summary_exclude_warmup_path.exists():
-            raise FileNotFoundError("summary outputs are missing; run summarize first")
+        missing_required = [path for path in formal_summary_output_paths(paths) if not path.exists()]
+        if missing_required:
+            raise FileNotFoundError(f"formal summary outputs are missing; run summarize first: {missing_required}")
         run_audit(args, paths)
+    if args.stage in {"validate", "all"}:
+        if not paths.audit_json_path.exists():
+            raise FileNotFoundError("audit outputs are missing; run audit first")
+        run_validate(args, paths)
 
 
 if __name__ == "__main__":

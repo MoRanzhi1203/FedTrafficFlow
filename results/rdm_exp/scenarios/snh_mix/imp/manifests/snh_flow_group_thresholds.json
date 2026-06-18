@@ -1,0 +1,21 @@
+{
+  "estimation_method": "sampled_global_clean_quantiles",
+  "quantiles": {
+    "q33": 1487.30224609375,
+    "q66": 2896.583984375
+  },
+  "groups": {
+    "low_flow": {
+      "min_inclusive": 0.0,
+      "max_exclusive": 1487.30224609375
+    },
+    "mid_flow": {
+      "min_inclusive": 1487.30224609375,
+      "max_exclusive": 2896.583984375
+    },
+    "high_flow": {
+      "min_inclusive": 2896.583984375,
+      "max_inclusive": 10404.2470703125
+    }
+  }
+}

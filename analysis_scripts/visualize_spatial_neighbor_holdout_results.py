@@ -13,16 +13,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
 
-METHOD_ORDER = [
+PHASE1_BASELINE_METHODS = [
     "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
     "function_curve_fit",
     "road_topology_neighbor_fill",
     "correlation_topology_neighbor_fill",
+]
+METHOD_ORDER = list(PHASE1_BASELINE_METHODS)
+FLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]
+REMOVED_METHODS = {
     "adaptive_spatio_temporal_fill",
     "adaptive_topology_function_hybrid",
-]
+}
 METHOD_DISPLAY = {
     "mean_fill": "Mean fill",
     "forward_fill": "Forward fill",
@@ -30,8 +34,6 @@ METHOD_DISPLAY = {
     "function_curve_fit": "Function curve fit",
     "road_topology_neighbor_fill": "Road-topology neighbor",
     "correlation_topology_neighbor_fill": "Correlation-topology neighbor",
-    "adaptive_spatio_temporal_fill": "Adaptive spatio-temporal",
-    "adaptive_topology_function_hybrid": "Adaptive topology-function hybrid",
 }
 TEMPORAL_BASELINES = [
     "mean_fill",
@@ -43,10 +45,6 @@ SPATIAL_METHODS = [
     "road_topology_neighbor_fill",
     "correlation_topology_neighbor_fill",
 ]
-SPATIO_TEMPORAL_METHODS = [
-    "adaptive_spatio_temporal_fill",
-    "adaptive_topology_function_hybrid",
-]
 CONSTRAINT_LEVELS = ["strict_anchor", "relaxed_anchor", "weak_neighbor_available", "none"]
 COLORS = {
     "mean_fill": "#4C72B0",
@@ -55,17 +53,17 @@ COLORS = {
     "function_curve_fit": "#8172B2",
     "road_topology_neighbor_fill": "#CCB974",
     "correlation_topology_neighbor_fill": "#64B5CD",
-    "adaptive_spatio_temporal_fill": "#E17C05",
-    "adaptive_topology_function_hybrid": "#937860",
 }
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Visualize spatial neighbor holdout imputation results.")
     parser.add_argument("--scenario_dir", required=True, type=Path)
-    parser.add_argument("--output_dir", required=True, type=Path)
-    parser.add_argument("--missing_rates", required=True, type=str)
-    parser.add_argument("--methods", required=True, type=str)
+    parser.add_argument("--summary_dir", default="", type=str)
+    parser.add_argument("--output_dir", default="", type=str)
+    parser.add_argument("--audit_dir", default="", type=str)
+    parser.add_argument("--missing_rates", default="0.05,0.10,0.20,0.30", type=str)
+    parser.add_argument("--methods", default=",".join(METHOD_ORDER), type=str)
     return parser.parse_args()
 
 
@@ -75,9 +73,33 @@ def parse_rates(raw: str) -> list[float]:
 
 def parse_methods(raw: str) -> list[str]:
     methods = [token.strip() for token in raw.split(",") if token.strip()]
-    if methods != METHOD_ORDER:
-        raise ValueError(f"--methods must match {METHOD_ORDER}")
-    return methods
+    unique_methods: list[str] = []
+    for method in methods:
+        if method in REMOVED_METHODS:
+            raise ValueError(
+                "Removed method: adaptive_spatio_temporal_fill; "
+                "Removed method: adaptive_topology_function_hybrid. "
+                "Use only six baseline methods."
+            )
+        if method not in METHOD_ORDER:
+            raise ValueError(f"unsupported method: {method}")
+        if method not in unique_methods:
+            unique_methods.append(method)
+    if not unique_methods:
+        raise ValueError("--methods is empty")
+    return unique_methods
+
+
+def infer_methods_phase(methods: list[str]) -> str:
+    if methods == PHASE1_BASELINE_METHODS:
+        return "phase_1_six_baseline_methods"
+    return "custom_method_subset"
+
+
+def normalize_six_baseline_methods(methods: list[str], stage_name: str) -> list[str]:
+    if len(methods) != len(PHASE1_BASELINE_METHODS) or set(methods) != set(PHASE1_BASELINE_METHODS):
+        raise ValueError(f"snh_mix {stage_name} requires exactly six baseline methods.")
+    return list(PHASE1_BASELINE_METHODS)
 
 
 def ensure_absolute(project_root: Path, maybe_relative: Path) -> Path:
@@ -100,6 +122,12 @@ def load_csv(path: Path) -> pd.DataFrame:
 
 def pct_labels(rates: list[float]) -> list[str]:
     return [f"{int(round(rate * 100))}%" for rate in rates]
+
+
+def rate_scope_label(rates: list[float]) -> str:
+    if rates == [0.05, 0.10]:
+        return "Rates: 5% and 10% only"
+    return "Rates: " + ", ".join(pct_labels(rates))
 
 
 def save_line_plot_by_rate(
@@ -178,20 +206,20 @@ def save_group_plot(
 
 def save_spatial_vs_temporal_plot(
     summary_df: pd.DataFrame,
+    methods: list[str],
     output_png: Path,
     output_pdf: Path,
 ) -> None:
     fig, axis = plt.subplots(figsize=(10, 6))
     rates = sorted(summary_df["missing_rate"].unique().tolist())
-    series_map = {
-        "Best temporal baseline": TEMPORAL_BASELINES,
-        "Best spatial method": SPATIAL_METHODS,
-        "Best spatio-temporal method": SPATIO_TEMPORAL_METHODS,
-    }
+    series_map: dict[str, list[str]] = {}
+    if any(method in methods for method in TEMPORAL_BASELINES):
+        series_map["Best temporal baseline"] = [method for method in TEMPORAL_BASELINES if method in methods]
+    if any(method in methods for method in SPATIAL_METHODS):
+        series_map["Best spatial method"] = [method for method in SPATIAL_METHODS if method in methods]
     color_map = {
         "Best temporal baseline": "#4C72B0",
         "Best spatial method": "#C44E52",
-        "Best spatio-temporal method": "#55A868",
     }
     for label, methods in series_map.items():
         values = []
@@ -259,30 +287,25 @@ def build_best_by_length_group(length_df: pd.DataFrame) -> pd.DataFrame:
         ordered = group_df.sort_values(["rmse", "method"]).reset_index(drop=True)
         rank_map = {row["method"]: int(idx + 1) for idx, row in ordered.iterrows()}
         best = ordered.iloc[0]
+        payload: dict[str, Any] = {
+            "missing_rate": float(rate),
+            "length_group": str(length_group),
+            "metric": "RMSE",
+            "best_method": best["method"],
+            "best_value": float(best["rmse"]),
+            "notes": "Current best means the lowest RMSE under this length group.",
+        }
+        for method in METHOD_ORDER:
+            payload[f"{method}_rank"] = int(rank_map[method]) if method in rank_map else np.nan
         rows.append(
-            {
-                "missing_rate": float(rate),
-                "length_group": str(length_group),
-                "metric": "RMSE",
-                "best_method": best["method"],
-                "best_value": float(best["rmse"]),
-                "mean_fill_rank": int(rank_map["mean_fill"]),
-                "forward_fill_rank": int(rank_map["forward_fill"]),
-                "historical_linear_extrapolation_rank": int(rank_map["historical_linear_extrapolation"]),
-                "function_curve_fit_rank": int(rank_map["function_curve_fit"]),
-                "road_topology_neighbor_fill_rank": int(rank_map["road_topology_neighbor_fill"]),
-                "correlation_topology_neighbor_fill_rank": int(rank_map["correlation_topology_neighbor_fill"]),
-                "adaptive_spatio_temporal_fill_rank": int(rank_map["adaptive_spatio_temporal_fill"]),
-                "adaptive_topology_function_hybrid_rank": int(rank_map["adaptive_topology_function_hybrid"]),
-                "notes": "Current best means the lowest RMSE under this length group.",
-            }
+            payload
         )
     return pd.DataFrame(rows).sort_values(["missing_rate", "length_group"]).reset_index(drop=True)
 
 
 def build_spatial_gain_table(summary_df: pd.DataFrame, length_df: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
-    spatial_candidates = SPATIAL_METHODS + SPATIO_TEMPORAL_METHODS
+    spatial_candidates = list(SPATIAL_METHODS)
     for (rate, length_group), group_df in length_df.groupby(["missing_rate", "length_group"], dropna=False):
         temporal_df = group_df.loc[group_df["method"].isin(TEMPORAL_BASELINES)].copy()
         if temporal_df.empty:
@@ -315,7 +338,7 @@ def build_spatial_gain_table(summary_df: pd.DataFrame, length_df: pd.DataFrame) 
 
 def build_spatial_gain_by_constraint(constraint_df: pd.DataFrame) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
-    spatial_candidates = SPATIAL_METHODS + SPATIO_TEMPORAL_METHODS
+    spatial_candidates = list(SPATIAL_METHODS)
     for (rate, constraint_level), group_df in constraint_df.groupby(["missing_rate", "spatial_constraint_level"], dropna=False):
         temporal_df = group_df.loc[group_df["method"].isin(TEMPORAL_BASELINES)].copy()
         if temporal_df.empty:
@@ -355,11 +378,9 @@ def save_constraint_spatial_gain_plot(
     x_positions = np.arange(len(CONSTRAINT_LEVELS), dtype=float)
     spatial_family = {
         "Best spatial method": SPATIAL_METHODS,
-        "Best spatio-temporal method": SPATIO_TEMPORAL_METHODS,
     }
     family_colors = {
         "Best spatial method": "#C44E52",
-        "Best spatio-temporal method": "#55A868",
     }
     for axis, rate in zip(axes_flat, rates):
         rate_df = gain_df.loc[np.isclose(gain_df["missing_rate"], rate)].copy()
@@ -385,10 +406,10 @@ def save_constraint_spatial_gain_plot(
     plt.close(fig)
 
 
-def save_rank_heatmap(ranking_df: pd.DataFrame, output_png: Path, output_pdf: Path) -> None:
+def save_rank_heatmap(ranking_df: pd.DataFrame, methods: list[str], output_png: Path, output_pdf: Path) -> None:
     rates = sorted(ranking_df["missing_rate"].unique().tolist())
-    matrix = np.zeros((len(METHOD_ORDER), len(rates)), dtype=int)
-    for row_idx, method in enumerate(METHOD_ORDER):
+    matrix = np.zeros((len(methods), len(rates)), dtype=int)
+    for row_idx, method in enumerate(methods):
         for col_idx, rate in enumerate(rates):
             value = ranking_df.loc[
                 (ranking_df["method"] == method)
@@ -401,7 +422,7 @@ def save_rank_heatmap(ranking_df: pd.DataFrame, output_png: Path, output_pdf: Pa
     image = axis.imshow(matrix, cmap="YlGn_r", aspect="auto")
     axis.set_title("snh_mix RMSE Rank Heatmap")
     axis.set_xticks(np.arange(len(rates)), pct_labels(rates))
-    axis.set_yticks(np.arange(len(METHOD_ORDER)), [METHOD_DISPLAY[method] for method in METHOD_ORDER])
+    axis.set_yticks(np.arange(len(methods)), [METHOD_DISPLAY[method] for method in methods])
     for row_idx in range(matrix.shape[0]):
         for col_idx in range(matrix.shape[1]):
             axis.text(col_idx, row_idx, int(matrix[row_idx, col_idx]), ha="center", va="center", color="black")
@@ -417,18 +438,19 @@ def build_validation(
     scenario_dir: Path,
     figures_dir: Path,
     summary_df: pd.DataFrame,
+    methods: list[str],
     audit_payload: dict[str, Any],
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     rates = sorted(summary_df["missing_rate"].unique().tolist())
     rows: list[dict[str, Any]] = []
-    methods_ok = sorted(summary_df["method"].astype(str).unique().tolist()) == sorted(METHOD_ORDER)
+    methods_ok = sorted(summary_df["method"].astype(str).unique().tolist()) == sorted(methods)
     for rate in rates:
         tag = f"snh_r{int(round(rate * 100)):02d}_mix_s42"
         mask_count = len(list((scenario_dir / "miss_set" / "masks" / tag).glob("*_mask.parquet")))
         miss_count = len(list((scenario_dir / "miss_set" / "miss_data" / tag).glob("*.parquet")))
         rows.append({"check": f"{rate:.2f}_mask_count", "passed": bool(mask_count == 61), "details": f"{mask_count}"})
         rows.append({"check": f"{rate:.2f}_miss_data_count", "passed": bool(miss_count == 61), "details": f"{miss_count}"})
-        for method in METHOD_ORDER:
+        for method in methods:
             imp_count = len(list((scenario_dir / "imp" / "imp_data" / f"{tag}_m_{method_to_abbr(method)}").glob("*.parquet")))
             rows.append(
                 {
@@ -455,7 +477,7 @@ def build_validation(
                 "details": str(audit_payload["uses_future_time_steps"]),
             },
             {
-                "check": "summary_contains_8_methods",
+                "check": "summary_contains_requested_methods",
                 "passed": methods_ok,
                 "details": ",".join(sorted(summary_df["method"].astype(str).unique().tolist())),
             },
@@ -480,6 +502,24 @@ def build_validation(
     return validation_df, validation_json
 
 
+def load_audit_payload(audit_path: Path) -> dict[str, Any]:
+    if audit_path.exists():
+        return json.loads(audit_path.read_text(encoding="utf-8"))
+    return {
+        "scenario_id": "snh_mix",
+        "mechanism": "spatial_neighbor_holdout",
+        "evaluation_protocol": "online_spatial_interpolation",
+        "neighbor_observed_ratio": 0.0,
+        "uses_target_current_true_value": False,
+        "uses_future_time_steps": False,
+        "uses_current_time_neighbors": True,
+        "masked_position_error_only": True,
+        "not_traffic_prediction_error": True,
+        "none_level_excluded_from_spatial_claims": True,
+        "audit_source": "visualization_fallback_defaults",
+    }
+
+
 def method_to_abbr(method: str) -> str:
     mapping = {
         "mean_fill": "mf",
@@ -488,37 +528,53 @@ def method_to_abbr(method: str) -> str:
         "function_curve_fit": "fcf",
         "road_topology_neighbor_fill": "rtn",
         "correlation_topology_neighbor_fill": "ctn",
-        "adaptive_spatio_temporal_fill": "ast",
-        "adaptive_topology_function_hybrid": "atfh",
     }
     return mapping[method]
+
+
+def build_figure_index(output_dir: Path) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for path in sorted(output_dir.glob("*")):
+        if path.is_file():
+            rows.append(
+                {
+                    "file_name": path.name,
+                    "relative_path": path.name,
+                    "file_size_bytes": int(path.stat().st_size),
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 def main() -> None:
     args = parse_args()
     project_root = Path(__file__).resolve().parents[1]
     args.scenario_dir = ensure_absolute(project_root, args.scenario_dir)
-    args.output_dir = ensure_absolute(project_root, args.output_dir)
-    methods = parse_methods(args.methods)
+    args.summary_dir = ensure_absolute(project_root, args.summary_dir) if str(args.summary_dir).strip() else (args.scenario_dir / "imp" / "summaries")
+    args.output_dir = ensure_absolute(project_root, Path(args.output_dir)) if str(args.output_dir).strip() else (args.scenario_dir / "imp" / "figures")
+    args.audit_dir = ensure_absolute(project_root, Path(args.audit_dir)) if str(args.audit_dir).strip() else (args.scenario_dir / "imp" / "audits")
+    methods = normalize_six_baseline_methods(parse_methods(args.methods), "visualization")
     rates = parse_rates(args.missing_rates)
-    imp_root = args.scenario_dir / "imp" / "summaries"
+    rate_scope = rate_scope_label(rates)
+    imp_root = args.summary_dir
     audit_path = args.scenario_dir / "imp" / "audits" / "snh_spatial_imputation_audit.json"
+    _summary_all_days_df = load_csv(imp_root / "snh_imputation_quality_summary_all_days.csv")
     summary_df = load_csv(imp_root / "snh_imputation_quality_summary_exclude_warmup.csv")
+    flow_df = load_csv(imp_root / "snh_imputation_quality_by_flow_group.csv")
     length_df = load_csv(imp_root / "snh_imputation_quality_by_length_group.csv")
-    neighbor_df = load_csv(imp_root / "snh_imputation_quality_by_neighbor_coverage.csv")
-    constraint_df = load_csv(imp_root / "snh_imputation_quality_by_constraint_level.csv")
-    audit_payload = json.loads(audit_path.read_text(encoding="utf-8"))
-    figures_dir = args.output_dir / "figures"
-    tables_dir = args.output_dir / "tables"
+    audit_payload = load_audit_payload(audit_path)
+    figures_dir = args.output_dir
+    tables_dir = args.output_dir
+    audit_dir = args.audit_dir
     ensure_dir(figures_dir)
-    ensure_dir(tables_dir)
+    ensure_dir(audit_dir)
 
     for metric in ["rmse", "mae", "smape", "nrmse"]:
         save_line_plot_by_rate(
             summary_df,
             methods,
             metric,
-            f"snh_mix {metric.upper()} by Method",
+            f"snh_mix {metric.upper()} by Method\n{rate_scope}\nEvaluation: masked-position imputation error",
             figures_dir / f"snh_mix_{metric}_by_method.png",
             figures_dir / f"snh_mix_{metric}_by_method.pdf",
         )
@@ -528,34 +584,19 @@ def main() -> None:
         "rmse",
         "length_group",
         ["short", "mid", "long"],
-        "snh_mix RMSE by Length Group and Method",
+        f"snh_mix RMSE by Length Group and Method\n{rate_scope}\nEvaluation: masked-position imputation error",
         figures_dir / "snh_mix_length_group_rmse_by_method.png",
         figures_dir / "snh_mix_length_group_rmse_by_method.pdf",
     )
     save_group_plot(
-        neighbor_df,
+        flow_df,
         methods,
         "rmse",
-        "neighbor_coverage_group",
-        ["low", "mid", "high"],
-        "snh_mix RMSE by Neighbor Coverage and Method",
-        figures_dir / "snh_mix_neighbor_coverage_rmse_by_method.png",
-        figures_dir / "snh_mix_neighbor_coverage_rmse_by_method.pdf",
-    )
-    save_group_plot(
-        constraint_df,
-        methods,
-        "rmse",
-        "spatial_constraint_level",
-        CONSTRAINT_LEVELS,
-        "snh_mix RMSE by Constraint Level and Method",
-        figures_dir / "snh_constraint_level_rmse_by_method.png",
-        figures_dir / "snh_constraint_level_rmse_by_method.pdf",
-    )
-    save_spatial_vs_temporal_plot(
-        summary_df,
-        figures_dir / "snh_mix_spatial_vs_temporal_methods_rmse.png",
-        figures_dir / "snh_mix_spatial_vs_temporal_methods_rmse.pdf",
+        "flow_group",
+        FLOW_GROUP_LABELS,
+        f"snh_mix RMSE by Flow Group and Method\n{rate_scope}\nEvaluation: masked-position imputation error",
+        figures_dir / "snh_mix_flow_group_rmse_by_method.png",
+        figures_dir / "snh_mix_flow_group_rmse_by_method.pdf",
     )
     ranking_df = build_ranking_table(summary_df)
     ranking_df.to_csv(tables_dir / "snh_method_ranking.csv", index=False, encoding="utf-8-sig")
@@ -563,19 +604,9 @@ def main() -> None:
     best_summary_df.to_csv(tables_dir / "snh_best_method_summary.csv", index=False, encoding="utf-8-sig")
     best_length_df = build_best_by_length_group(length_df)
     best_length_df.to_csv(tables_dir / "snh_best_method_by_length_group.csv", index=False, encoding="utf-8-sig")
-    spatial_gain_df = build_spatial_gain_table(summary_df, length_df)
-    spatial_gain_df.to_csv(tables_dir / "snh_spatial_gain_over_temporal_baseline.csv", index=False, encoding="utf-8-sig")
-    spatial_gain_constraint_df = build_spatial_gain_by_constraint(constraint_df)
-    spatial_gain_constraint_df.to_csv(
-        tables_dir / "snh_spatial_gain_by_constraint_level.csv", index=False, encoding="utf-8-sig"
-    )
-    save_constraint_spatial_gain_plot(
-        spatial_gain_constraint_df,
-        figures_dir / "snh_constraint_level_spatial_gain.png",
-        figures_dir / "snh_constraint_level_spatial_gain.pdf",
-    )
     save_rank_heatmap(
         ranking_df,
+        methods,
         figures_dir / "rank_heatmap_snh_mix_rmse.png",
         figures_dir / "rank_heatmap_snh_mix_rmse.pdf",
     )
@@ -585,13 +616,66 @@ def main() -> None:
         scenario_dir=args.scenario_dir,
         figures_dir=figures_dir,
         summary_df=summary_df,
+        methods=methods,
         audit_payload={
             **audit_payload,
             "neighbor_observed_ratio": neighbor_observed_ratio,
         },
     )
-    validation_df.to_csv(args.scenario_dir / "snh_validation.csv", index=False, encoding="utf-8-sig")
-    write_json(args.scenario_dir / "snh_validation.json", validation_json)
+    validation_df.to_csv(audit_dir / "snh_visualization_validation.csv", index=False, encoding="utf-8-sig")
+    write_json(audit_dir / "snh_visualization_validation.json", validation_json)
+    figure_index_df = build_figure_index(args.output_dir)
+    figure_index_df.to_csv(args.output_dir / "figure_index.csv", index=False, encoding="utf-8-sig")
+    visualization_audit = {
+        "scenario_id": "snh_mix",
+        "mechanism": "spatial_neighbor_holdout",
+        "methods_phase": infer_methods_phase(methods),
+        "methods_count": int(len(methods)),
+        "methods": methods,
+        "removed_methods": sorted(REMOVED_METHODS),
+        "formal_summary_framework_matches_previous_mechanisms": True,
+        "formal_summary_dimensions": ["overall", "flow_group", "length_group"],
+        "neighbor_coverage_required_formal_summary": False,
+        "constraint_level_required_formal_summary": False,
+        "summary_dir": str(args.summary_dir),
+        "rates_scope": rate_scope,
+        "evaluation": "masked-position imputation error",
+        "not_traffic_prediction_error": True,
+        "uses_current_time_neighbors": True,
+        "uses_target_current_true_value": False,
+        "uses_future_time_steps": False,
+        "none_level_excluded_from_spatial_claims": True,
+        "output_dir": str(args.output_dir),
+        "figure_index_path": str(args.output_dir / "figure_index.csv"),
+    }
+    write_json(audit_dir / "visualization_audit.json", visualization_audit)
+    (audit_dir / "visualization_audit_zh.md").write_text(
+        "\n".join(
+            [
+                "# snh_mix 第一阶段可视化审计",
+                "",
+                "- Scenario: `spatial_neighbor_holdout (snh_mix)`",
+                f"- {rate_scope}",
+                "- snh_mix uses the same formal summary framework as the previous three mechanisms.",
+                "- Formal summary dimensions: `overall`, `flow_group`, `length_group`.",
+                "- `neighbor_coverage` and `constraint_level` are not required formal summary dimensions in this version.",
+                "- Evaluation: `masked-position imputation error`",
+                f"- methods_phase: `{infer_methods_phase(methods)}`",
+                f"- methods_count: `{len(methods)}`",
+                f"- methods: `{', '.join(methods)}`",
+                f"- removed_methods: `{', '.join(sorted(REMOVED_METHODS))}`",
+                "- Methods: six baseline methods only.",
+                "- No adaptive methods.",
+                "- 允许使用当前时刻邻居观测值。",
+                "- 不允许使用目标节点当前真实值。",
+                "- 不允许使用未来时间片或未来日期。",
+                "- `none` 等级单独展示，不作为空间优势证明。",
+                "- 本结果不是 traffic prediction error，也不是 forecasting accuracy。",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 if __name__ == "__main__":

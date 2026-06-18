@@ -1,0 +1,184 @@
+{
+  "scenario_id": "snh_mix",
+  "mechanism": "spatial_neighbor_holdout",
+  "methods_count": 6,
+  "removed_methods": [
+    "adaptive_spatio_temporal_fill",
+    "adaptive_topology_function_hybrid"
+  ],
+  "mask_scope": "global",
+  "global_allocation_used": true,
+  "constraint_level_used": true,
+  "formal_summary_framework_matches_previous_mechanisms": true,
+  "formal_summary_dimensions": [
+    "overall",
+    "flow_group",
+    "length_group"
+  ],
+  "formal_summary_framework": [
+    "detail",
+    "summary_all_days",
+    "summary_exclude_warmup",
+    "by_flow_group",
+    "by_length_group"
+  ],
+  "neighbor_coverage_required_formal_summary": false,
+  "constraint_level_required_formal_summary": false,
+  "optional_spatial_diagnostics": [
+    "neighbor_coverage",
+    "constraint_level"
+  ],
+  "none_level_excluded_from_spatial_claims": true,
+  "evaluation_protocol": "online_spatial_interpolation",
+  "uses_current_time_neighbors": true,
+  "uses_target_current_true_value": false,
+  "uses_future_time_steps": false,
+  "uses_future_days": false,
+  "allowed_current_information": "observed_neighbors_only",
+  "masked_position_error_only": true,
+  "not_traffic_prediction_error": true,
+  "neighbor_observed_enforced": true,
+  "not_strict_history_only": true,
+  "methods_phase": "phase_1_six_baseline_methods",
+  "methods": [
+    "mean_fill",
+    "forward_fill",
+    "historical_linear_extrapolation",
+    "function_curve_fit",
+    "road_topology_neighbor_fill",
+    "correlation_topology_neighbor_fill"
+  ],
+  "imp_data_storage_mode": "local",
+  "external_imp_data_root": "",
+  "input_checks": [
+    {
+      "missing_rate": 0.05,
+      "scenario_tag": "snh_r05_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    },
+    {
+      "missing_rate": 0.1,
+      "scenario_tag": "snh_r10_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    },
+    {
+      "missing_rate": 0.2,
+      "scenario_tag": "snh_r20_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    },
+    {
+      "missing_rate": 0.3,
+      "scenario_tag": "snh_r30_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    }
+  ],
+  "summary_outputs": {
+    "detail": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\summaries\\snh_imputation_quality_detail.csv",
+    "summary_all_days": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\summaries\\snh_imputation_quality_summary_all_days.csv",
+    "summary_exclude_warmup": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\summaries\\snh_imputation_quality_summary_exclude_warmup.csv",
+    "by_length_group": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\summaries\\snh_imputation_quality_by_length_group.csv",
+    "by_flow_group": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\summaries\\snh_imputation_quality_by_flow_group.csv"
+  },
+  "contains_requested_methods": true,
+  "contains_length_groups": [
+    "long",
+    "mid",
+    "short"
+  ],
+  "contains_flow_groups": [
+    "high_flow",
+    "low_flow",
+    "mid_flow"
+  ],
+  "optional_neighbor_coverage_summary_exists": false,
+  "optional_constraint_level_summary_exists": false,
+  "performance_summary": {
+    "scenario_id": "snh_mix",
+    "evaluation_protocol": "online_spatial_interpolation",
+    "imp_data_storage_mode": "local",
+    "external_imp_data_root": "",
+    "write_imputed_data": true,
+    "resume": true,
+    "overwrite": false,
+    "total_elapsed_seconds": 15709.229456,
+    "total_completed_rate_method_chunks": 720,
+    "counts_by_rate_method": [
+      {
+        "missing_rate": 0.2,
+        "method": "correlation_topology_neighbor_fill",
+        "completed_chunk_count": 59
+      },
+      {
+        "missing_rate": 0.2,
+        "method": "forward_fill",
+        "completed_chunk_count": 59
+      },
+      {
+        "missing_rate": 0.2,
+        "method": "function_curve_fit",
+        "completed_chunk_count": 59
+      },
+      {
+        "missing_rate": 0.2,
+        "method": "historical_linear_extrapolation",
+        "completed_chunk_count": 59
+      },
+      {
+        "missing_rate": 0.2,
+        "method": "mean_fill",
+        "completed_chunk_count": 59
+      },
+      {
+        "missing_rate": 0.2,
+        "method": "road_topology_neighbor_fill",
+        "completed_chunk_count": 59
+      },
+      {
+        "missing_rate": 0.3,
+        "method": "correlation_topology_neighbor_fill",
+        "completed_chunk_count": 61
+      },
+      {
+        "missing_rate": 0.3,
+        "method": "forward_fill",
+        "completed_chunk_count": 61
+      },
+      {
+        "missing_rate": 0.3,
+        "method": "function_curve_fit",
+        "completed_chunk_count": 61
+      },
+      {
+        "missing_rate": 0.3,
+        "method": "historical_linear_extrapolation",
+        "completed_chunk_count": 61
+      },
+      {
+        "missing_rate": 0.3,
+        "method": "mean_fill",
+        "completed_chunk_count": 61
+      },
+      {
+        "missing_rate": 0.3,
+        "method": "road_topology_neighbor_fill",
+        "completed_chunk_count": 61
+      }
+    ]
+  }
+}

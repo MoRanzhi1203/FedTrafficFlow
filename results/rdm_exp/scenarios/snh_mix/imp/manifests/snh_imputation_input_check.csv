@@ -1,0 +1,5 @@
+﻿missing_rate,scenario_tag,mask_file_count,miss_data_file_count,expected_chunk_count,masks_complete,miss_data_complete
+0.05,snh_r05_mix_s42,61,61,61,True,True
+0.1,snh_r10_mix_s42,61,61,61,True,True
+0.2,snh_r20_mix_s42,61,61,61,True,True
+0.3,snh_r30_mix_s42,61,61,61,True,True

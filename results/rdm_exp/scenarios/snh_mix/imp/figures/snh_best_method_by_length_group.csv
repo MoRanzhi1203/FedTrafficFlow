@@ -1,0 +1,13 @@
+﻿missing_rate,length_group,metric,best_method,best_value,notes,mean_fill_rank,forward_fill_rank,historical_linear_extrapolation_rank,function_curve_fit_rank,road_topology_neighbor_fill_rank,correlation_topology_neighbor_fill_rank
+0.05,long,RMSE,correlation_topology_neighbor_fill,102.39883405291074,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.05,mid,RMSE,correlation_topology_neighbor_fill,103.2527962305901,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.05,short,RMSE,correlation_topology_neighbor_fill,103.65028289053338,Current best means the lowest RMSE under this length group.,2,3,5,4,6,1
+0.1,long,RMSE,correlation_topology_neighbor_fill,101.30613136282672,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.1,mid,RMSE,correlation_topology_neighbor_fill,102.14125281761775,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.1,short,RMSE,correlation_topology_neighbor_fill,101.90125283538872,Current best means the lowest RMSE under this length group.,2,3,5,4,6,1
+0.2,long,RMSE,correlation_topology_neighbor_fill,99.15521846875342,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.2,mid,RMSE,correlation_topology_neighbor_fill,99.75897945105412,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.2,short,RMSE,correlation_topology_neighbor_fill,100.40080743287471,Current best means the lowest RMSE under this length group.,2,3,5,4,6,1
+0.3,long,RMSE,correlation_topology_neighbor_fill,97.46490701099404,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.3,mid,RMSE,correlation_topology_neighbor_fill,98.3120735977669,Current best means the lowest RMSE under this length group.,2,5,4,3,6,1
+0.3,short,RMSE,correlation_topology_neighbor_fill,98.6776723528336,Current best means the lowest RMSE under this length group.,2,4,5,3,6,1

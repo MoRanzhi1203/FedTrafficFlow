@@ -1,0 +1,40 @@
+{
+  "rows": [
+    {
+      "missing_rate": 0.05,
+      "scenario_tag": "snh_r05_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    },
+    {
+      "missing_rate": 0.1,
+      "scenario_tag": "snh_r10_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    },
+    {
+      "missing_rate": 0.2,
+      "scenario_tag": "snh_r20_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    },
+    {
+      "missing_rate": 0.3,
+      "scenario_tag": "snh_r30_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "expected_chunk_count": 61,
+      "masks_complete": true,
+      "miss_data_complete": true
+    }
+  ]
+}

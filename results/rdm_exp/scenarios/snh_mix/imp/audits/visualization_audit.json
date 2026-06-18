@@ -1,0 +1,36 @@
+{
+  "scenario_id": "snh_mix",
+  "mechanism": "spatial_neighbor_holdout",
+  "methods_phase": "phase_1_six_baseline_methods",
+  "methods_count": 6,
+  "methods": [
+    "mean_fill",
+    "forward_fill",
+    "historical_linear_extrapolation",
+    "function_curve_fit",
+    "road_topology_neighbor_fill",
+    "correlation_topology_neighbor_fill"
+  ],
+  "removed_methods": [
+    "adaptive_spatio_temporal_fill",
+    "adaptive_topology_function_hybrid"
+  ],
+  "formal_summary_framework_matches_previous_mechanisms": true,
+  "formal_summary_dimensions": [
+    "overall",
+    "flow_group",
+    "length_group"
+  ],
+  "neighbor_coverage_required_formal_summary": false,
+  "constraint_level_required_formal_summary": false,
+  "summary_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\summaries",
+  "rates_scope": "Rates: 5%, 10%, 20%, 30%",
+  "evaluation": "masked-position imputation error",
+  "not_traffic_prediction_error": true,
+  "uses_current_time_neighbors": true,
+  "uses_target_current_true_value": false,
+  "uses_future_time_steps": false,
+  "none_level_excluded_from_spatial_claims": true,
+  "output_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\comparison_spatial_extension\\snh_mix_phase1_six_methods",
+  "figure_index_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\comparison_spatial_extension\\snh_mix_phase1_six_methods\\figure_index.csv"
+}

@@ -1,0 +1,196 @@
+{
+  "scenario_id": "snh_mix",
+  "all_checks_passed": false,
+  "checks": [
+    {
+      "check": "0.05_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_mean_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_forward_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_historical_linear_extrapolation_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_function_curve_fit_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_road_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.05_correlation_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_mean_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_forward_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_historical_linear_extrapolation_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_function_curve_fit_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_road_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.10_correlation_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_mean_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_forward_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_historical_linear_extrapolation_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_function_curve_fit_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_road_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.20_correlation_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_mean_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_forward_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_historical_linear_extrapolation_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_function_curve_fit_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_road_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "0.30_correlation_topology_neighbor_fill_imp_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "neighbor_observed_ratio_positive",
+      "passed": true,
+      "details": "1.0"
+    },
+    {
+      "check": "uses_target_current_true_value_false",
+      "passed": true,
+      "details": "False"
+    },
+    {
+      "check": "uses_future_time_steps_false",
+      "passed": true,
+      "details": "False"
+    },
+    {
+      "check": "summary_contains_requested_methods",
+      "passed": true,
+      "details": "correlation_topology_neighbor_fill,forward_fill,function_curve_fit,historical_linear_extrapolation,mean_fill,road_topology_neighbor_fill"
+    },
+    {
+      "check": "visualization_contains_spatial_methods",
+      "passed": false,
+      "details": "snh_mix_spatial_vs_temporal_methods_rmse.png"
+    },
+    {
+      "check": "evaluation_protocol_online_spatial_interpolation",
+      "passed": true,
+      "details": "online_spatial_interpolation"
+    }
+  ]
+}

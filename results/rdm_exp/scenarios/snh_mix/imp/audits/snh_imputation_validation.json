@@ -1,0 +1,170 @@
+{
+  "scenario_id": "snh_mix",
+  "methods_count": 6,
+  "removed_methods": [
+    "adaptive_spatio_temporal_fill",
+    "adaptive_topology_function_hybrid"
+  ],
+  "all_complete": false,
+  "missing_data_preserved": true,
+  "masks_preserved": true,
+  "imputation_completed": false,
+  "summary_completed": true,
+  "audit_completed": true,
+  "optional_constraint_level_summary_exists": false,
+  "optional_none_level_separated": false,
+  "uses_future_information": false,
+  "counts_by_rate_method": [
+    {
+      "missing_rate": 0.05,
+      "method": "mean_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "forward_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "historical_linear_extrapolation",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "function_curve_fit",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "road_topology_neighbor_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.05,
+      "method": "correlation_topology_neighbor_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "mean_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "forward_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "historical_linear_extrapolation",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "function_curve_fit",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "road_topology_neighbor_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.1,
+      "method": "correlation_topology_neighbor_fill",
+      "completed_chunk_count": 0,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "mean_fill",
+      "completed_chunk_count": 59,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "forward_fill",
+      "completed_chunk_count": 59,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "historical_linear_extrapolation",
+      "completed_chunk_count": 59,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "function_curve_fit",
+      "completed_chunk_count": 59,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "road_topology_neighbor_fill",
+      "completed_chunk_count": 59,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.2,
+      "method": "correlation_topology_neighbor_fill",
+      "completed_chunk_count": 59,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "mean_fill",
+      "completed_chunk_count": 61,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "forward_fill",
+      "completed_chunk_count": 61,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "historical_linear_extrapolation",
+      "completed_chunk_count": 61,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "function_curve_fit",
+      "completed_chunk_count": 61,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "road_topology_neighbor_fill",
+      "completed_chunk_count": 61,
+      "expected_chunk_count": 61
+    },
+    {
+      "missing_rate": 0.3,
+      "method": "correlation_topology_neighbor_fill",
+      "completed_chunk_count": 61,
+      "expected_chunk_count": 61
+    }
+  ],
+  "imp_data_storage_mode": "local",
+  "external_imp_data_root": "",
+  "masked_position_error_only": true,
+  "not_traffic_prediction_error": true,
+  "none_level_excluded_from_spatial_claims": true,
+  "neighbor_coverage_required_formal_summary": false,
+  "constraint_level_required_formal_summary": false
+}

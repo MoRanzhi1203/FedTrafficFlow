@@ -1,0 +1,17 @@
+﻿missing_rate,metric,best_method,best_value,second_best_method,second_best_value,worst_method,worst_value,notes
+0.05,MAE,correlation_topology_neighbor_fill,41.99846190196803,mean_fill,127.06820577092496,road_topology_neighbor_fill,478.2629477522096,Masked-position imputation error under online spatial interpolation.
+0.05,NRMSE,correlation_topology_neighbor_fill,0.0099113370111382,mean_fill,0.0237637257622413,road_topology_neighbor_fill,0.0818570456462358,Masked-position imputation error under online spatial interpolation.
+0.05,RMSE,correlation_topology_neighbor_fill,102.97069986824437,mean_fill,246.88570981545203,road_topology_neighbor_fill,850.4278756607181,Masked-position imputation error under online spatial interpolation.
+0.05,SMAPE,correlation_topology_neighbor_fill,0.0300924736249456,mean_fill,0.0690297074772332,road_topology_neighbor_fill,0.177662699132481,Masked-position imputation error under online spatial interpolation.
+0.1,MAE,correlation_topology_neighbor_fill,41.24168137743374,mean_fill,127.0169764984467,road_topology_neighbor_fill,481.3927774478285,Masked-position imputation error under online spatial interpolation.
+0.1,NRMSE,correlation_topology_neighbor_fill,0.0097548160584559,mean_fill,0.0236646539641648,road_topology_neighbor_fill,0.0825413069187055,Masked-position imputation error under online spatial interpolation.
+0.1,RMSE,correlation_topology_neighbor_fill,101.78870487084652,mean_fill,246.93386977205137,road_topology_neighbor_fill,861.2948393136512,Masked-position imputation error under online spatial interpolation.
+0.1,SMAPE,correlation_topology_neighbor_fill,0.0302745553726854,mean_fill,0.0694034316470317,road_topology_neighbor_fill,0.1787275703407427,Masked-position imputation error under online spatial interpolation.
+0.2,MAE,correlation_topology_neighbor_fill,39.980627278726224,mean_fill,126.74015280553084,road_topology_neighbor_fill,489.4620737347979,Masked-position imputation error under online spatial interpolation.
+0.2,NRMSE,correlation_topology_neighbor_fill,0.0095193946254723,mean_fill,0.0235042458607505,road_topology_neighbor_fill,0.0843232524315385,Masked-position imputation error under online spatial interpolation.
+0.2,RMSE,correlation_topology_neighbor_fill,99.69254814026172,mean_fill,246.1499133257269,road_topology_neighbor_fill,883.0813547618262,Masked-position imputation error under online spatial interpolation.
+0.2,SMAPE,correlation_topology_neighbor_fill,0.0306910160301944,mean_fill,0.0698183198975638,road_topology_neighbor_fill,0.1811502925586555,Masked-position imputation error under online spatial interpolation.
+0.3,MAE,correlation_topology_neighbor_fill,39.00545918615106,mean_fill,126.70466518334815,road_topology_neighbor_fill,502.22404538883626,Masked-position imputation error under online spatial interpolation.
+0.3,NRMSE,correlation_topology_neighbor_fill,0.0093963984737637,mean_fill,0.0234946377660553,road_topology_neighbor_fill,0.0869877415630682,Masked-position imputation error under online spatial interpolation.
+0.3,RMSE,correlation_topology_neighbor_fill,98.19548394876227,mean_fill,245.8771661052815,road_topology_neighbor_fill,910.3481225970344,Masked-position imputation error under online spatial interpolation.
+0.3,SMAPE,correlation_topology_neighbor_fill,0.0312826980730246,mean_fill,0.0702452361900127,road_topology_neighbor_fill,0.1851652446751732,Masked-position imputation error under online spatial interpolation.
