@@ -1,0 +1,7 @@
+{
+  "scenario_tag": "snh_r20_mix_s42",
+  "method": "historical_linear_extrapolation",
+  "chunk_index": 11,
+  "completed": true,
+  "output_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\imp_data\\snh_r20_mix_s42_m_hle\\node_flow_chunk_011.parquet"
+}

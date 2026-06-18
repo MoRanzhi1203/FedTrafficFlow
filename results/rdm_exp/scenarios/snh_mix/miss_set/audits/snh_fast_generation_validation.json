@@ -1,0 +1,296 @@
+{
+  "all_complete": true,
+  "resume_enabled": true,
+  "checkpoint_mode": "part_files",
+  "atomic_write_enabled": true,
+  "event_id_written_directly": true,
+  "backfill_event_ids_used": false,
+  "neighbor_protection_mode": "anchor",
+  "placement_backend": "bitset",
+  "chunk_outer_loop_enabled": true,
+  "full_checkpoint_rewrite_disabled": true,
+  "constraint_relaxation_enabled": true,
+  "all_rates_global_missing_count_preserved": true,
+  "constraint_level_recorded_in_events": true,
+  "constraint_level_recorded_in_masks": true,
+  "none_level_allowed": true,
+  "none_level_count_reported": true,
+  "spatially_constrained_ratio_reported": true,
+  "none_level_excluded_from_spatial_claims": true,
+  "mask_scope": "global",
+  "global_allocation_used": true,
+  "allocation_sum_matches_global_missing_count": true,
+  "observed_sum_matches_global_missing_count": true,
+  "day_stratified_generation_used": false,
+  "per_chunk_round_rate_used": false,
+  "warning_rates_below_min_spatially_constrained_ratio": [],
+  "failed_parts": [],
+  "tmp_files": [],
+  "checks": [
+    {
+      "check": "snh_r05_mix_s42_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r05_mix_s42_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r05_mix_s42_done_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r05_mix_s42_status_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r05_mix_s42_event_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r05_mix_s42_observed_missing_rate_close",
+      "passed": true,
+      "details": "0.050000"
+    },
+    {
+      "check": "snh_r05_mix_s42_global_missing_count_preserved",
+      "passed": true,
+      "details": "12306677/12306677"
+    },
+    {
+      "check": "snh_r05_mix_s42_spatially_constrained_ratio_reported",
+      "passed": true,
+      "details": "1.000000"
+    },
+    {
+      "check": "snh_r10_mix_s42_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r10_mix_s42_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r10_mix_s42_done_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r10_mix_s42_status_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r10_mix_s42_event_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r10_mix_s42_observed_missing_rate_close",
+      "passed": true,
+      "details": "0.100000"
+    },
+    {
+      "check": "snh_r10_mix_s42_global_missing_count_preserved",
+      "passed": true,
+      "details": "24613354/24613354"
+    },
+    {
+      "check": "snh_r10_mix_s42_spatially_constrained_ratio_reported",
+      "passed": true,
+      "details": "1.000000"
+    },
+    {
+      "check": "snh_r20_mix_s42_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r20_mix_s42_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r20_mix_s42_done_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r20_mix_s42_status_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r20_mix_s42_event_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r20_mix_s42_observed_missing_rate_close",
+      "passed": true,
+      "details": "0.200000"
+    },
+    {
+      "check": "snh_r20_mix_s42_global_missing_count_preserved",
+      "passed": true,
+      "details": "49226707/49226707"
+    },
+    {
+      "check": "snh_r20_mix_s42_spatially_constrained_ratio_reported",
+      "passed": true,
+      "details": "1.000000"
+    },
+    {
+      "check": "snh_r30_mix_s42_mask_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r30_mix_s42_miss_data_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r30_mix_s42_done_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r30_mix_s42_status_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r30_mix_s42_event_part_count",
+      "passed": true,
+      "details": "61"
+    },
+    {
+      "check": "snh_r30_mix_s42_observed_missing_rate_close",
+      "passed": true,
+      "details": "0.300000"
+    },
+    {
+      "check": "snh_r30_mix_s42_global_missing_count_preserved",
+      "passed": true,
+      "details": "73840061/73840061"
+    },
+    {
+      "check": "snh_r30_mix_s42_spatially_constrained_ratio_reported",
+      "passed": true,
+      "details": "0.997007"
+    },
+    {
+      "check": "neighbor_observed_ratio_positive",
+      "passed": true,
+      "details": "0.995986"
+    },
+    {
+      "check": "min_available_neighbor_count",
+      "passed": true,
+      "details": "snh_r05_mix_s42:1;snh_r10_mix_s42:1;snh_r20_mix_s42:1;snh_r30_mix_s42:0"
+    },
+    {
+      "check": "skipped_missing_slots_recorded",
+      "passed": true,
+      "details": "0"
+    },
+    {
+      "check": "no_incomplete_tmp_files",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "check": "no_failed_parts",
+      "passed": true,
+      "details": ""
+    },
+    {
+      "check": "resume_enabled",
+      "passed": true,
+      "details": "True"
+    },
+    {
+      "check": "checkpoint_mode_part_files",
+      "passed": true,
+      "details": "part_files"
+    },
+    {
+      "check": "event_id_written_directly",
+      "passed": true,
+      "details": "True"
+    },
+    {
+      "check": "backfill_event_ids_disabled",
+      "passed": true,
+      "details": "False"
+    },
+    {
+      "check": "constraint_relaxation_enabled",
+      "passed": true,
+      "details": "True"
+    },
+    {
+      "check": "constraint_level_recorded_in_events",
+      "passed": true,
+      "details": "spatial_constraint_level,relaxation_stage"
+    },
+    {
+      "check": "constraint_level_recorded_in_masks",
+      "passed": true,
+      "details": "row_index,节点ID,时间段,day_index,global_time_index,is_missing,scenario_id,mechanism,evaluation_protocol,missing_rate_target,event_id,actual_length,length_group,available_neighbor_count,anchor_neighbor_count,neighbor_scope,neighbor_observed_ratio,spatial_constraint_level,relaxation_stage,anchor_neighbor_count_used"
+    },
+    {
+      "check": "none_level_allowed",
+      "passed": true,
+      "details": "True"
+    },
+    {
+      "check": "none_level_count_reported",
+      "passed": true,
+      "details": "220985"
+    },
+    {
+      "check": "none_level_excluded_from_spatial_claims",
+      "passed": true,
+      "details": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix_fast_full_temp\\miss_set\\audits\\snh_constraint_relaxation_audit_zh.md"
+    },
+    {
+      "check": "mask_scope_global",
+      "passed": true,
+      "details": "global"
+    },
+    {
+      "check": "global_allocation_used",
+      "passed": true,
+      "details": "True"
+    },
+    {
+      "check": "allocation_sum_matches_global_missing_count",
+      "passed": true,
+      "details": "checked on global_missing_allocation.csv"
+    },
+    {
+      "check": "observed_sum_matches_global_missing_count",
+      "passed": true,
+      "details": "checked on finalized status"
+    },
+    {
+      "check": "day_stratified_generation_disabled",
+      "passed": true,
+      "details": "False"
+    },
+    {
+      "check": "per_chunk_round_rate_disabled",
+      "passed": true,
+      "details": "False"
+    }
+  ]
+}

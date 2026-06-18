@@ -20,8 +20,6 @@ METHOD_CODE_MAP = {
     "rtn": "road_topology_neighbor_fill",
     "tfh": "topology_function_hybrid",
     "ctnf": "correlation_topology_neighbor_fill",
-    "astf": "adaptive_spatio_temporal_fill",
-    "atfh": "adaptive_topology_function_hybrid",
     "zf": "zero_fill",
     "gnf": "geo_neighbor_fill",
     "gfh": "geo_func_hybrid",

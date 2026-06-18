@@ -1,0 +1,7 @@
+{
+  "scenario_tag": "snh_r10_mix_s42",
+  "method": "function_curve_fit",
+  "chunk_index": 40,
+  "completed": true,
+  "output_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\imp_data\\snh_r10_mix_s42_m_fcf\\node_flow_chunk_040.parquet"
+}

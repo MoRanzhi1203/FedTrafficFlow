@@ -1,0 +1,43 @@
+{
+  "mechanism": "spatial_neighbor_holdout",
+  "mask_scope": "global",
+  "allocation_method": "sequential_hypergeometric_global_without_replacement",
+  "allocation_shortfall_policy": "carry_forward",
+  "global_allocation_used": true,
+  "day_stratified_generation_used": false,
+  "per_chunk_round_rate_used": false,
+  "per_rate": {
+    "0.05": {
+      "global_eligible_count": 246133536,
+      "global_missing_count": 12306677,
+      "allocation_sum": 12306677,
+      "observed_sum": 12306677,
+      "allocation_sum_matches_global_missing_count": true,
+      "observed_sum_matches_global_missing_count": true
+    },
+    "0.10": {
+      "global_eligible_count": 246133536,
+      "global_missing_count": 24613354,
+      "allocation_sum": 24613354,
+      "observed_sum": 24613354,
+      "allocation_sum_matches_global_missing_count": true,
+      "observed_sum_matches_global_missing_count": true
+    },
+    "0.20": {
+      "global_eligible_count": 246133536,
+      "global_missing_count": 49226707,
+      "allocation_sum": 49226707,
+      "observed_sum": 49226707,
+      "allocation_sum_matches_global_missing_count": true,
+      "observed_sum_matches_global_missing_count": true
+    },
+    "0.30": {
+      "global_eligible_count": 246133536,
+      "global_missing_count": 73840061,
+      "allocation_sum": 73840061,
+      "observed_sum": 73840061,
+      "allocation_sum_matches_global_missing_count": true,
+      "observed_sum_matches_global_missing_count": true
+    }
+  }
+}

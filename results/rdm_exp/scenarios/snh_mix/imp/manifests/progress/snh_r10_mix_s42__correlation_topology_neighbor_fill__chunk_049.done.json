@@ -1,0 +1,7 @@
+{
+  "scenario_tag": "snh_r10_mix_s42",
+  "method": "correlation_topology_neighbor_fill",
+  "chunk_index": 49,
+  "completed": true,
+  "output_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\snh_mix\\imp\\imp_data\\snh_r10_mix_s42_m_ctn\\node_flow_chunk_049.parquet"
+}

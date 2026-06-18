@@ -1,8 +1,8 @@
 # 真实数据缺失实验短路径目录
 
-1. 本目录统一管理三类真实数据缺失与补全实验。
+1. 本目录统一管理四类真实数据缺失与补全实验。
 2. 新根目录使用 `results\rdm_exp`，用于降低 Windows 长路径风险。
-3. 三类机制分别使用 `g_mcar_pt`、`ntb_mix`、`nso_mix`。
+3. 四类机制分别使用 `g_mcar_pt`、`ntb_mix`、`nso_mix`、`snh_mix`。
 4. 每个 scenario 下分为 `miss_set` 和 `imp`。
 5. `miss_set` 下保留 `masks`、`miss_data`、`manifests`、`audits`。
 6. `imp` 下保留 `imp_data`、`summaries`、`figures`、`audits`、`manifests`。
@@ -16,6 +16,7 @@
 - `g_mcar_pt = global MCAR point`
 - `ntb_mix = node temporal block, mixed short-mid-long`
 - `nso_mix = node subset temporal outage, mixed short-mid-long`
+- `snh_mix = spatial neighbor holdout, mixed short-mid-long`
 - `miss_set = missingness setting`
 - `miss_data = missing datasets`
 - `imp = imputation`
@@ -26,12 +27,16 @@
 - `rtn = road-topology neighbor`
 - `fcf = function curve fit`
 - `tfh = topology-function hybrid`
+- `ctn = correlation-topology neighbor`
+- `ast = adaptive spatio-temporal fill`
+- `atfh = adaptive topology-function hybrid`
 
 ## Scenario IDs
 
 - `g_mcar_pt`
 - `ntb_mix`
 - `nso_mix`
+- `snh_mix`
 
 ## 路径索引
 
@@ -39,3 +44,4 @@
 - `path_aliases.json`: `results\rdm_exp\path_aliases.json`
 - `path_cleanup`: `results\rdm_exp\path_cleanup`
 - `comparison`: `results\rdm_exp\comparison`
+- `comparison_spatial_extension`: `results\rdm_exp\comparison_spatial_extension`

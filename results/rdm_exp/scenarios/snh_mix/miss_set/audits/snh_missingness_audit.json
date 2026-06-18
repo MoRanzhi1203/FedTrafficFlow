@@ -1,0 +1,64 @@
+{
+  "scenario_id": "snh_mix",
+  "mechanism": "spatial_neighbor_holdout",
+  "evaluation_protocol": "online_spatial_interpolation",
+  "uses_current_time_neighbors_allowed_for_spatial_methods": true,
+  "target_current_true_value_available_to_methods": false,
+  "future_information_allowed": false,
+  "masked_position_imputation_error_only": true,
+  "neighbor_protection_mode": "anchor",
+  "anchor_neighbor_count": 1,
+  "min_available_neighbors": 1,
+  "neighbor_protection_difference_from_legacy": "anchor mode protects only anchor neighbors instead of all preferred neighbors",
+  "placement_backend": "bitset",
+  "per_rate": {
+    "0.05": {
+      "scenario_tag": "snh_r05_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "observed_missing_rate": 0.050000000812567044,
+      "neighbor_observed_ratio": 1.0,
+      "min_available_neighbor_count": 1,
+      "max_available_neighbor_count": 2,
+      "event_count": 1675275,
+      "skipped_missing_slots": 0,
+      "candidate_rounds_total": 61
+    },
+    "0.10": {
+      "scenario_tag": "snh_r10_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "observed_missing_rate": 0.10000000162513409,
+      "neighbor_observed_ratio": 1.0,
+      "min_available_neighbor_count": 1,
+      "max_available_neighbor_count": 2,
+      "event_count": 3489485,
+      "skipped_missing_slots": 0,
+      "candidate_rounds_total": 61
+    },
+    "0.20": {
+      "scenario_tag": "snh_r20_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "observed_missing_rate": 0.19999999918743294,
+      "neighbor_observed_ratio": 1.0,
+      "min_available_neighbor_count": 1,
+      "max_available_neighbor_count": 1,
+      "event_count": 7777447,
+      "skipped_missing_slots": 0,
+      "candidate_rounds_total": 61
+    },
+    "0.30": {
+      "scenario_tag": "snh_r30_mix_s42",
+      "mask_file_count": 61,
+      "miss_data_file_count": 61,
+      "observed_missing_rate": 0.30000000081256706,
+      "neighbor_observed_ratio": 0.9967076313745947,
+      "min_available_neighbor_count": 0,
+      "max_available_neighbor_count": 1,
+      "event_count": 13786222,
+      "skipped_missing_slots": 0,
+      "candidate_rounds_total": 1220
+    }
+  }
+}
