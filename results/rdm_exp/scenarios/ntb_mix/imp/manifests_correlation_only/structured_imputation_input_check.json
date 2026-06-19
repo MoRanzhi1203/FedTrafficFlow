@@ -1,0 +1,84 @@
+{
+  "input_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\analysis\\node_intersection_flow_parquet",
+  "missingness_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set",
+  "mechanism": "node_temporal_block",
+  "scenario_tag": "mixed_short_mid_long",
+  "missing_rates": [
+    0.05,
+    0.1,
+    0.2,
+    0.3
+  ],
+  "chunk_count_expected": 61,
+  "node_subset_event_manifest": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\imp\\manifests_correlation_only\\node_temporal_block_events.csv",
+  "checks": [
+    {
+      "mechanism": "node_temporal_block",
+      "missing_rate": 0.05,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r05_mix_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\miss_data\\ntb_r05_mix_s42",
+      "missing_dataset_chunk_count": 61,
+      "is_complete": true,
+      "uses_row_index_mask": true,
+      "has_length_group": true,
+      "has_actual_length": true,
+      "has_node_subset_event": true,
+      "chunk_count_expected": 61,
+      "scenario_tag": "mixed_short_mid_long",
+      "sample_mask_columns": "[\"row_index\", \"节点ID\", \"时间段\", \"day_index\", \"global_time_index\", \"is_missing\", \"mechanism\", \"missing_rate_target\", \"actual_length\", \"length_group\", \"length_mode\"]"
+    },
+    {
+      "mechanism": "node_temporal_block",
+      "missing_rate": 0.1,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r10_mix_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\miss_data\\ntb_r10_mix_s42",
+      "missing_dataset_chunk_count": 61,
+      "is_complete": true,
+      "uses_row_index_mask": true,
+      "has_length_group": true,
+      "has_actual_length": true,
+      "has_node_subset_event": true,
+      "chunk_count_expected": 61,
+      "scenario_tag": "mixed_short_mid_long",
+      "sample_mask_columns": "[\"row_index\", \"节点ID\", \"时间段\", \"day_index\", \"global_time_index\", \"is_missing\", \"mechanism\", \"missing_rate_target\", \"actual_length\", \"length_group\", \"length_mode\"]"
+    },
+    {
+      "mechanism": "node_temporal_block",
+      "missing_rate": 0.2,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r20_mix_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\miss_data\\ntb_r20_mix_s42",
+      "missing_dataset_chunk_count": 61,
+      "is_complete": true,
+      "uses_row_index_mask": true,
+      "has_length_group": true,
+      "has_actual_length": true,
+      "has_node_subset_event": true,
+      "chunk_count_expected": 61,
+      "scenario_tag": "mixed_short_mid_long",
+      "sample_mask_columns": "[\"row_index\", \"节点ID\", \"时间段\", \"day_index\", \"global_time_index\", \"is_missing\", \"mechanism\", \"missing_rate_target\", \"actual_length\", \"length_group\", \"length_mode\"]"
+    },
+    {
+      "mechanism": "node_temporal_block",
+      "missing_rate": 0.3,
+      "mask_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\masks\\ntb_r30_mix_s42",
+      "mask_chunk_count": 61,
+      "missing_dataset_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\miss_data\\ntb_r30_mix_s42",
+      "missing_dataset_chunk_count": 61,
+      "is_complete": true,
+      "uses_row_index_mask": true,
+      "has_length_group": true,
+      "has_actual_length": true,
+      "has_node_subset_event": true,
+      "chunk_count_expected": 61,
+      "scenario_tag": "mixed_short_mid_long",
+      "sample_mask_columns": "[\"row_index\", \"节点ID\", \"时间段\", \"day_index\", \"global_time_index\", \"is_missing\", \"mechanism\", \"missing_rate_target\", \"actual_length\", \"length_group\", \"length_mode\"]"
+    }
+  ],
+  "notes_zh": [
+    "本轮只检查并补全 node_temporal_block / mixed_short_mid_long。",
+    "如果任何缺失率不是 61/61，则不应进入 impute 阶段。"
+  ]
+}

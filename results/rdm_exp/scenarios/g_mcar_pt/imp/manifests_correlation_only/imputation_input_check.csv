@@ -1,0 +1,5 @@
+﻿missing_rate,mask_dir,mask_chunk_count,missing_dataset_dir,missing_dataset_chunk_count,mask_scope,missing_unit,mask_uses_row_index,chunk_count_expected
+0.05,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r05_mcar_s42,61,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\miss_data\r05_mcar_s42,61,global,node_time_observation,True,61
+0.1,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r10_mcar_s42,61,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\miss_data\r10_mcar_s42,61,global,node_time_observation,True,61
+0.2,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r20_mcar_s42,61,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\miss_data\r20_mcar_s42,61,global,node_time_observation,True,61
+0.3,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\masks\r30_mcar_s42,61,E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\miss_set\miss_data\r30_mcar_s42,61,global,node_time_observation,True,61

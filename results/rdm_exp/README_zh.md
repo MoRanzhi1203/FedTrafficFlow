@@ -26,7 +26,6 @@
 - `hle = historical linear extrapolation`
 - `rtn = road-topology neighbor`
 - `fcf = function curve fit`
-- `tfh = topology-function hybrid`
 - `ctn = correlation-topology neighbor`
 - `ast = adaptive spatio-temporal fill`
 - `atfh = adaptive topology-function hybrid`

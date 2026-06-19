@@ -14,7 +14,6 @@ import pandas as pd
 
 METHOD_ALIASES = {
     "geo_neighbor_fill": "road_topology_neighbor_fill",
-    "geo_func_hybrid": "topology_function_hybrid",
 }
 
 METHOD_DISPLAY = {
@@ -23,7 +22,7 @@ METHOD_DISPLAY = {
     "historical_linear_extrapolation": "Historical linear extrapolation",
     "road_topology_neighbor_fill": "Road-topology neighbor",
     "function_curve_fit": "Function curve fit",
-    "topology_function_hybrid": "Topology-function hybrid",
+    "correlation_topology_neighbor_fill": "Correlation-topology neighbor",
 }
 
 DEFAULT_METHODS = [
@@ -32,7 +31,7 @@ DEFAULT_METHODS = [
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid",
+    "correlation_topology_neighbor_fill",
 ]
 
 FLOW_GROUPS = ["low_flow", "mid_flow", "high_flow"]

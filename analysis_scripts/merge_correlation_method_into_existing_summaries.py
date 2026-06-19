@@ -12,7 +12,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--legacy_summary_dir", required=True, type=Path)
     parser.add_argument("--correlation_summary_dir", required=True, type=Path)
     parser.add_argument("--output_summary_dir", required=True, type=Path)
-    parser.add_argument("--old_method", default="topology_function_hybrid", type=str)
+
     parser.add_argument("--new_method", default="correlation_topology_neighbor_fill", type=str)
     return parser.parse_args()
 

@@ -37,7 +37,6 @@ METHOD_ORDER = [
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid",
     "correlation_topology_neighbor_fill",
 ]
 REMOVED_METHODS = {"zero_fill"}
@@ -47,7 +46,6 @@ METHOD_DIR_ABBREVIATIONS = {
     "historical_linear_extrapolation": "hle",
     "road_topology_neighbor_fill": "rtn",
     "function_curve_fit": "fcf",
-    "topology_function_hybrid": "tfh",
     "correlation_topology_neighbor_fill": "ctn",
 }
 METHOD_FALLBACK_POLICY = {
@@ -56,7 +54,6 @@ METHOD_FALLBACK_POLICY = {
     "historical_linear_extrapolation": "fallback_to_current_day_forward_fill_when_history_is_insufficient",
     "road_topology_neighbor_fill": "fallback_to_current_day_forward_fill_when_no_topology_history_is_available",
     "function_curve_fit": "fallback_to_current_day_forward_fill_when_no_history_profile_is_available",
-    "topology_function_hybrid": "blend_topology_and_function_primary_predictions_or_fallback_to_current_day_forward_fill",
     "correlation_topology_neighbor_fill": "same-time positive-correlation topology neighbors -> mean_fill",
 }
 FLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]
@@ -1879,7 +1876,11 @@ def run_validate(args: argparse.Namespace, paths: StagePaths) -> dict[str, Any]:
         "uses_bidirectional_interpolation": False,
         "warmup_days": args.warmup_days,
         "main_metrics_exclude_warmup": args.exclude_warmup_from_main_metrics,
-        "fallback_policy": METHOD_FALLBACK_POLICY,
+        "fallback_policy": {
+            method: METHOD_FALLBACK_POLICY[method]
+            for method in args.impute_methods_parsed
+            if method in METHOD_FALLBACK_POLICY
+        },
         "non_mask_positions_preserved": True,
         "evaluation_only_on_mask_positions": True,
         "completeness": completeness_rows,

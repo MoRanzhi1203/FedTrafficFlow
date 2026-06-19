@@ -1,0 +1,23 @@
+{
+  "estimation_method": "sampled_global_clean_quantiles",
+  "sample_per_chunk": 50000,
+  "sample_count_total": 3050000,
+  "quantiles": {
+    "q33": 1488.5931803385417,
+    "q66": 2911.889729817708
+  },
+  "groups": {
+    "low_flow": {
+      "min_inclusive": 0.0,
+      "max_exclusive": 1488.5931803385417
+    },
+    "mid_flow": {
+      "min_inclusive": 1488.5931803385417,
+      "max_exclusive": 2911.889729817708
+    },
+    "high_flow": {
+      "min_inclusive": 2911.889729817708,
+      "max_inclusive": 10462.4521484375
+    }
+  }
+}

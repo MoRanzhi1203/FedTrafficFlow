@@ -6,5 +6,4 @@ multirate_flow_group_rmse_by_method.png,line,RMSE,all_6_methods_by_flow_group,5_
 multirate_mae_by_method.png,line,MAE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison
 multirate_nrmse_by_method.png,line,NRMSE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison
 multirate_rmse_by_method.png,line,RMSE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison
-multirate_rmse_by_method_nonzero_zoom.png,line,RMSE,nonzero_methods,5_10_20_30,False,Zoom view excluding zero fill
 multirate_smape_by_method.png,line,sMAPE,all_6_methods,5_10_20_30,True,Formal six-method direct comparison

@@ -23,7 +23,7 @@ METHOD_DISPLAY = {
     "historical_linear_extrapolation": "Historical linear extrapolation",
     "road_topology_neighbor_fill": "Road-topology neighbor",
     "function_curve_fit": "Function curve fit",
-    "topology_function_hybrid": "Topology-function hybrid",
+    "correlation_topology_neighbor_fill": "Correlation-topology neighbor",
 }
 
 SCENARIO_DISPLAY = {
@@ -50,7 +50,7 @@ DEFAULT_METHODS = [
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid",
+    "correlation_topology_neighbor_fill",
 ]
 
 DEFAULT_RATES = [0.05, 0.10, 0.20, 0.30]
@@ -67,11 +67,12 @@ PLOT_COLORS = {
     "mean_fill": "#4C72B0",
     "forward_fill": "#55A868",
     "historical_linear_extrapolation": "#C44E52",
-    "road_topology_neighbor_fill": "#8172B2",
+    "road_topology_neighbor_fill": "#8172B2",```
     "function_curve_fit": "#CCB974",
-    "topology_function_hybrid": "#64B5CD",
+    "correlation_topology_neighbor_fill": "#64B5CD",
+    "topology_function_hybrid": "#2A9D8F",
 }
-
+```
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(

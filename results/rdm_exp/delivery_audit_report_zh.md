@@ -50,8 +50,8 @@
 
 | 核查项 | 状态 | 证据 | 结论 |
 |---|---|---|---|
-| `global_missingness_imputation_pipeline.py` 方法集 | 已完成 | `METHOD_ORDER` 为 `mean_fill, forward_fill, historical_linear_extrapolation, road_topology_neighbor_fill, function_curve_fit, topology_function_hybrid`；`REMOVED_METHODS = {"zero_fill"}` | 正式全局补全脚本已切换到新方法集 |
-| `structured_missingness_imputation_pipeline.py` 方法集 | 已完成 | `METHOD_ORDER` 为相同六方法；`REMOVED_METHODS = {"zero_fill"}` | 正式结构化补全脚本已切换到新方法集 |
+| `global_missingness_imputation_pipeline.py` 方法集 | 已完成 | `METHOD_ORDER` 为 `mean_fill, forward_fill, historical_linear_extrapolation, correlation_topology_neighbor_fill, function_curve_fit`；`REMOVED_METHODS = {"zero_fill"}` | 正式全局补全脚本已切换到新方法集 |
+| `structured_missingness_imputation_pipeline.py` 方法集 | 已完成 | `METHOD_ORDER` 为 `mean_fill, forward_fill, historical_linear_extrapolation, correlation_topology_neighbor_fill, function_curve_fit`；`REMOVED_METHODS = {"zero_fill"}` | 正式结构化补全脚本已切换到新方法集 |
 | 两条正式 pipeline 是否存在明显未实现占位 | 已完成 | 目标文件中未发现 `TODO` / `FIXME` / `NotImplemented` / 尾行 `pass` | 在本次交付范围内未见明显未实现占位 |
 | structured 是否实现 visualization audit 输出 | 未完成 | `structured_missingness_imputation_pipeline.py` 中存在 `audit_json_name` 但未见 `visualization_audit` 相关逻辑 | structured 场景缺少与 global 对齐的 visualization audit 输出能力 |
 | comparison 重建脚本是否已支持新方法集 | 已完成 | `visualize_all_missingness_imputation_results.py` 含 `mean_fill`，并显式拒绝 `zero_fill` | comparison 脚本本身已支持正式新方法集，但结果目录未同步重建 |

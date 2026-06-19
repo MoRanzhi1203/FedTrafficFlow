@@ -36,33 +36,33 @@
 - mean_fill: `same_slot_7day_mean -> node_7day_mean -> slot_7day_mean -> global_7day_mean -> current_day_forward_fill`
 - forward_fill: `use_previous_slot_or_previous_day_last_slot_then_global_safe_fallback_zero`
 - historical_linear_extrapolation: `fallback_to_current_day_forward_fill_when_history_is_insufficient`
-- road_topology_neighbor_fill: `fallback_to_current_day_forward_fill_when_no_topology_history_is_available`
 - function_curve_fit: `fallback_to_current_day_forward_fill_when_no_history_profile_is_available`
-- topology_function_hybrid: `blend_topology_and_function_primary_predictions_or_fallback_to_current_day_forward_fill`
+- road_topology_neighbor_fill: `fallback_to_current_day_forward_fill_when_no_topology_history_is_available`
+- correlation_topology_neighbor_fill: `same-time positive-correlation topology neighbors -> mean_fill`
 
 ## 6. 输出完整性
 
 - rate=0.05, method=mean_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.05, method=forward_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.05, method=historical_linear_extrapolation, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.05, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.05, method=function_curve_fit, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.05, method=topology_function_hybrid, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.05, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.05, method=correlation_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.10, method=mean_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.10, method=forward_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.10, method=historical_linear_extrapolation, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.10, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.10, method=function_curve_fit, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.10, method=topology_function_hybrid, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.10, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.10, method=correlation_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.20, method=mean_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.20, method=forward_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.20, method=historical_linear_extrapolation, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.20, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.20, method=function_curve_fit, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.20, method=topology_function_hybrid, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.20, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.20, method=correlation_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.30, method=mean_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.30, method=forward_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.30, method=historical_linear_extrapolation, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.30, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
 - rate=0.30, method=function_curve_fit, imputed_chunk_count=61, expected=61, is_complete=True
-- rate=0.30, method=topology_function_hybrid, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.30, method=road_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True
+- rate=0.30, method=correlation_topology_neighbor_fill, imputed_chunk_count=61, expected=61, is_complete=True

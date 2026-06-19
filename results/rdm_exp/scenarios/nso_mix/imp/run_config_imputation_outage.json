@@ -17,9 +17,9 @@
     "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
-    "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid"
+    "road_topology_neighbor_fill",
+    "correlation_topology_neighbor_fill"
   ],
   "causal_history_only": true,
   "history_days": 7,

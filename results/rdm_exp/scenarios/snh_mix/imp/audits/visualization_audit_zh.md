@@ -9,7 +9,7 @@
 - methods_phase: `phase_1_six_baseline_methods`
 - methods_count: `6`
 - methods: `mean_fill, forward_fill, historical_linear_extrapolation, function_curve_fit, road_topology_neighbor_fill, correlation_topology_neighbor_fill`
-- removed_methods: `adaptive_spatio_temporal_fill, adaptive_topology_function_hybrid`
+- removed_methods: `adaptive_spatio_temporal_fill`
 - Methods: six baseline methods only.
 - No adaptive methods.
 - 允许使用当前时刻邻居观测值。
