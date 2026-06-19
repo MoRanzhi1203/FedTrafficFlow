@@ -67,12 +67,12 @@ PLOT_COLORS = {
     "mean_fill": "#4C72B0",
     "forward_fill": "#55A868",
     "historical_linear_extrapolation": "#C44E52",
-    "road_topology_neighbor_fill": "#8172B2",```
+    "road_topology_neighbor_fill": "#8172B2",
     "function_curve_fit": "#CCB974",
     "correlation_topology_neighbor_fill": "#64B5CD",
     "topology_function_hybrid": "#2A9D8F",
 }
-```
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -476,7 +476,7 @@ def build_length_group_best_table(length_df: pd.DataFrame) -> pd.DataFrame:
                     "historical_linear_extrapolation_rank": int(rank_map["historical_linear_extrapolation"]),
                     "function_curve_fit_rank": int(rank_map["function_curve_fit"]),
                     "road_topology_neighbor_fill_rank": int(rank_map["road_topology_neighbor_fill"]),
-                    "topology_function_hybrid_rank": int(rank_map["topology_function_hybrid"]),
+                    "correlation_topology_neighbor_fill_rank": int(rank_map["correlation_topology_neighbor_fill"]),
                     "notes": "Masked-position imputation error only; current best means the lowest value under this metric.",
                 }
             )
@@ -484,7 +484,6 @@ def build_length_group_best_table(length_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def save_rank_heatmap(
-    ranking_df: pd.DataFrame,
     title: str,
     output_png: Path,
     output_pdf: Path,
@@ -526,6 +525,10 @@ def build_heatmap_matrix(
                     (subset["method"] == method) & np.isclose(subset["missing_rate"], rate),
                     "rank",
                 ]
+                if value.empty:
+                    raise RuntimeError(
+                        f"No rank found for method={method}, rate={rate}, scenario={scenario}, metric={metric}"
+                    )
                 matrix[row_idx, col_idx] = int(value.iloc[0])
         return x_labels, methods, matrix
     x_labels = [f"{SCENARIO_DISPLAY[name]}\n{int(round(rate * 100))}%" for name in SCENARIO_ORDER for rate in rates]
@@ -540,6 +543,10 @@ def build_heatmap_matrix(
                     & np.isclose(subset["missing_rate"], rate),
                     "rank",
                 ]
+                if value.empty:
+                    raise RuntimeError(
+                        f"No rank found for scenario={scenario_name}, method={method}, rate={rate}, metric={metric}"
+                    )
                 matrix[row_idx, col_idx] = int(value.iloc[0])
                 col_idx += 1
     return x_labels, methods, matrix
@@ -803,7 +810,6 @@ def generate_all_outputs(
             rates=rates,
         )
         save_rank_heatmap(
-            ranking_df,
             f"{SCENARIO_DISPLAY[scenario]} RMSE Rank Heatmap",
             heatmap_png,
             heatmap_pdf,
@@ -833,7 +839,6 @@ def generate_all_outputs(
         rates=rates,
     )
     save_rank_heatmap(
-        ranking_df,
         "Cross-scenario RMSE Rank Heatmap",
         cross_heatmap_png,
         cross_heatmap_pdf,
