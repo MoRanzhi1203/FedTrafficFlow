@@ -38,6 +38,7 @@ METHOD_ORDER = [
     "road_topology_neighbor_fill",
     "function_curve_fit",
     "topology_function_hybrid",
+    "correlation_topology_neighbor_fill",
 ]
 REMOVED_METHODS = {"zero_fill"}
 METHOD_DIR_ABBREVIATIONS = {
@@ -47,6 +48,7 @@ METHOD_DIR_ABBREVIATIONS = {
     "road_topology_neighbor_fill": "rtn",
     "function_curve_fit": "fcf",
     "topology_function_hybrid": "tfh",
+    "correlation_topology_neighbor_fill": "ctn",
 }
 METHOD_FALLBACK_POLICY = {
     "mean_fill": "same_slot_7day_mean -> node_7day_mean -> slot_7day_mean -> global_7day_mean -> current_day_forward_fill",
@@ -55,6 +57,7 @@ METHOD_FALLBACK_POLICY = {
     "road_topology_neighbor_fill": "fallback_to_current_day_forward_fill_when_no_topology_history_is_available",
     "function_curve_fit": "fallback_to_current_day_forward_fill_when_no_history_profile_is_available",
     "topology_function_hybrid": "blend_topology_and_function_primary_predictions_or_fallback_to_current_day_forward_fill",
+    "correlation_topology_neighbor_fill": "same-time positive-correlation topology neighbors -> mean_fill",
 }
 FLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]
 EPSILON = 1e-6
@@ -111,6 +114,7 @@ class RateScanResult:
     history_road: deque[np.ndarray]
     history_function: deque[np.ndarray]
     history_hybrid: deque[np.ndarray]
+    history_clean: deque[np.ndarray]
 
 
 def parse_args() -> argparse.Namespace:
@@ -135,6 +139,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--time_col", required=True, type=str)
     parser.add_argument("--period", required=True, type=int)
     parser.add_argument("--topology_file", required=True, type=Path)
+    parser.add_argument("--correlation_history_days", default=14, type=int)
+    parser.add_argument("--neighbor_scope", default=2, type=int)
+    parser.add_argument("--allow_current_time_neighbors", default="true", type=str)
+    parser.add_argument("--manifests_subdir", default="manifests", type=str)
+    parser.add_argument("--summaries_subdir", default="summaries", type=str)
+    parser.add_argument("--audits_subdir", default="audits", type=str)
+    parser.add_argument("--figures_subdir", default="figures", type=str)
+    parser.add_argument("--run_config_name", default="run_config_imputation.json", type=str)
+    parser.add_argument("--run_commands_name", default="run_commands_imputation.txt", type=str)
     return parser.parse_args()
 
 
@@ -173,10 +186,8 @@ def parse_methods(raw: str) -> list[str]:
             raise ValueError(f"unsupported imputation method: {token}")
         if normalized not in parsed:
             parsed.append(normalized)
-    if parsed != METHOD_ORDER:
-        missing_methods = [method for method in METHOD_ORDER if method not in parsed]
-        if missing_methods:
-            raise ValueError(f"required methods missing from --impute_methods: {missing_methods}")
+    if not parsed:
+        raise ValueError("impute_methods is empty")
     return parsed
 
 
@@ -209,19 +220,20 @@ def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
         handle.write(json.dumps(to_serializable(payload), ensure_ascii=False) + "\n")
 
 
-def build_paths(output_dir: Path) -> StagePaths:
+def build_paths(args: argparse.Namespace) -> StagePaths:
+    output_dir = args.output_dir
     return StagePaths(
         root=output_dir,
-        manifests_dir=output_dir / "manifests",
-        audits_dir=output_dir / "audits",
-        summaries_dir=output_dir / "summaries",
-        figures_dir=output_dir / "figures",
+        manifests_dir=output_dir / args.manifests_subdir,
+        audits_dir=output_dir / args.audits_subdir,
+        summaries_dir=output_dir / args.summaries_subdir,
+        figures_dir=output_dir / args.figures_subdir,
         imputed_datasets_dir=output_dir / "imp_data",
-        run_config_path=output_dir / "run_config_imputation.json",
-        run_commands_path=output_dir / "run_commands_imputation.txt",
-        chunk_status_path=output_dir / "manifests" / "imputed_chunk_status.csv",
-        chunk_state_log_path=output_dir / "manifests" / "imputed_chunk_runtime_state.jsonl",
-        resume_scan_path=output_dir / "manifests" / "imputed_resume_scan.csv",
+        run_config_path=output_dir / args.run_config_name,
+        run_commands_path=output_dir / args.run_commands_name,
+        chunk_status_path=(output_dir / args.manifests_subdir) / "imputed_chunk_status.csv",
+        chunk_state_log_path=(output_dir / args.manifests_subdir) / "imputed_chunk_runtime_state.jsonl",
+        resume_scan_path=(output_dir / args.manifests_subdir) / "imputed_resume_scan.csv",
     )
 
 
@@ -281,6 +293,12 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("exclude_warmup_from_main_metrics must be true")
     if args.period <= 0:
         raise ValueError("period must be positive")
+    if args.neighbor_scope <= 0:
+        raise ValueError("neighbor_scope must be positive")
+    if args.correlation_history_days <= 0:
+        raise ValueError("correlation_history_days must be positive")
+    if "correlation_topology_neighbor_fill" in args.impute_methods_parsed and not parse_bool(args.allow_current_time_neighbors):
+        raise ValueError("correlation_topology_neighbor_fill requires --allow_current_time_neighbors true")
 
 
 def list_clean_files(input_dir: Path) -> list[Path]:
@@ -531,8 +549,11 @@ def compute_method_outputs(
     history_road: deque[np.ndarray],
     history_function: deque[np.ndarray],
     history_hybrid: deque[np.ndarray],
+    history_clean: deque[np.ndarray],
     weight_matrix: sparse.csr_matrix,
     row_sums: np.ndarray,
+    topology_candidates: dict[int, dict[str, np.ndarray]],
+    correlation_history_days: int,
     basis: np.ndarray,
     pseudo_inverse: np.ndarray,
 ) -> dict[str, tuple[np.ndarray, np.ndarray]]:
@@ -580,6 +601,18 @@ def compute_method_outputs(
         forward_imputed,
         lam=0.5,
     )
+    masked_node_indices, masked_slot_indices = np.where(prepared.mask_matrix)
+    corr_stack = historical_stack(history_clean, last_n=correlation_history_days)
+    ctn_imputed, ctn_fallback = spatial_current_prediction(
+        missing_matrix=prepared.missing_sorted,
+        mask_matrix=prepared.mask_matrix,
+        mean_fill=mean_imputed,
+        node_indices=masked_node_indices.astype(np.int64, copy=False),
+        slot_indices=masked_slot_indices.astype(np.int64, copy=False),
+        topology_candidates=topology_candidates,
+        history_stack_corr=corr_stack,
+        correlation_mode=True,
+    )
     return {
         "mean_fill": (mean_imputed, mean_fallback),
         "forward_fill": (forward_imputed, forward_fallback),
@@ -587,6 +620,7 @@ def compute_method_outputs(
         "road_topology_neighbor_fill": (road_imputed, road_fallback),
         "function_curve_fit": (function_imputed, function_fallback),
         "topology_function_hybrid": (hybrid_imputed, hybrid_fallback),
+        "correlation_topology_neighbor_fill": (ctn_imputed, ctn_fallback),
     }
 
 
@@ -600,12 +634,16 @@ def update_histories_from_outputs(
     history_function: deque[np.ndarray],
     history_hybrid: deque[np.ndarray],
 ) -> np.ndarray:
-    forward_imputed = method_outputs["forward_fill"][0]
+    forward_imputed = method_outputs.get("forward_fill", (observed_matrix, None))[0]
+    linear_imputed = method_outputs.get("historical_linear_extrapolation", (observed_matrix, None))[0]
+    road_imputed = method_outputs.get("road_topology_neighbor_fill", (observed_matrix, None))[0]
+    function_imputed = method_outputs.get("function_curve_fit", (observed_matrix, None))[0]
+    hybrid_imputed = method_outputs.get("topology_function_hybrid", (observed_matrix, None))[0]
     history_observed.append(observed_matrix.copy())
-    history_linear.append(method_outputs["historical_linear_extrapolation"][0].copy())
-    history_road.append(method_outputs["road_topology_neighbor_fill"][0].copy())
-    history_function.append(method_outputs["function_curve_fit"][0].copy())
-    history_hybrid.append(method_outputs["topology_function_hybrid"][0].copy())
+    history_linear.append(linear_imputed.copy())
+    history_road.append(road_imputed.copy())
+    history_function.append(function_imputed.copy())
+    history_hybrid.append(hybrid_imputed.copy())
     return forward_imputed[:, -1].copy()
 
 
@@ -754,10 +792,195 @@ def build_topology_matrix(topology_file: Path, ref_node_ids: np.ndarray) -> tupl
     return weight_matrix, row_sums
 
 
-def historical_stack(history: deque[np.ndarray]) -> np.ndarray | None:
+def build_topology_candidates(topology_file: Path, ref_node_ids: np.ndarray, max_scope: int) -> dict[int, dict[str, np.ndarray]]:
+    topo_df = pd.read_csv(topology_file, usecols=["起始节点ID", "结束节点ID", "长度"])
+    node_to_idx = {int(node_id): idx for idx, node_id in enumerate(ref_node_ids.tolist())}
+    first_hop_sets: list[set[int]] = [set() for _ in range(len(ref_node_ids))]
+    first_hop_lengths: list[dict[int, float]] = [dict() for _ in range(len(ref_node_ids))]
+    for start, end, length in topo_df.itertuples(index=False, name=None):
+        start_idx = node_to_idx.get(int(start))
+        end_idx = node_to_idx.get(int(end))
+        if start_idx is None or end_idx is None or start_idx == end_idx:
+            continue
+        safe_length = float(length) if pd.notna(length) and float(length) > 0 else 1.0
+        first_hop_sets[start_idx].add(end_idx)
+        first_hop_sets[end_idx].add(start_idx)
+        prev = first_hop_lengths[start_idx].get(end_idx)
+        if prev is None or safe_length < prev:
+            first_hop_lengths[start_idx][end_idx] = safe_length
+        prev = first_hop_lengths[end_idx].get(start_idx)
+        if prev is None or safe_length < prev:
+            first_hop_lengths[end_idx][start_idx] = safe_length
+    second_hop_lengths: list[dict[int, float]] = [dict() for _ in range(len(ref_node_ids))]
+    if max_scope >= 2:
+        for node_idx, neighbors in enumerate(first_hop_sets):
+            for mid_idx in neighbors:
+                length_to_mid = first_hop_lengths[node_idx][mid_idx]
+                for second_idx in first_hop_sets[mid_idx]:
+                    if second_idx == node_idx or second_idx in neighbors:
+                        continue
+                    total_length = length_to_mid + first_hop_lengths[mid_idx][second_idx]
+                    prev = second_hop_lengths[node_idx].get(second_idx)
+                    if prev is None or total_length < prev:
+                        second_hop_lengths[node_idx][second_idx] = total_length
+    output: dict[int, dict[str, np.ndarray]] = {}
+    for node_idx in range(len(ref_node_ids)):
+        first_neighbors = np.asarray(sorted(first_hop_sets[node_idx]), dtype=np.int64)
+        first_lengths = np.asarray(
+            [float(first_hop_lengths[node_idx][neighbor]) for neighbor in first_neighbors.tolist()],
+            dtype=np.float32,
+        )
+        if len(first_neighbors) > 0:
+            neighbors = first_neighbors
+            lengths = first_lengths
+            scope = 1
+        else:
+            second_neighbors = np.asarray(sorted(second_hop_lengths[node_idx].keys()), dtype=np.int64)
+            second_lengths = np.asarray(
+                [float(second_hop_lengths[node_idx][neighbor]) for neighbor in second_neighbors.tolist()],
+                dtype=np.float32,
+            )
+            neighbors = second_neighbors
+            lengths = second_lengths
+            scope = 2 if len(second_neighbors) > 0 else 0
+        output[node_idx] = {
+            "neighbors": neighbors,
+            "lengths": lengths,
+            "scope": np.asarray([scope], dtype=np.int64),
+        }
+    return output
+
+
+def historical_stack(history: deque[np.ndarray], last_n: int | None = None) -> np.ndarray | None:
     if not history:
         return None
-    return np.stack(list(history), axis=0).astype(np.float32, copy=False)
+    values = list(history)[-last_n:] if last_n is not None else list(history)
+    return np.stack(values, axis=0).astype(np.float32, copy=False)
+
+
+def correlation_for_pair(target_series: np.ndarray, neighbor_series: np.ndarray) -> float:
+    valid = np.isfinite(target_series) & np.isfinite(neighbor_series)
+    if int(valid.sum()) < 8:
+        return 0.0
+    x = target_series[valid].astype(np.float64, copy=False)
+    y = neighbor_series[valid].astype(np.float64, copy=False)
+    x_std = float(np.std(x))
+    y_std = float(np.std(y))
+    if x_std <= EPSILON or y_std <= EPSILON:
+        return 0.0
+    corr = float(np.corrcoef(x, y)[0, 1])
+    if not np.isfinite(corr):
+        return 0.0
+    return corr
+
+
+def build_target_neighbor_cache(
+    *,
+    target_idx: int,
+    history_stack_corr: np.ndarray | None,
+    topology_candidates: dict[int, dict[str, np.ndarray]],
+) -> dict[str, Any]:
+    candidate_info = topology_candidates[target_idx]
+    neighbors = candidate_info["neighbors"]
+    lengths = candidate_info["lengths"]
+    scope = int(candidate_info["scope"][0]) if len(candidate_info["scope"]) else 0
+    if history_stack_corr is None or history_stack_corr.shape[0] == 0 or len(neighbors) == 0:
+        return {
+            "neighbors": neighbors,
+            "lengths": lengths,
+            "scope": scope,
+            "corr": np.zeros(len(neighbors), dtype=np.float32),
+            "mu_i": 0.0,
+            "sigma_i": 1.0,
+            "mu_j": np.zeros(len(neighbors), dtype=np.float32),
+            "sigma_j": np.ones(len(neighbors), dtype=np.float32),
+        }
+    target_hist = history_stack_corr[:, target_idx, :].reshape(-1).astype(np.float32, copy=False)
+    mu_i = float(np.nanmean(target_hist)) if np.isfinite(target_hist).any() else 0.0
+    sigma_i = float(np.nanstd(target_hist)) if np.isfinite(target_hist).any() else 1.0
+    corr_values = np.zeros(len(neighbors), dtype=np.float32)
+    mu_j = np.zeros(len(neighbors), dtype=np.float32)
+    sigma_j = np.ones(len(neighbors), dtype=np.float32)
+    for idx, neighbor_idx in enumerate(neighbors.tolist()):
+        neighbor_hist = history_stack_corr[:, int(neighbor_idx), :].reshape(-1).astype(np.float32, copy=False)
+        corr_values[idx] = correlation_for_pair(target_hist, neighbor_hist)
+        mu_j[idx] = float(np.nanmean(neighbor_hist)) if np.isfinite(neighbor_hist).any() else 0.0
+        sigma_j[idx] = float(np.nanstd(neighbor_hist)) if np.isfinite(neighbor_hist).any() else 1.0
+    return {
+        "neighbors": neighbors,
+        "lengths": lengths,
+        "scope": scope,
+        "corr": corr_values,
+        "mu_i": mu_i,
+        "sigma_i": sigma_i,
+        "mu_j": mu_j,
+        "sigma_j": sigma_j,
+    }
+
+
+def spatial_current_prediction(
+    *,
+    missing_matrix: np.ndarray,
+    mask_matrix: np.ndarray,
+    mean_fill: np.ndarray,
+    node_indices: np.ndarray,
+    slot_indices: np.ndarray,
+    topology_candidates: dict[int, dict[str, np.ndarray]],
+    history_stack_corr: np.ndarray | None,
+    correlation_mode: bool,
+) -> tuple[np.ndarray, np.ndarray]:
+    imputed = mean_fill.copy()
+    fallback = mask_matrix.copy()
+    unique_nodes = np.unique(node_indices)
+    target_cache: dict[int, dict[str, Any]] = {}
+    for target_idx in unique_nodes.tolist():
+        selector = node_indices == target_idx
+        slots = slot_indices[selector]
+        cache = target_cache.get(int(target_idx))
+        if cache is None:
+            cache = build_target_neighbor_cache(
+                target_idx=int(target_idx),
+                history_stack_corr=history_stack_corr,
+                topology_candidates=topology_candidates,
+            )
+            target_cache[int(target_idx)] = cache
+        neighbors = cache["neighbors"]
+        if len(neighbors) == 0:
+            continue
+        current_values = missing_matrix[neighbors][:, slots]
+        available = np.isfinite(current_values)
+        if correlation_mode:
+            positive = available & (cache["corr"][:, None] > 0.05)
+            base_weights = np.where(
+                cache["corr"] > 0.05,
+                np.maximum(cache["corr"], 0.0) / np.power(cache["lengths"] + EPSILON, 1.0),
+                0.0,
+            ).astype(np.float32)
+            weight_matrix = base_weights[:, None] * positive.astype(np.float32)
+            z_values = np.where(
+                positive,
+                (current_values - cache["mu_j"][:, None]) / (cache["sigma_j"][:, None] + EPSILON),
+                0.0,
+            )
+            numerator = np.sum(weight_matrix * z_values, axis=0, dtype=np.float32)
+            denominator = np.sum(weight_matrix, axis=0, dtype=np.float32)
+            success = denominator > EPSILON
+            predictions = np.full(len(slots), np.nan, dtype=np.float32)
+            predictions[success] = cache["mu_i"] + (
+                max(cache["sigma_i"], EPSILON) * (numerator[success] / denominator[success])
+            )
+        else:
+            base_weights = (1.0 / (cache["lengths"] + EPSILON)).astype(np.float32)
+            weight_matrix = base_weights[:, None] * available.astype(np.float32)
+            numerator = np.sum(weight_matrix * np.where(available, current_values, 0.0), axis=0, dtype=np.float32)
+            denominator = np.sum(weight_matrix, axis=0, dtype=np.float32)
+            success = denominator > EPSILON
+            predictions = np.full(len(slots), np.nan, dtype=np.float32)
+            predictions[success] = numerator[success] / denominator[success]
+        if np.any(success):
+            imputed[int(target_idx), slots[success]] = predictions[success]
+            fallback[int(target_idx), slots[success]] = False
+    return imputed.astype(np.float32, copy=False), fallback
 
 
 def compute_global_median(history: deque[np.ndarray]) -> float:
@@ -1191,8 +1414,9 @@ def plot_metric(summary_df: pd.DataFrame, metric: str, output_png: Path, output_
     overall_df = summary_df.loc[summary_df["flow_group"] == "overall"].copy()
     if overall_df.empty:
         raise RuntimeError(f"cannot plot {metric}: overall summary is empty")
+    methods = [method for method in METHOD_ORDER if method in set(overall_df["method"].astype(str))]
     plt.figure(figsize=(10, 6))
-    for method in METHOD_ORDER:
+    for method in methods:
         method_df = overall_df.loc[overall_df["method"] == method].sort_values("missing_rate")
         plt.plot(method_df["missing_rate"], method_df[metric], marker="o", linewidth=2, label=method)
     plt.xlabel("Missing Rate")
@@ -1211,10 +1435,11 @@ def plot_flow_group_rmse(summary_df: pd.DataFrame, output_png: Path, output_pdf:
     flow_df = summary_df.loc[summary_df["flow_group"].isin(FLOW_GROUP_LABELS)].copy()
     if flow_df.empty:
         raise RuntimeError("cannot plot flow-group RMSE because grouped summary is empty")
+    methods = [method for method in METHOD_ORDER if method in set(flow_df["method"].astype(str))]
     fig, axes = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
     for axis, group_label in zip(axes, FLOW_GROUP_LABELS):
         group_df = flow_df.loc[flow_df["flow_group"] == group_label]
-        for method in METHOD_ORDER:
+        for method in methods:
             method_df = group_df.loc[group_df["method"] == method].sort_values("missing_rate")
             axis.plot(method_df["missing_rate"], method_df["rmse"], marker="o", linewidth=1.8, label=method)
         axis.set_title(group_label)
@@ -1257,6 +1482,7 @@ def scan_existing_outputs_for_rate(
     history_road: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_function: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_hybrid: deque[np.ndarray] = deque(maxlen=args.history_days)
+    history_clean: deque[np.ndarray] = deque(maxlen=max(args.history_days, args.correlation_history_days))
     forward_last_state: np.ndarray | None = None
 
     resume_chunk_index = len(clean_files)
@@ -1319,6 +1545,7 @@ def scan_existing_outputs_for_rate(
             history_function=history_function,
             history_hybrid=history_hybrid,
         )
+        history_clean.append(prepared.clean_sorted.copy())
 
     return RateScanResult(
         missing_rate=rate,
@@ -1332,6 +1559,7 @@ def scan_existing_outputs_for_rate(
         history_road=copy_history(history_road, args.history_days),
         history_function=copy_history(history_function, args.history_days),
         history_hybrid=copy_history(history_hybrid, args.history_days),
+        history_clean=copy_history(history_clean, max(args.history_days, args.correlation_history_days)),
     )
 
 
@@ -1352,6 +1580,7 @@ def run_impute(
         output_path=paths.manifests_dir / "flow_group_thresholds.json",
     )
     weight_matrix, row_sums = build_topology_matrix(args.topology_file, ref_node_ids)
+    topology_candidates = build_topology_candidates(args.topology_file, ref_node_ids, args.neighbor_scope)
     basis, pseudo_inverse = build_fourier_basis(args.period, order=3)
     existing_status_df, existing_detail_df = load_existing_progress(paths)
 
@@ -1405,6 +1634,7 @@ def run_impute(
         history_road = copy_history(scan_result.history_road, args.history_days)
         history_function = copy_history(scan_result.history_function, args.history_days)
         history_hybrid = copy_history(scan_result.history_hybrid, args.history_days)
+        history_clean = copy_history(scan_result.history_clean, max(args.history_days, args.correlation_history_days))
         forward_last_state = None if scan_result.forward_last_state is None else scan_result.forward_last_state.copy()
 
         missing_dir = missing_subdir(args.missingness_dir, rate, args.mechanism, args.seed)
@@ -1436,8 +1666,11 @@ def run_impute(
                 history_road=history_road,
                 history_function=history_function,
                 history_hybrid=history_hybrid,
+                history_clean=history_clean,
                 weight_matrix=weight_matrix,
                 row_sums=row_sums,
+                topology_candidates=topology_candidates,
+                correlation_history_days=args.correlation_history_days,
                 basis=basis,
                 pseudo_inverse=pseudo_inverse,
             )
@@ -1519,6 +1752,7 @@ def run_impute(
                 history_function=history_function,
                 history_hybrid=history_hybrid,
             )
+            history_clean.append(prepared.clean_sorted.copy())
             persist_status_snapshot(status_rows, paths)
             persist_detail_snapshot(detail_rows, paths)
             append_jsonl(
@@ -1769,7 +2003,7 @@ def main() -> None:
     args.exclude_warmup_from_main_metrics = parse_bool(args.exclude_warmup_from_main_metrics)
     validate_args(args)
 
-    paths = build_paths(args.output_dir)
+    paths = build_paths(args)
     mkdirs(paths)
     write_run_artifacts(args, paths)
 
