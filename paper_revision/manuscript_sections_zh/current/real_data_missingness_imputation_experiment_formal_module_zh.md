@@ -1,37 +1,108 @@
-# 真实数据缺失值设置与缺失值补全实验
+# 真实数据缺失设置与插补恢复实验
 
-## 实验定位与设计目标
+## 1. 引言
 
-在正式论文结构中，真实数据缺失值设置与缺失值补全实验可视为真实数据分析链路中的上游鲁棒性验证模块，其职责并不是替代后续联邦交通流预测实验，而是在真实节点级流量序列已经完成清洗、聚合与完整性核验的前提下，进一步检验观测缺失对数据可用性的影响，以及不同补全策略在严格因果约束下恢复真实信号的能力。与前期仿真实验强调标准 FedAvg 在受控 Non-IID 条件下的预测有效性不同，本模块关注的是“真实输入数据在缺失扰动下的可恢复性”，因此报告的核心评价对象是 masked-position imputation error，而不是交通流预测误差。
+真实交通流分析通常建立在连续、稳定且可追溯的观测序列基础之上。然而，在实际采集链路中，传感器离线、通信中断、局部数据阻塞与空间节点可见性不均等因素会引入多类型缺失，从而影响后续预测模型的输入质量与统计结论的可靠性。已有研究普遍指出，缺失机制的结构特征将直接决定恢复难度与误差传播路径，因此在进入真实数据联邦预测分析之前，有必要对真实节点级交通流序列的缺失鲁棒性进行独立评估 [Ref-M1, Ref-M2]。
 
-本实验延续项目在前期模块中的统一写作口径与证据组织方式，围绕以下三个目标展开：
+本节以项目已完成预处理的真实节点级交通流数据为基础，构造四类可复现缺失场景，并系统评估六种正式插补方法在不同缺失比例与不同信息边界下的恢复性能。与前述仿真实验聚焦标准 FedAvg 在受控 Non-IID 预测场景中的表现不同，本节关注的是输入数据层面的可恢复性，因此核心评价对象为掩码位置插补误差（masked-position imputation error），而非交通流预测误差。
 
-1. 在真实节点级交通流数据上构造可复现、可审计的缺失场景，覆盖全局点级完全随机缺失、两类时间结构化非随机缺失以及一类空间邻域约束缺失；
-2. 在严格历史因果约束下，对六种正式补全方法进行一致评估，比较其在不同缺失比例和不同缺失结构下的误差表现；
-3. 为后续真实数据预测实验提供数据质量鲁棒性证据，并与前期仿真实验中关于图结构、周期性与异质性影响的结论形成上游数据层面的交叉验证。
+本节的科学问题可以概括为三点。第一，在完整真实数据基线上，如何构造兼具可重复性、可审计性与机制解释性的缺失场景。第二，在严格历史因果约束与在线空间插补两类信息边界下，不同插补方法的性能差异如何表现。第三，这些恢复结果能否为后续真实数据预测实验提供上游数据质量证据，并与仿真实验中关于图结构、周期性和异质性的重要发现形成相互支撑 [Ref-F1, Ref-G1]。
 
-需要强调的是，项目在 `results\rdm_exp` 目录下一共登记了四类缺失场景：`g_mcar_pt`、`ntb_mix`、`nso_mix` 和 `snh_mix`。四类场景均属于本文正文内容。其中，`g_mcar_pt`、`ntb_mix` 和 `nso_mix` 构成严格历史因果补全主链路，适合放入统一主表比较；`snh_mix` 构成在线空间插补主链路，虽然评价协议不同，但同样作为已完成的正文模块单列分析，而不是验证阶段的扩展附录内容。
+需要说明的是，本文涉及四类正式场景：全局点级完全随机缺失（global MCAR point, `g_mcar_pt`）、节点连续时间块缺失（node temporal block, `ntb_mix`）、节点子集连续离线缺失（node subset temporal outage, `nso_mix`）以及空间邻居保留型目标节点连续缺失（spatial neighbor holdout, `snh_mix`）。其中，前三类场景共享严格历史因果补全协议，可放入统一主表比较；`snh_mix` 采用在线空间插补协议，允许使用当前时刻邻居观测，因此在正文中作为独立结果模块分析。该组织方式与仿真实验章节中“统一主线 + 专门结果分支”的写法保持一致，有利于章节迁移至 SCI 论文主体时维持逻辑连续性。
 
-## 真实数据基础与前序链路衔接
+## 2. 材料与方法
 
-前期真实数据预处理结果表明，项目已经形成了从原始路段与路网文件到节点级流量时序数据的完整转换链路。当前真实数据实验的直接输入目录为 `data\analysis\node_intersection_flow_parquet`，该目录对应 61 个日分片、42,031 个节点、每日 96 个时间片的节点级流量观测。预处理审计显示，总唯一观测对数为 `246,133,536`，缺失记录、重复记录、空值、NaN 与负值计数均为 `0`，说明缺失实验并不是在原始脏数据上“被动修补”，而是在完整基准数据上“主动施加可控缺失”，从而保证补全误差可以与真实值逐点对照。
+### 2.1 数据基础与前序预处理衔接
 
-从方法链路上看，本实验与前期仿真实验之间存在三层衔接关系。第一，二者都采用日内 96 时间片组织的时序结构，强调交通状态的周期性规律；第二，二者都将道路拓扑视为重要的空间先验，只是仿真实验在预测模型内部利用图结构，本实验则在数据补全过程中利用 `rnsd_processed.csv` 提供的拓扑邻接；第三，二者都强调避免把不同任务的指标混为一谈，仿真实验报告预测误差，本实验报告补全误差。因而，本模块的意义在于回答：在真实数据已经满足较高完整性标准的前提下，若后续观测链路出现可控缺失，哪些补全策略能够最大程度保留原始信号结构，从而为下游联邦训练提供更稳定的输入。
+本实验直接使用 `data\analysis\node_intersection_flow_parquet` 中的节点级交通流数据。该数据由原始路网文件、速度观测与派生交通指标经过清洗、聚合与节点映射后形成，覆盖 61 个日分片、42,031 个节点、每日 96 个时间片，总唯一观测对数为 246,133,536。预处理审计表明，基准数据中缺失记录、重复记录、空值、NaN 与负值均为 0，因此本节所有插补误差都建立在“完整真值可回溯”的前提下。
 
-## 实验环境配置与可复现性
+前序预处理模块已经验证观测节点与拓扑节点的一致性，这为道路拓扑邻接插补和相关性拓扑邻接插补提供了空间先验基础。同时，真实流量序列表现出的日内周期性也为历史均值、线性外推与函数曲线拟合等方法提供了统计支撑。因而，本节并非在原始脏数据上进行被动修复，而是在完整基准之上主动施加可控缺失，从而将恢复误差与真实值进行逐点比较。
 
-**表 1 实验环境与关键复现参数**
+### 2.2 问题定义与评价指标
+
+设完整真实数据可表示为
+
+$$
+\mathcal{Y}=\{y_{d,n,t}\mid d\in\mathcal{D},\, n\in\mathcal{N},\, t\in\mathcal{T}\},
+$$
+
+其中 $d$ 表示日期索引，$n$ 表示节点索引，$t$ 表示日内时间片索引，且 $|\mathcal{T}|=96$。在给定缺失机制 $m$ 与目标缺失率 $r$ 的条件下，定义缺失掩码集合为 $\Omega_{m,r}$，其对应的观测集合为 $\mathcal{O}_{m,r}=\mathcal{Y}\setminus\Omega_{m,r}$。插补任务可记为构造函数
+
+$$
+\hat{y}_{d,n,t}=f_{\theta}(\mathcal{O}_{m,r},\mathcal{C}_{d,n,t}),
+$$
+
+其中 $\mathcal{C}_{d,n,t}$ 表示在协议边界内可访问的上下文信息。对于严格历史因果协议，$\mathcal{C}_{d,n,t}$ 仅包含目标节点过去 7 天及当日当前时刻之前的信息；对于在线空间插补协议，$\mathcal{C}_{d,n,t}$ 还允许包含当前时刻邻居节点观测，但不允许使用目标节点当前真实值或未来信息。
+
+所有性能指标均仅在掩码位置上计算。设掩码位置总数为 $M$，真实值为 $y_i$，插补值为 $\hat{y}_i$，则主要评价指标定义为：
+
+$$
+\mathrm{MAE}=\frac{1}{M}\sum_{i=1}^{M}|y_i-\hat{y}_i|,
+$$
+
+$$
+\mathrm{RMSE}=\sqrt{\frac{1}{M}\sum_{i=1}^{M}(y_i-\hat{y}_i)^2},
+$$
+
+$$
+\mathrm{sMAPE}=\frac{1}{M}\sum_{i=1}^{M}\frac{2|y_i-\hat{y}_i|}{|y_i|+|\hat{y}_i|+\varepsilon},
+$$
+
+$$
+\mathrm{NRMSE}=\frac{\mathrm{RMSE}}{y_{\max}-y_{\min}}.
+$$
+
+其中 $\varepsilon$ 为避免分母为零的极小常数。RMSE 与 MAE 作为主结果指标，sMAPE 与 NRMSE 用于辅助解释相对误差和跨场景尺度差异。由于目标变量为连续型交通流量，本节不引入 F1-score 等分类指标。
+
+### 2.3 缺失场景设计
+
+四类场景统一覆盖 5%、10%、20% 和 30% 四个目标缺失率，分别对应低、中、高缺失强度区间。场景设计兼顾统计学缺失机制、工程可复现性以及交通采集链路中的实际失效形态。
+
+**表 1 四类缺失场景定义**
+
+| 场景 ID | 中文名称 | 机制名称 | 信息边界 | 结构特征 | 在正文中的角色 |
+|---|---|---|---|---|---|
+| `g_mcar_pt` | 全局 MCAR 点级随机缺失 | global MCAR point | 严格历史因果 | 全局点级抽样，不形成连续块 | 统一主表场景 |
+| `ntb_mix` | 节点连续时间块缺失 | node temporal block | 严格历史因果 | 单节点连续时间块，短中长混合 | 统一主表场景 |
+| `nso_mix` | 节点子集连续离线缺失 | node subset temporal outage | 严格历史因果 | 部分节点在同一时段共同离线 | 统一主表场景 |
+| `snh_mix` | 空间邻居保留型目标节点连续缺失 | spatial neighbor holdout | 在线空间插补 | 目标节点连续缺失，同时保留当前邻居观测 | 正文独立场景 |
+
+`g_mcar_pt` 以单个 $(d,n,t)$ 观测为缺失单位，通过不放回抽样控制全局缺失计数，因此属于完全随机缺失（missing completely at random, MCAR）。`ntb_mix` 与 `nso_mix` 均采用 `mixed_short_mid_long` 事件长度模式，其中短块长度为 1-4、中块长度为 5-12、长块长度为 13-24 个时间片，采样概率分别为 0.4、0.4 和 0.2。二者均保留 `row_index` 级别掩码，只修改目标列，因此可用于掩码位置误差的精确统计。
+
+两类结构化场景的差异在于缺失结构。`ntb_mix` 主要破坏单节点时间连续性，更接近单点采集链路的连续中断；`nso_mix` 表现为部分节点在同一时段共同离线，更接近局部区域设备故障或通信阻塞。`snh_mix` 则进一步放宽信息边界，使目标节点缺失时刻的邻居观测仍然可见，从而构成在线空间插补问题。
+
+### 2.4 插补协议与方法集合
+
+前三类主表场景遵循一致的严格历史因果协议：仅使用过去 7 天历史，设 `context_days_before = 7`、`context_days_after = 0`、`warmup_days = 7`，禁止 backfill、双向插值及未来信息访问。`snh_mix` 采用在线空间插补协议：允许使用当前时刻邻居观测，但同样禁止访问目标节点当前真实值以及未来时刻或未来日期的信息。
+
+所有场景统一评估六种正式方法：
+
+**表 2 插补方法及其方法学要点**
+
+| 方法 | 英文名称 | 核心思想 | 主要依赖或退化路径 |
+|---|---|---|---|
+| `mean_fill` | Mean fill | 基于同节点同时间片与多级统计量的历史均值回填 | 历史统计均值链式退化 |
+| `forward_fill` | Forward fill | 沿时间方向使用已有历史观测进行单向回填 | `previous_slot -> previous_day_last_slot` |
+| `historical_linear_extrapolation` | Historical linear extrapolation | 利用历史序列趋势做线性外推 | 历史不足时退化为前向填充 |
+| `function_curve_fit` | Function curve fit | 基于历史日曲线进行函数拟合恢复 | 历史 profile 不足时退化 |
+| `road_topology_neighbor_fill` | Road-topology neighbor fill | 依据路网拓扑邻接和道路长度权重进行空间传播 | 无可用拓扑信息时退化 |
+| `correlation_topology_neighbor_fill` | Correlation-topology neighbor fill | 结合拓扑邻接与正相关邻居观测估计缺失值 | 相关邻居不足时退化为均值法 |
+
+需要指出的是，`correlation_topology_neighbor_fill` 在严格历史场景中依然遵守协议边界：其使用的是外部可观测邻居信息，而不是目标节点当前真值，因此并不构成目标泄漏。`snh_mix` 的特殊性仅在于协议本身允许当前邻居观测，从而使该方法的空间优势得到更充分体现。
+
+### 2.5 实现环境、可复现性与工件一致性
+
+实验环境和关键复现参数如下：
+
+**表 3 实验环境与关键参数**
 
 | 项目 | 配置 |
 |---|---|
 | 操作系统 | Windows |
 | Shell | PowerShell `5.1.19041.1682` |
-| Python | `3.12.3` |
-| numpy | `1.26.4` |
-| pandas | `2.2.3` |
-| pyarrow | `16.1.0` |
-| scipy | `1.13.1` |
-| matplotlib | `3.9.2` |
+| Python 环境 | conda `analysis` |
+| Python | `3.9.23` |
+| 核心依赖 | `numpy`、`pandas`、`pyarrow`、`scipy`、`matplotlib` |
 | 输入目录 | `data\analysis\node_intersection_flow_parquet` |
 | 拓扑文件 | `data\processed\rnsd_processed.csv` |
 | 目标列 | `路口车流量` |
@@ -41,186 +112,24 @@
 | 随机种子 | `42` |
 | 历史窗口 | `7` 天 |
 | warmup | `7` 天 |
-| 主指标是否排除 warmup | `True` |
 
-纳入本文统一主表统计的三类严格历史协议场景，其核心实现代码主要来自以下四个脚本：
+上述环境口径与项目现有运行记录保持一致。真实数据缺失设置与插补脚本的示例命令、场景目录下的 `run_commands*.txt` 以及项目环境说明文档均指向 `E:\anaconda3\envs\analysis\python.exe`，因此本节后续涉及的复现实验环境统一以 conda `analysis` 为准。
 
-| 脚本 | 作用 |
-|---|---|
-| `analysis_scripts\global_missingness_setting_pipeline.py` | 生成 `g_mcar_pt` 全局点级缺失并输出审计结果 |
-| `analysis_scripts\structured_missingness_setting_pipeline.py` | 生成 `ntb_mix` 与 `nso_mix` 两类结构化缺失场景 |
-| `analysis_scripts\global_missingness_imputation_pipeline.py` | 执行 `g_mcar_pt` 的六方法补全、统计与绘图 |
-| `analysis_scripts\structured_missingness_imputation_pipeline.py` | 执行 `ntb_mix`、`nso_mix` 的六方法补全、长度组统计与绘图 |
+从实现链路上看，`global_missingness_setting_pipeline.py`、`structured_missingness_setting_pipeline.py` 与 `spatial_neighbor_holdout_setting_pipeline_fast.py` 分别负责四类场景的缺失生成；`global_missingness_imputation_pipeline.py`、`structured_missingness_imputation_pipeline.py` 与 `spatial_neighbor_holdout_imputation_pipeline.py` 负责方法执行与 summary 输出；`visualize_all_missingness_imputation_results.py` 和 `visualize_spatial_neighbor_holdout_results.py` 负责结果图件；`repair_structured_scenario_artifacts.py`、`analyze_structured_missingness_distribution.py` 与相关测试脚本负责结构化工件的一致性修复与回归验证。该模块化结构保证了结果的可追溯性与后续复核便利性。
 
-`snh_mix` 的设置与补全则分别使用 `analysis_scripts\spatial_neighbor_holdout_setting_pipeline_fast.py`、`analysis_scripts\spatial_neighbor_holdout_imputation_pipeline.py` 和 `analysis_scripts\visualize_spatial_neighbor_holdout_results.py`。该场景的相关脚本与产物同样纳入本文正文，但由于其采用 `online_spatial_interpolation` 协议，正文中以独立小节报告结果，不与前三类严格历史协议场景混写到同一主表。
+此外，先前 `nso_mix/ntb_mix` 目录中由共享工件复制引起的 `manifest` 与分布报告错位问题已完成修复，并通过一致性校验文件验证为 `all_consistent = true`。因此，本节引用的结构化场景统计已具备归档与论文使用的基础一致性。
 
-为保证复现性，项目在各场景目录下均保存了 `run_config.json`、`run_config_imputation.json`、审计报告、汇总 CSV 和图件索引。场景注册、状态字段、路径索引与备注统一由 `results\rdm_exp\experiment_registry.json` 管理；本文所有“主结果”“主表”“统一主表比较”等表述，若未特别说明，均默认指严格历史因果补全主链路的三类场景；`snh_mix` 作为已完成的正文模块在后文独立报告其协议边界与结果。
+### 2.6 图表与引用规范说明
 
-在本轮通读与全项目遍历后，可以进一步把缺失值设置与填补相关模块划分为四类：
+为满足 SCI 期刊常见排版要求，本节采用以下写法规范。第一，专业术语在首次出现时给出中英文对应，如完全随机缺失（missing completely at random, MCAR）和在线空间插补（online spatial interpolation）。第二，所有图表均采用“表题在上、图题在下”的标准结构，正文中统一使用 `Figure 1`、`Figure 2` 的连续编号格式。第三，嵌入正文的图件使用现有 PNG 版本以保证在线阅读与文档排版兼容，同时各图对应的 PDF 矢量版本保留在结果目录中，可在投稿排版阶段直接替换为出版级源文件。第四，文中引用框架预留为 `[Ref-*]` 形式，以便后续并入论文总参考文献列表时统一编号。第五，图表编号在迁移到论文主体后可按全稿顺序重排，但本节内部编号、图注与正文引导关系已经按照独立章节标准完成统一。
 
-**表 1-1 缺失值设置与补全相关模块全景梳理**
+## 3. 结果
 
-| 模块类别 | 代表脚本 | 当前作用 |
-|---|---|---|
-| 场景生成主链路 | `global_missingness_setting_pipeline.py`、`structured_missingness_setting_pipeline.py`、`spatial_neighbor_holdout_setting_pipeline_fast.py` | 分别负责 `g_mcar_pt`、`ntb_mix/nso_mix`、`snh_mix` 的缺失场景生成与原始审计 |
-| 补全执行主链路 | `global_missingness_imputation_pipeline.py`、`structured_missingness_imputation_pipeline.py`、`spatial_neighbor_holdout_imputation_pipeline.py` | 按场景协议执行六方法补全、生成 summary 与审计结果 |
-| 可视化与分布分析 | `visualize_all_missingness_imputation_results.py`、`visualize_global_missingness_imputation.py`、`visualize_spatial_neighbor_holdout_results.py`、`analyze_structured_missingness_distribution.py` | 负责 comparison 层、单场景图件、结构化缺失分布报告与辅助表 |
-| 路径治理与一致性修复 | `missingness_experiment_paths.py`、`reorganize_missingness_experiment_layout.py`、`repair_structured_scenario_artifacts.py`、`extract_and_cleanup_imputed_datasets.py` | 负责目录重组、短路径迁移、单场景工件重建、归档清理与防复发 |
-| 回归验证 | `tests\test_structured_scenario_artifact_repair.py` | 覆盖单场景重建、共享状态污染过滤、文件名归一化与 manifest/report 一致性校验 |
+### 3.1 严格历史协议场景的总体结果
 
-这意味着当前项目中“缺失值设置”和“缺失值填补”不再只是四个主脚本的线性串联，而是已经形成“场景生成 -> 补全执行 -> 可视化汇总 -> 工件修复与校验 -> 回归测试”的完整模块化链路。文档中的后续口径更新，均以该全景梳理结果为基础。
+在统一主表覆盖的三类严格历史协议场景中，`correlation_topology_neighbor_fill` 在四个缺失率水平上均取得最低 RMSE。该结论直接来自场景级正式 summary，而非后验排序结果。
 
-## 实验数据来源与预处理说明
-
-### 数据来源与规模
-
-真实数据链路的原始输入包括 `link_gps.v2`、`road_network_sub-dataset.v2` 与 `traffic_speed_sub-dataset.v2`，其后经过路段静态信息清洗、速度观测拼接、交通指标派生和节点级流量聚合，形成节点日分片 Parquet 数据。前序预处理结果给出的关键规模如下：
-
-**表 2 真实数据基线规模与质量摘要**
-
-| 指标 | 数值 |
-|---|---:|
-| 覆盖天数 | 61 |
-| 每日时间片数 | 96 |
-| 观测节点数 | 42,031 |
-| 拓扑节点数 | 42,031 |
-| 总唯一观测对数 | 246,133,536 |
-| 缺失记录数 | 0 |
-| 重复记录数 | 0 |
-| 空值流量数 | 0 |
-| NaN 流量数 | 0 |
-| 负流量数 | 0 |
-
-这一基线数据质量十分关键。它意味着本实验中的 mask 位置都可以回溯到真实完整值，因此 MAE、RMSE、MAPE、sMAPE 和 NRMSE 都是在“人工施加缺失后再与原始真值逐点比对”的条件下计算得到，避免了真实缺失场景中常见的“缺失位置无真值、无法客观评估”的问题。
-
-### 与前期预处理结果的承接关系
-
-当前缺失实验直接继承前序预处理模块所形成的节点级时序组织方式，也继承了其对空间拓扑一致性的确认结果。尤其是观测节点与拓扑节点零不一致这一点，为道路拓扑邻接补全和相关性拓扑邻接补全提供了必要前提。与此同时，前序分析中提取到的日变化周期性和傅里叶拟合结果，也为历史均值、线性外推和函数曲线拟合类方法提供了合理的先验基础。
-
-需要说明的是，本报告讨论的目标变量是连续型交通流量，因此评价指标采用连续变量误差指标。用户需求中提及的 `F1-score` 等分类指标不适用于当前任务；若未来将流量离散化为拥堵等级或通行状态类别，才有必要引入分类评价指标体系。
-
-## 缺失值设置实验设计
-
-### 场景与缺失率梯度
-
-当前项目四类场景的配置统一覆盖 4 个目标缺失率：`5%`、`10%`、`20%`、`30%`。为便于实验分析，本文将其分别视为低缺失率区间（`5%`、`10%`）、中缺失率区间（`20%`）和高缺失率区间（`30%`）。此外，`0%` 无缺失对照组保留在部分配置中，用于表征基准数据状态，但不生成大体积缺失副本，也不参与插补误差统计。
-
-**表 3 项目已定义的四类缺失场景与当前纳入状态**
-
-| 场景 ID | 中文名称 | 缺失机制 | 缺失类型判定 | 结构特征 | 当前状态 |
-|---|---|---|---|---|---|
-| `g_mcar_pt` | 完整数据全局 MCAR 点级随机缺失 | `mcar_point` | 完全随机缺失（MCAR） | 全局点级抽样，不形成连续块 | `ready`，纳入主结果 |
-| `ntb_mix` | 节点连续时间块缺失，短中长混合长度 | `node_temporal_block` | 结构化非随机缺失 | 单节点连续时间块，长度混合 | `ready`，纳入主结果 |
-| `nso_mix` | 节点子集连续离线缺失，短中长混合长度 | `node_subset_temporal_outage` | 结构化非随机缺失 | 部分节点在同一时段共同离线 | `ready`，纳入主结果 |
-| `snh_mix` | 空间邻居保留型目标节点连续缺失 | `spatial_neighbor_holdout` | 空间邻域约束下的结构化缺失 | 目标节点连续缺失，同时保留邻居观测用于在线空间插值 | 正文内容，独立协议分析 |
-
-从统计学定义看，当前项目已定义的四类场景覆盖了 MCAR 和多种结构化非随机缺失机制。若将“随机缺失”理解为工程实现中的随机参数化过程，则 `g_mcar_pt` 的点级抽样和结构化场景中的事件长度采样都包含随机成分；但严格意义上的独立 MAR 场景并未在当前项目注册表中单独登记，因此本文不将其误写为独立场景类型。下文涉及统一主表统计时，若未特别说明，均仅指前三类严格历史协议场景；涉及 `snh_mix` 时，则会显式标注其属于已完成的在线空间插补正文模块，并在独立小节中报告结果。
-
-### 全局点级 MCAR 缺失
-
-`g_mcar_pt` 的生成规则来自 `global_missingness_setting_pipeline.py`。该机制以单个 `(day_index, 节点ID, 时间段)` 行级观测为缺失单位，通过 `sequential_hypergeometric_global_without_replacement` 策略在全体可用观测上逐块分配缺失计数。该设计具有三点特征：
-
-1. mask 精确记录 `row_index`，能够回溯到原始完整数据中的具体观测行；
-2. 缺失不会把同一时间片下所有路口整体置空，也不会人为构造连续时间块；
-3. 目标缺失计数在全局尺度上精确控制，从而保证不同日分片之间的缺失率围绕目标值波动。
-
-`g_mcar_pt` 审计报告给出的关键统计如下：
-
-**表 4 `g_mcar_pt` 缺失设置审计摘要**
-
-| 缺失率 | 全局缺失计数 | 观测缺失率 | 日缺失率标准差 |
-|---|---:|---:|---:|
-| 5% | 12,306,677 | 0.0500000008 | 0.0001226606 |
-| 10% | 24,613,354 | 0.1000000016 | 0.0001300067 |
-| 20% | 49,226,707 | 0.1999999992 | 0.0001897211 |
-| 30% | 73,840,061 | 0.3000000008 | 0.0002503708 |
-
-上述结果表明，全局缺失计数均与目标设置严格一致，而每日缺失率标准差保持在较小范围内，说明该机制在保持全局精确控制的同时，没有引入明显的日级偏置。
-
-### 结构化缺失设计
-
-`ntb_mix` 和 `nso_mix` 由 `structured_missingness_setting_pipeline.py` 生成，均采用 `mixed_short_mid_long` 事件长度模式。其正式设计说明如下：
-
-1. short block 长度范围为 `1-4` 个时间片，采样概率为 `0.4`；
-2. mid block 长度范围为 `5-12` 个时间片，采样概率为 `0.4`；
-3. long block 长度范围为 `13-24` 个时间片，采样概率为 `0.2`；
-4. `mask` 与 `miss_data` 仍精确到 `row_index`，且只修改目标列；
-5. 两类机制都不会把同一时间片下全部节点整体置缺失，也不会覆盖已有 `g_mcar_pt` 结果。
-
-在 `ntb_mix` 中，连续缺失发生在单节点自身的时间轴上，因此更强调时间连续性破坏；在 `nso_mix` 中，连续缺失表现为部分节点在同一时段共同离线，更接近局部采集设备短时故障或通信中断。两类机制都不属于 MCAR，因为缺失并非独立点级均匀抽样，而是带有明确的时间结构与节点结构偏向。
-
-需要单独说明的是，结构化场景目录中的共享工件复制问题已经完成修复。当前 `nso_mix` 与 `ntb_mix` 的分布报告、`manifest` 与一致性校验文件均由 `repair_structured_scenario_artifacts.py` 基于单场景本地 `masks`、`miss_data`、`run_config` 和 `chunk_status` 重新构建，并通过 `structured_missingness_consistency_validation.json` 验证为 `all_consistent = true`。因此，本文现在可以将 `nso_mix` 与 `ntb_mix` 的单场景分布报告作为辅助证据使用，而不再需要把它们视作未修复风险项。
-
-## 缺失值补全算法实现与步骤
-
-### 统一因果约束与评价口径
-
-纳入统一主表统计的三类严格历史协议场景在补全阶段均遵循一致的严格历史因果约束：
-
-1. 仅使用过去 `7` 天历史，`context_days_before = 7`，`context_days_after = 0`；
-2. 不允许使用未来天信息，不允许使用同日未来时间片；
-3. 不使用 backfill，不使用双向插值；
-4. 设定 `warmup_days = 7`，主表统计排除 warmup；
-5. 误差仅在 mask 位置上计算，非 mask 位置保持原值不变。
-
-这一约束与后续在线预测或在线补全应用场景保持一致，也避免了“利用未来观测补历史缺失”的信息泄漏问题。特别需要指出的是，`correlation_topology_neighbor_fill` 允许使用同一时刻的相关邻居节点观测，但不允许访问目标缺失点的真实当前值，因此其本质仍是基于外部可观测邻域信息的在线空间补全，而非目标泄漏。
-
-### 正式六方法集合
-
-正式补全方法集合为：
-
-1. `mean_fill`
-2. `forward_fill`
-3. `historical_linear_extrapolation`
-4. `function_curve_fit`
-5. `road_topology_neighbor_fill`
-6. `correlation_topology_neighbor_fill`
-
-与早期残留配置相比，正式口径已新增 `mean_fill` 并移除 `zero_fill`。本文所有主结果均按上述六方法口径分析。
-
-**表 5 六种正式补全方法及其实现要点**
-
-| 方法 | 核心思想 | 关键参数/依赖 | 主要 fallback |
-|---|---|---|---|
-| `mean_fill` | 利用同节点同时间片 7 日均值及多级统计均值回填 | `history_days=7` | `same_slot_7day_mean -> node_7day_mean -> slot_7day_mean -> global_7day_mean -> current_day_forward_fill` |
-| `forward_fill` | 使用当前日过去时间片或上一日末时间片向前填充 | 因果单向 | `previous_slot -> previous_day_last_slot -> safe fallback` |
-| `historical_linear_extrapolation` | 基于历史曲线趋势做线性外推 | `history_days=7` | 历史不足时退化为 `current_day_forward_fill` |
-| `function_curve_fit` | 基于历史日曲线的函数拟合恢复缺失值 | 历史日内曲线 | 无历史 profile 时退化为 `current_day_forward_fill` |
-| `road_topology_neighbor_fill` | 基于 `rnsd_processed.csv` 提供的道路拓扑邻接与道路长度权重做空间补全 | 路网拓扑 | 无可用拓扑历史时退化为 `current_day_forward_fill` |
-| `correlation_topology_neighbor_fill` | 使用同一时刻正相关拓扑邻居估计缺失值，再回退至均值法 | 相关阈值与拓扑邻居 | `same-time positive-correlation topology neighbors -> mean_fill` |
-
-### 运行流程与中间输出
-
-补全过程可概括为以下步骤：
-
-1. 读取指定场景下的 `masks`、`miss_data` 与运行配置；
-2. 对每个缺失率和每种方法逐日分片执行补全；
-3. 写出 `imp_data` 目录下的补全后数据；
-4. 汇总 mask 位置误差，生成 `summaries` 下的整体表、流量分组表和长度分组表；
-5. 输出 `audits` 审计报告，验证完整性和因果约束；
-6. 输出 `figures` 下的正式线图和跨场景比较图。
-
-因此，本实验的“中间输出结果”并非只是一张最终指标表，而是包含了从 mask、缺失数据、补全数据到主表、分组表、审计报告和图件的完整产物链。该设计符合项目归档与后续复核需求。
-
-### 评价指标
-
-当前目标变量为连续型交通流量，正式指标包括：
-
-1. `MAE`：衡量平均绝对偏差；
-2. `RMSE`：强调较大补全误差的惩罚；
-3. `MAPE`：描述相对误差水平；
-4. `sMAPE`：在低值区间下比 MAPE 更稳定；
-5. `NRMSE`：用于跨场景、跨流量尺度比较。
-
-其中，`RMSE` 与 `MAE` 为主分析指标；`sMAPE` 与 `NRMSE` 用于辅助分析不同场景下的相对误差与尺度归一化表现。
-
-## 实验结果分析
-
-### 总体结果
-
-场景级正式 summary CSV 显示，在当前六方法口径下，`correlation_topology_neighbor_fill` 在统一主表覆盖的三类严格历史协议场景、四个缺失率上均取得最低整体 RMSE。这一结论直接来自各场景的主汇总表，而不是 comparison 层的旧排名表。
-
-**表 6 三类严格历史协议场景在不同缺失率下的最优整体结果（按 RMSE）**
+**表 4 三类严格历史协议场景在不同缺失率下的最优整体结果（按 RMSE）**
 
 | 场景 | 缺失率 | 最优方法 | MAE | RMSE | sMAPE | NRMSE |
 |---|---:|---|---:|---:|---:|---:|
@@ -237,13 +146,13 @@
 | `nso_mix` | 20% | `correlation_topology_neighbor_fill` | 52.1823 | 129.1213 | 0.03448 | 0.01232 |
 | `nso_mix` | 30% | `correlation_topology_neighbor_fill` | 58.4905 | 144.1964 | 0.03729 | 0.01378 |
 
-从趋势上看，统一主表中的三类严格历史协议场景都表现出一致的缺失率升高带来的误差上升现象。例如，`g_mcar_pt` 下最优 RMSE 由 `110.7937` 上升到 `143.8741`，`ntb_mix` 由 `110.2810` 上升到 `148.5163`，`nso_mix` 由 `110.3261` 上升到 `144.1964`。这说明随着缺失比例从低区间进入高区间，任何方法都难以避免信息损失累积；但拓扑相关性增强的空间补全方法仍能维持相对稳定的领先优势。
+三个场景均表现出一致的误差增长趋势：随着缺失率由 5% 提升至 30%，最优 RMSE 从约 110 增长至 144-149 区间。这表明缺失比例仍是决定恢复难度的首要因素。值得注意的是，`ntb_mix` 在高缺失率区间的最优 RMSE 略高于 `g_mcar_pt` 与 `nso_mix`，说明单节点长时间连续空洞对仅依赖历史信息的恢复机制更不友好。
 
-### 代表性方法对比
+### 3.2 代表性方法差异与结构长度敏感性
 
-仅报告最优方法并不足以体现方法差异。以 `5%` 缺失率下统一主表中的三类严格历史协议场景为例，六方法之间已经表现出清晰的层次结构。
+为了进一步说明方法层面的差异，表 5 给出 5% 缺失率下三类严格历史协议场景的代表性 RMSE 比较。
 
-**表 7 5% 缺失率下三类严格历史协议场景的代表性 RMSE 对比**
+**表 5 5% 缺失率下代表性方法的 RMSE 对比**
 
 | 场景 | `forward_fill` | `mean_fill` | `function_curve_fit` | `historical_linear_extrapolation` | `road_topology_neighbor_fill` | `correlation_topology_neighbor_fill` |
 |---|---:|---:|---:|---:|---:|---:|
@@ -251,15 +160,11 @@
 | `ntb_mix` | 355.3231 | 250.5986 | 257.8246 | 317.0631 | 855.1867 | 110.2810 |
 | `nso_mix` | 233.5330 | 250.0624 | 256.8544 | 316.6989 | 854.5850 | 110.3261 |
 
-该结果揭示出以下几点。
+这一结果揭示出两个稳定现象。首先，`correlation_topology_neighbor_fill` 的优势并非边际改进，而是与其他方法形成明显的误差间隔，说明“拓扑邻接 + 同时刻正相关约束”能够有效利用真实空间依赖。其次，`road_topology_neighbor_fill` 在三类严格历史协议场景中均明显落后，提示静态拓扑先验若缺少可用的相关观测支撑，难以独立承担高质量恢复任务。
 
-第一，`correlation_topology_neighbor_fill` 的优势并非边际改进，而是相对其他方法形成了明显的数量级优势，说明“拓扑邻居 + 同时刻正相关约束”的空间信息在真实数据补全过程中确有贡献。第二，在不使用同刻邻居的纯历史方法中，`g_mcar_pt` 场景下 `forward_fill` 表现较强，这与全局点缺失对局部时序连续性的破坏较弱相一致；而在结构化场景下，`mean_fill` 相对更稳健，说明连续块缺失对简单向前传递造成了更大压力。第三，单纯依赖道路拓扑历史的 `road_topology_neighbor_fill` 在这三类严格历史协议场景中都明显落后，提示仅有静态拓扑而缺少同刻相关信息时，邻接传播不足以支撑高质量恢复。
+对于结构化场景，缺失长度也是关键因素。表 6 汇总了 30% 缺失率下的长度组最优结果。
 
-### 结构化场景的长度组分析
-
-结构化场景额外统计了 `short`、`mid`、`long` 三类缺失长度组。当前正式长度组 summary 显示，`correlation_topology_neighbor_fill` 在两类结构化场景的全部长度组中仍然取得最低 RMSE。
-
-**表 8 30% 缺失率下结构化场景长度组最优结果（按 RMSE）**
+**表 6 30% 缺失率下结构化场景长度组最优结果（按 RMSE）**
 
 | 场景 | 长度组 | 最优方法 | MAE | RMSE | sMAPE |
 |---|---|---|---:|---:|---:|
@@ -270,109 +175,13 @@
 | `nso_mix` | mid | `correlation_topology_neighbor_fill` | 58.9187 | 145.5397 | 0.03732 |
 | `nso_mix` | long | `correlation_topology_neighbor_fill` | 60.0366 | 148.0914 | 0.03813 |
 
-这一结果说明，随着连续缺失长度增加，误差整体呈上升趋势，尤其在 `ntb_mix` 中 long 组相较 short 组的 RMSE 增幅更明显，说明单节点长时间连续空洞更难仅凭历史自身恢复。相比之下，`nso_mix` 的 short、mid、long 之间差异相对平缓，这可能意味着“部分节点共同离线”场景仍保留了一定的同构空间线索，便于相关邻居方法从周边可观测节点中恢复缺失值。
+随着缺失块长度增加，误差总体上升，且这一趋势在 `ntb_mix` 中更加显著。这说明当缺失主要沿单节点时间轴连续扩展时，目标节点自身历史对恢复的支撑能力下降更快；相比之下，`nso_mix` 的长度效应较为平缓，表明部分节点共同离线场景仍保留一定的空间同构结构。
 
-### 图形化结果
+### 3.3 `snh_mix` 场景的在线空间插补结果
 
-图 1 至图 4 给出了统一主表中的三类严格历史协议场景 RMSE 对比图和跨场景比较图。这些图件的用途不是替代表格，而是用于展示不同缺失率下方法曲线的整体形态与相对间距。
+与前三类严格历史协议场景不同，`snh_mix` 允许使用目标节点缺失时刻的邻居观测，因此应在独立协议框架下解释其结果。该场景的正式 summary 显示，`correlation_topology_neighbor_fill` 在四个缺失率下均取得最低 RMSE。
 
-图 1 给出了 `g_mcar_pt` 的六方法 RMSE 曲线。可以看到，`correlation_topology_neighbor_fill` 始终位于最下方，而 `road_topology_neighbor_fill` 全程最差，说明“只依赖拓扑、但缺少实时相关邻居”的策略在点级随机缺失中并不充分。
-
-![图 1 全局 MCAR 点级缺失场景下的 RMSE 对比](../../../results/rdm_exp/scenarios/g_mcar_pt/imp/figures/g_mcar_pt_rmse_by_method.png)
-
-注：图 1 来源于 `results\rdm_exp\scenarios\g_mcar_pt\imp\figures\g_mcar_pt_rmse_by_method.png`，文件 UTC 生成时间为 `2026-06-16T14:28:40Z`。
-
-图 2 给出了 `ntb_mix` 的六方法 RMSE 曲线。该图显示，在节点连续时间块缺失下，结构化缺失对纯时间插补方法的影响更大，而 `correlation_topology_neighbor_fill` 仍能保持最稳定的低误差区间。
-
-![图 2 节点连续时间块缺失场景下的 RMSE 对比](../../../results/rdm_exp/scenarios/ntb_mix/imp/figures/ntb_mix_rmse_by_method.png)
-
-注：图 2 来源于 `results\rdm_exp\scenarios\ntb_mix\imp\figures\ntb_mix_rmse_by_method.png`，文件 UTC 生成时间为 `2026-06-19T03:58:59Z`。
-
-图 3 给出了 `nso_mix` 的六方法 RMSE 曲线。其整体趋势与 `ntb_mix` 相近，但在低到中缺失率区间下，`forward_fill` 的表现相对 `mean_fill` 更接近，说明节点子集离线场景并不一定总是比单节点块缺失更难。
-
-![图 3 节点子集连续离线缺失场景下的 RMSE 对比](../../../results/rdm_exp/scenarios/nso_mix/imp/figures/nso_mix_rmse_by_method.png)
-
-注：图 3 来源于 `results\rdm_exp\scenarios\nso_mix\imp\figures\nso_mix_rmse_by_method.png`，文件 UTC 生成时间为 `2026-06-19T03:58:59Z`。
-
-图 4 给出了三类严格历史协议主表场景的跨场景总体 RMSE 对比图。该图适合观察不同场景之间的整体误差层级。当前 comparison 层已经完成六方法名称统一，同时 `ntb_mix` 与 `nso_mix` 的结构化分布报告也已完成单场景重建和一致性校验，因此 comparison 图件可作为辅助趋势展示与交叉核对材料使用；不过，正式结论仍以各场景主 summary CSV 与对应审计报告为准，而 `snh_mix` 由于协议不同，在正文独立小节中单列解释。
-
-![图 4 三类严格历史协议场景总体 RMSE 跨场景对比](../../../results/rdm_exp/comparison/figures/scenario_comparison_rmse_overall.png)
-
-注：图 4 来源于 `results\rdm_exp\comparison\figures\scenario_comparison_rmse_overall.png`，文件 UTC 生成时间为 `2026-06-16T14:29:07Z`。
-
-## 对比实验验证
-
-### 场景间对比
-
-从最优方法对应的结果看，`g_mcar_pt`、`ntb_mix` 和 `nso_mix` 在低缺失率区间下的最佳 RMSE 都约为 `110` 左右，而在高缺失率区间上升到 `144-149` 区间，表明缺失结构虽然影响方法排序和难度，但并未改变“缺失率升高必然带来恢复难度上升”的总体规律。进一步比较可见，`ntb_mix` 在 20% 和 30% 时的最优 RMSE 略高于另外两类场景，说明单节点长时间连续空洞对补全更不利。
-
-### 与前期仿真实验结论的交叉验证
-
-前期仿真实验在预测层面表明，图结构建模相较规则卷积建模具有更稳定的误差表现，且客户端异构程度和数据扰动会显著影响下游预测难度。本报告中的真实数据缺失实验虽然不直接训练联邦预测模型，但在数据恢复层面给出了相一致的证据：当补全过程能够利用真实道路拓扑和同刻相关邻居时，补全误差显著下降；而当缺失具有更强的结构连续性时，误差明显上升。换言之，仿真实验强调“图结构和异质性会影响预测性能”，本实验则说明“若输入数据发生结构化缺失，图相关先验同样会影响上游数据恢复质量”。
-
-需要保持克制的是，这种交叉验证只说明上下游证据在方向上相互支持，并不意味着“补全误差更低就必然等价于联邦预测误差更低”。正式论文中仍应把缺失补全实验视为数据层鲁棒性证据，而不是直接替代真实数据预测实验。
-
-## 结果追踪、来源与口径说明
-
-### 正式主结果来源
-
-**表 9 本报告主结果与图件的来源追踪**
-
-| 类型 | 文件 | 角色 | UTC 生成时间 |
-|---|---|---|---|
-| 主结果表 | `results\rdm_exp\scenarios\g_mcar_pt\imp\summaries\imputation_quality_summary_exclude_warmup.csv` | `g_mcar_pt` 正式整体结果 | `2026-06-19T03:58:59Z` |
-| 主结果表 | `results\rdm_exp\scenarios\ntb_mix\imp\summaries\structured_imputation_quality_summary_exclude_warmup.csv` | `ntb_mix` 正式整体结果 | `2026-06-19T03:58:59Z` |
-| 主结果表 | `results\rdm_exp\scenarios\nso_mix\imp\summaries\outage_imputation_quality_summary_exclude_warmup.csv` | `nso_mix` 正式整体结果 | `2026-06-19T03:58:59Z` |
-| 主结果表 | `results\rdm_exp\scenarios\snh_mix\imp\summaries\snh_imputation_quality_summary_exclude_warmup.csv` | `snh_mix` 正文场景整体结果 | `2026-06-18T04:49:50Z` |
-| 单场景图 | `results\rdm_exp\scenarios\g_mcar_pt\imp\figures\g_mcar_pt_rmse_by_method.png` | 图 1 | `2026-06-16T14:28:40Z` |
-| 单场景图 | `results\rdm_exp\scenarios\ntb_mix\imp\figures\ntb_mix_rmse_by_method.png` | 图 2 | `2026-06-19T03:58:59Z` |
-| 单场景图 | `results\rdm_exp\scenarios\nso_mix\imp\figures\nso_mix_rmse_by_method.png` | 图 3 | `2026-06-19T03:58:59Z` |
-| 跨场景图 | `results\rdm_exp\comparison\figures\scenario_comparison_rmse_overall.png` | 图 4 | `2026-06-16T14:29:07Z` |
-| 单场景图 | `results\rdm_exp\scenarios\snh_mix\imp\figures\snh_mix_rmse_by_method.png` | `snh_mix` 正文结果图 | `2026-06-18T04:41:06Z` |
-| 辅助表 | `results\rdm_exp\comparison\tables\best_method_summary.csv` | 辅助概览与交叉核对，不作为唯一结论依据 | `2026-06-20T14:16:52Z` |
-
-### 口径一致性同步状态
-
-为保证学术归档的严谨性，本文需要显式记录本轮通读、检索和修复后已经完成的关键口径同步事项。
-
-1. 已修复项：`comparison` 层原有的旧方法名 `topology_function_hybrid` 已完成统一清理，当前 comparison 表和图件已统一采用正式六方法口径，即 `mean_fill`、`forward_fill`、`historical_linear_extrapolation`、`function_curve_fit`、`road_topology_neighbor_fill` 和 `correlation_topology_neighbor_fill`。
-2. 已修复项：`nso_mix` 的 `run_config_imputation.json` 已同步更新为正式结果口径，不再残留 `zero_fill` 与 `topology_function_hybrid` 等旧方法名，路径字段也已切换为当前 `results\rdm_exp\scenarios\nso_mix` 目录。
-3. 已修复项：`nso_mix` 与 `ntb_mix` 目录下曾经因共享 structured 工件复制而出现的分布报告与 `manifest` 内容错位问题，现已通过单场景工件重建机制完成修复。两类结构化场景的 `structured_missingness_consistency_validation.json` 均给出 `validated = true`、`row_count = 4`、`all_consistent = true`。
-4. 已补强项：针对上述结构化工件错位问题，项目现已新增 `repair_structured_scenario_artifacts.py`、更新 `analyze_structured_missingness_distribution.py` 与 `reorganize_missingness_experiment_layout.py`，并通过 `tests\test_structured_scenario_artifact_repair.py` 覆盖共享状态污染过滤、`_mask.parquet` 文件名归一化、短路径目录解析与一致性校验失败场景。
-
-上述同步事项不会改变本报告既有主结论，但显著提高了 comparison 层、场景配置、结构化分布报告与归档工件之间的口径一致性。当前主链路中已无已知的 `manifest/report` 内容错位风险；文稿中对 `snh_mix` 保留的仅是“协议边界不同、需独立解释”的说明，而不再将其表述为剩余风险或未完成事项。
-
-## `snh_mix` 正文场景说明与结果
-
-### 场景定位与协议边界
-
-`snh_mix` 对应 `spatial_neighbor_holdout_mixed_short_mid_long`，中文名称为“空间邻居保留型目标节点连续缺失”。该场景与前三类场景一样，属于本文正文的正式实验内容；不同之处不在于是否完成，而在于评价协议不同。前三类场景采用严格历史因果补全，不允许使用当前时刻邻居观测；`snh_mix` 采用 `online_spatial_interpolation`，允许使用目标节点缺失时刻的邻居观测，但仍不允许使用目标节点当前真实值，也不允许使用未来时间片或未来日期。
-
-因此，`snh_mix` 的正文写法应当是“已完成、独立协议、单列分析”，而不是“扩展验证阶段”或“未完成附录内容”。它与前三类场景共享同一套 formal summary 组织框架，但在结果解释上需要保持协议边界清晰，不能把允许当前邻居观测的空间插补结果与严格历史补全结果直接混写进同一张统一主表。
-
-### 当前正文状态
-
-从现有运行配置、summary 和图件产物来看，`snh_mix` 已形成可直接写入正文的完整结果链。
-
-**表 10 `snh_mix` 正文状态摘要**
-
-| 模块 | 当前状态 | 证据 |
-|---|---|---|
-| 场景定位 | 已完成并纳入正文 | 本稿正文结构 |
-| 缺失设置 | 已形成 61 个 mask 与 61 个 miss_data，四个缺失率均有审计 | `snh_missingness_audit_zh.md` |
-| 协议定义 | 已明确为 `online_spatial_interpolation` | `run_config_imputation.json`、`snh_spatial_imputation_audit_zh.md` |
-| 方法集合 | 六个 baseline 正式方法已形成汇总结果 | `snh_spatial_imputation_audit_zh.md`、`snh_imputation_quality_summary_exclude_warmup.csv` |
-| 汇总产物 | 已存在 `overall`、`flow_group`、`length_group` 三类 summary | `summaries` 目录与 `snh_spatial_imputation_audit.json` |
-| 图件产物 | 已生成 RMSE、MAE、sMAPE、NRMSE 及 flow/length 组图件 | `figures\figure_index.csv`、`snh_mix_rmse_by_method.png` |
-| 正文使用方式 | 纳入正文独立结果分析，不与前三类统一主表混排 | 本稿正文结构 |
-
-缺失设置侧的审计结果表明，`snh_mix` 在 5%、10%、20%、30% 下均已生成 61 个 mask 文件和 61 个缺失数据分片，且 `neighbor_observed_ratio` 在 5% 至 20% 下均为 `1.000000`，在 30% 下仍为 `0.996708`。这说明该场景能够在目标节点缺失时刻保留高比例可观测邻居，为在线空间插补提供稳定前提。
-
-### 结果摘要
-
-`snh_mix` 的正式 summary 显示，`correlation_topology_neighbor_fill` 在四个缺失率下均取得最低 RMSE，并且稳定优于 `mean_fill` 与 `road_topology_neighbor_fill`。
-
-**表 11 `snh_mix` 在不同缺失率下的最优整体结果（按 RMSE）**
+**表 7 `snh_mix` 在不同缺失率下的最优整体结果（按 RMSE）**
 
 | 缺失率 | 最优方法 | MAE | RMSE | sMAPE | NRMSE | 第二优方法 |
 |---|---|---:|---:|---:|---:|---|
@@ -381,46 +190,88 @@
 | 20% | `correlation_topology_neighbor_fill` | 39.9806 | 99.6925 | 0.03069 | 0.00952 | `mean_fill` |
 | 30% | `correlation_topology_neighbor_fill` | 39.0055 | 98.1955 | 0.03128 | 0.00940 | `mean_fill` |
 
-这一结果说明，在允许使用当前时刻邻居观测的协议下，空间相关邻居方法能够显著增强恢复质量，并将 RMSE 稳定控制在 `98-103` 区间。与前三类严格历史协议场景相比，`snh_mix` 的最佳误差水平更低，这并不意味着它“天然更容易”，而是说明在当前时刻邻居信息可用的前提下，空间观测边界本身已经改变了问题条件，因此必须作为独立协议场景解释。
+在 `snh_mix` 中，最优 RMSE 稳定维持在 98-103 区间，且随缺失率提升并未表现出与前三类严格历史协议场景相同的显著恶化。这一结果表明，当当前时刻邻居观测可用时，空间相关信息可以显著增强恢复能力。不过，这一结论不能与前三类场景直接做数值强比较，因为二者的信息边界并不相同。
 
-### 与前三类场景的分类对比
+### 3.4 严格历史协议场景的可视化证据
 
-既然 `snh_mix` 允许使用当前时刻邻居观测，那么在报告中更合适的处理方式不是把它与前三类场景直接混入同一张统一主表，而是按信息使用边界分类，并在各自类别内部比较方法表现。按照这一原则，当前项目中的四类场景可划分为“严格历史补全类”和“在线空间插补类”两大类。
+为了与表 4 至表 6 的量化结果形成互补，本节首先给出三类严格历史协议场景的单场景与跨场景可视化结果。该部分图件的目标是展示误差曲线的整体形态、方法间间隔以及场景间难度层级，从而为后文的 `snh_mix` 在线空间插补图件提供统一参照。
 
-**表 12 四类场景按信息使用边界的分类对比**
+如 Figure 1 所示，在 `g_mcar_pt` 场景下，`correlation_topology_neighbor_fill` 在 5%-30% 缺失率区间始终保持最低 RMSE，而 `road_topology_neighbor_fill` 的误差水平持续处于最差区间，说明单纯依赖静态拓扑而缺少实时相关邻居支撑时，点级随机缺失恢复能力明显不足。
 
-| 分类 | 场景 | 是否允许使用当前时刻邻居观测 | 是否允许使用未来信息 | 评价协议 | 当前状态 | 在本稿中的使用方式 |
-|---|---|---|---|---|---|---|
-| 严格历史补全类 | `g_mcar_pt` | 否 | 否 | 严格历史因果补全 | 正文内容 | 纳入统一主表统计与主结论 |
-| 严格历史补全类 | `ntb_mix` | 否 | 否 | 严格历史因果补全 | 正文内容 | 纳入统一主表统计与主结论 |
-| 严格历史补全类 | `nso_mix` | 否 | 否 | 严格历史因果补全 | 正文内容 | 纳入统一主表统计与主结论 |
-| 在线空间插补类 | `snh_mix` | 是 | 否 | `online_spatial_interpolation` | 正文内容 | 纳入正文独立结果小节 |
+![Figure 1](../../../results/rdm_exp/scenarios/g_mcar_pt/imp/figures/g_mcar_pt_rmse_by_method.png)
 
-从这个分类可以看出，前三类场景的共同边界是“只能使用历史信息，不允许调用当前时刻邻居观测”，因此它们之间可以进行统一口径的主表比较；而 `snh_mix` 的核心特征是“允许在目标节点缺失时刻调用外部邻居观测，但仍不允许访问目标节点当前真实值或未来信息”，所以它更适合被解释为在线空间插补类正文场景。换言之，`snh_mix` 并不是比前三类“更强”或“更弱”，而是属于信息条件不同的一类正式实验设置。
+Figure 1. RMSE comparison of six imputation methods under the `g_mcar_pt` scenario. The horizontal axis denotes the target missing rate, and the vertical axis denotes RMSE. `g_mcar_pt` corresponds to global point-wise MCAR missingness. RMSE, root mean square error; MCAR, missing completely at random.
 
-如果进一步按方法层面归类，那么前三类严格历史协议场景中的六种方法可分为两组：一组是仅依赖历史信息或历史统计量的时间补全方法，如 `mean_fill`、`forward_fill`、`historical_linear_extrapolation`、`function_curve_fit`；另一组是依赖空间结构但仍受主场景协议约束的方法，如 `road_topology_neighbor_fill` 与 `correlation_topology_neighbor_fill`。`snh_mix` 与它们的最大差异不在于是否使用拓扑，而在于是否允许显式引入目标缺失时刻的邻居观测。因此，`snh_mix` 与前三类方法的最佳比较方式应是“正文分类对比”，而不是把两类结果直接并入同一数值排名表。
+如 Figure 2 所示，`ntb_mix` 场景中的方法分离度进一步增大，尤其是纯时间插补方法在高缺失率区间的误差上升更快。这一结果与表 6 的长度组分析一致，说明连续时间块缺失会显著削弱单节点历史信息的可恢复性。
 
-### 后续工作
+![Figure 2](../../../results/rdm_exp/scenarios/ntb_mix/imp/figures/ntb_mix_rmse_by_method.png)
 
-`snh_mix` 已经属于本文正文内容，后续工作重点不再是“是否进入正文”，而是继续增强该协议下的解释深度与方法覆盖度：
+Figure 2. RMSE comparison of six imputation methods under the `ntb_mix` scenario. `ntb_mix` denotes node temporal block missingness with mixed short-, mid-, and long-span outages. The larger separation among methods at higher missing rates indicates stronger sensitivity of temporally continuous missing blocks to the chosen imputation strategy. RMSE, root mean square error.
 
-1. 补充 `neighbor_coverage`、`constraint_level` 等空间诊断输出，增强空间机制解释力；
-2. 在保持 `online_spatial_interpolation` 协议边界清晰的前提下，继续扩展自适应空间方法，与当前六方法形成更完整的正文对比链；
-3. 将 `snh_mix` 的最优方案与真实数据预测实验连接，评估在线空间插补带来的输入质量提升是否能够转化为下游预测收益。
+如 Figure 3 所示，`nso_mix` 场景的整体趋势与 `ntb_mix` 相近，但在低至中等缺失率区间的若干时间型方法差距略有收敛；即便如此，`correlation_topology_neighbor_fill` 依然维持稳定领先，提示局部节点集合共同离线时仍存在可利用的空间同构结构。
 
-## 结论与展望
+![Figure 3](../../../results/rdm_exp/scenarios/nso_mix/imp/figures/nso_mix_rmse_by_method.png)
 
-本文所依托的真实数据缺失实验框架一共定义了四类可复现缺失场景，并且四类场景均已作为正文内容纳入本稿。其中，前三类场景构成严格历史因果补全主链路，`snh_mix` 构成在线空间插补主链路。在 61 天、42,031 个节点、246,133,536 条完整观测对构成的真实节点级交通流数据上，系统评估六种正式补全方法后，实验结果表明：
+Figure 3. RMSE comparison of six imputation methods under the `nso_mix` scenario. `nso_mix` denotes node subset temporal outage, in which a subset of nodes becomes jointly unavailable within the same period. The figure shows that correlation-aware topology neighbors remain consistently advantageous even when the missingness pattern is spatially clustered. RMSE, root mean square error.
 
-1. 在当前正式六方法口径下，`correlation_topology_neighbor_fill` 在 `g_mcar_pt`、`ntb_mix` 和 `nso_mix` 的全部缺失率上均取得最低整体 RMSE；
-2. 随着缺失率从低区间提升至高区间，前三类严格历史协议场景的补全误差均稳定上升，说明缺失比例仍是决定恢复难度的核心因素；
-3. 结构化连续缺失，尤其是单节点长时间连续块缺失，会进一步增加恢复难度；
-4. 单纯依赖道路拓扑历史的 `road_topology_neighbor_fill` 效果明显不足，说明静态拓扑先验若缺少实时相关邻居支持，难以独立承担高质量补全任务；
-5. 在 `snh_mix` 中，`correlation_topology_neighbor_fill` 在 5% 至 30% 下的 RMSE 稳定维持在 `98.20-102.97` 区间，表明当前时刻邻居观测在在线空间插补协议下具有显著恢复价值；
-6. 当前真实数据缺失补全结果与前期仿真实验关于图结构重要性和扰动敏感性的结论在方向上相互支持，但二者分属数据恢复与预测建模两个层面，不能简单互相替代。
+为了进一步比较三类严格历史协议场景的整体难度层级，Figure 4 汇总了跨场景总体 RMSE 结果。该图并不替代表 5 的场景级最优结果，而是用于从整体趋势上说明三类场景对方法性能的共同影响方向。
 
-后续工作可从三个方向继续推进。其一，将当前已在 `ntb_mix/nso_mix` 上验证通过的单场景工件重建与一致性校验机制推广到更多场景，形成统一的归档前校验流程。其二，将当前最优补全方案与真实数据预测实验连接起来，直接评估“补全后输入质量提升”是否能够转化为下游联邦预测误差下降。其三，在当前 MCAR 与结构化非随机缺失之外，继续补充更明确的 MAR 或设备级故障机制，并持续扩展 `snh_mix` 所代表的在线空间插补类实验覆盖范围。
+![Figure 4](../../../results/rdm_exp/comparison/figures/scenario_comparison_rmse_overall.png)
 
-## 小结
+Figure 4. Cross-scenario overall RMSE comparison among the three strict-history protocol scenarios, namely `g_mcar_pt`, `ntb_mix`, and `nso_mix`. The figure is intended to visualize scenario-level difficulty differences under a unified causal-history constraint, while formal quantitative conclusions remain based on the scenario summaries reported in Table 4. RMSE, root mean square error.
 
-综合来看，本实验已经形成了从完整真实数据基线、缺失场景生成、严格因果补全、误差汇总、图件展示到审计追踪的完整证据链。其主要贡献不在于提出新的补全算法，而在于以统一口径验证了真实节点级交通流在多类缺失扰动下的可恢复性，并为后续真实数据联邦预测模块提供了可追溯的数据鲁棒性基础。
+### 3.5 `snh_mix` 场景的完整可视化结果
+
+鉴于 `snh_mix` 已被界定为正文中的正式结果模块，本节补充嵌入其具有明确业务用途的核心图件，以形成“总体性能图 + 分组稳健性图 + 排名热图”的完整证据链。与前三类严格历史协议场景不同，以下图件均应解释为在线空间插补协议下的方法比较，而不能直接视为与 Figure 1-Figure 4 同口径的统一排名。考虑到表 7 已经同时报告 MAE、sMAPE 与 NRMSE 数值结果，正文中不再重复嵌入仅改变误差量纲但不新增业务信息的冗余曲线，而将有限图幅集中用于支撑方法优劣、流量分层稳健性与缺失跨度稳健性三类核心问题。
+
+首先，Figure 5 给出了 `snh_mix` 场景的总体 RMSE 曲线。与表 7 的最优结果一致，`correlation_topology_neighbor_fill` 在四个缺失率水平上始终取得最低 RMSE，且误差变化范围明显低于前三类严格历史协议场景。
+
+![Figure 5](../../../results/rdm_exp/scenarios/snh_mix/imp/figures/snh_mix_rmse_by_method.png)
+
+Figure 5. RMSE comparison of six imputation methods under the `snh_mix` scenario. `snh_mix` denotes spatial neighbor holdout missingness, where the target node is masked while same-time neighbor observations remain visible. The figure highlights the strong advantage of correlation-aware topology neighbors under the online spatial interpolation protocol. RMSE, root mean square error.
+
+仅有总体指标仍不足以说明 `snh_mix` 在不同业务子群上的表现，因此 Figure 6 和 Figure 7 分别给出按流量水平与按缺失长度分组的 RMSE 结果。Figure 6 表明，在高流量、中流量和低流量三个预定义流量层中，最优方法的领先关系保持稳定，说明在线空间插补优势并不局限于某一流量范围。
+
+![Figure 6](../../../results/rdm_exp/scenarios/snh_mix/imp/figures/snh_mix_flow_group_rmse_by_method.png)
+
+Figure 6. RMSE comparison by flow group under the `snh_mix` scenario. High-flow, mid-flow, and low-flow groups denote the predefined traffic-level strata in the formal summary. The figure shows that `correlation_topology_neighbor_fill` maintains its advantage across heterogeneous traffic-intensity subsets. RMSE, root mean square error.
+
+如 Figure 7 所示，从缺失跨度角度观察时，`correlation_topology_neighbor_fill` 在 short、mid 和 long 三类缺失长度组中始终排名第一，与表 7 中的总体最优结论形成一致支持。这里的 short、mid 和 long 分别对应 1-4、5-12 和 13-24 个时间片的预定义缺失长度区间。
+
+![Figure 7](../../../results/rdm_exp/scenarios/snh_mix/imp/figures/snh_mix_length_group_rmse_by_method.png)
+
+Figure 7. RMSE comparison by missing-length group under the `snh_mix` scenario. Short, mid, and long correspond to missing spans of 1-4, 5-12, and 13-24 time steps, respectively. The ranking stability across length groups indicates that the performance gain of correlation-aware topology neighbors is robust to the duration of contiguous target-node missingness. RMSE, root mean square error.
+
+最后，Figure 8 以排名热图的形式汇总了 `snh_mix` 在不同缺失率下的 RMSE 排名结果，使方法优势的全局结构更易于比较。该图能够直观显示 `correlation_topology_neighbor_fill` 在全部缺失率水平上的一致第一名地位，以及其他方法在不同条件下的相对排序波动。
+
+![Figure 8](../../../results/rdm_exp/scenarios/snh_mix/imp/figures/rank_heatmap_snh_mix_rmse.png)
+
+Figure 8. Heatmap of RMSE-based method rankings under the `snh_mix` scenario across all missing-rate levels. Lower ranks indicate better performance, with rank 1 representing the best method at the corresponding missing rate. The heatmap summarizes the globally stable dominance of `correlation_topology_neighbor_fill` under the online spatial interpolation protocol. RMSE, root mean square error.
+
+## 4. 讨论
+
+### 4.1 图相关空间信息为何稳定有效
+
+无论在严格历史协议场景还是在线空间插补场景中，`correlation_topology_neighbor_fill` 都表现出稳定优势。这一现象说明，真实交通流恢复并不仅仅依赖时间平滑性，还依赖空间上可解释的相关结构。与单纯使用静态拓扑不同，相关性拓扑策略能够在空间邻接关系之上进一步筛选信息质量更高的邻居节点，从而降低无效传播和误差放大风险。这一点与仿真实验中“图结构建模优于规则卷积建模”的趋势形成了方法论上的相互印证 [Ref-G1, Ref-G2]。
+
+### 4.2 缺失机制与信息边界共同决定恢复难度
+
+本节结果表明，缺失率、缺失结构和可用信息边界共同决定恢复性能。前三类严格历史协议场景共享同样的可用信息约束，因此适合纳入统一主表比较；在这一前提下，`ntb_mix` 的高缺失率结果略差于 `g_mcar_pt` 和 `nso_mix`，说明长时间连续空洞更依赖目标节点自身历史。另一方面，`snh_mix` 的较低误差并不意味着该场景在统计意义上“更简单”，而是因为其当前时刻邻居信息可用，从根本上改变了恢复问题的信息结构。因此，将 `snh_mix` 作为独立正文模块而非与前三类统一排名，是更符合 SCI 论文方法学严谨性的写法。
+
+### 4.3 学术适配性与章节独立性
+
+从章节组织上看，本节已经具备 SCI 论文独立章节所需的基本要素：明确的引言、可复现的方法定义、公式化指标体系、结构化结果展示、讨论性解释以及可继续扩展的引用框架。与参考仿真实验章节相同，本节保持了“问题定位 -> 方法定义 -> 结果证据 -> 讨论归纳”的学术叙述路径；同时，图表、术语和公式写法均可在并入整篇论文后进行全局编号，而无需对核心内容进行二次重构。
+
+此外，结构化工件一致性问题已经完成修复，使 `nso_mix` 与 `ntb_mix` 的 `manifest`、分布摘要和审计结果能够为本节提供稳定支撑。这一点对 SCI 写作尤为重要，因为章节一旦进入正文，就必须保证其结果链条具有一致性、可复核性与可再现性。
+
+## 5. 结论
+
+本节在完整真实节点级交通流基线之上，构造了四类可复现缺失场景，并系统评估六种正式插补方法在严格历史因果补全与在线空间插补两类协议下的表现。主要结论如下。
+
+1. 在三类严格历史协议场景中，`correlation_topology_neighbor_fill` 在全部缺失率水平下均取得最低整体 RMSE，说明相关拓扑邻居信息是恢复真实交通流缺失值的关键线索。
+2. 随着缺失率提升，`g_mcar_pt`、`ntb_mix` 和 `nso_mix` 的误差均稳定上升，表明缺失比例仍是决定恢复难度的核心因素。
+3. 相较于全局点级随机缺失，单节点连续时间块缺失在高缺失率下表现出更高恢复难度，说明结构化连续缺失会显著削弱历史信息的有效性。
+4. 在 `snh_mix` 场景中，`correlation_topology_neighbor_fill` 的 RMSE 稳定维持在 98.20-102.97 区间，表明当前时刻邻居观测在在线空间插补协议下具有显著增益。
+5. 本节结果与前述仿真实验关于图结构和异质性重要性的发现具有方向一致性，但二者分别对应数据恢复与预测建模两个层面，因此应当被理解为互补证据，而非简单替代关系。
+
+未来工作可沿三个方向推进：其一，将当前最优插补方案与真实数据联邦预测实验直接连接，定量分析输入恢复质量改善对下游预测收益的贡献；其二，在现有 MCAR 与结构化非随机缺失之外，引入更明确的 MAR 或设备级故障机制建模；其三，继续丰富 `snh_mix` 所代表的在线空间插补类实验，包括更细粒度的邻居约束诊断与自适应空间方法扩展。
