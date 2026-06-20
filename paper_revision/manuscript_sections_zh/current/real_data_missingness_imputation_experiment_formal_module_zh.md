@@ -56,6 +56,20 @@
 
 为保证复现性，项目在各场景目录下均保存了 `run_config.json`、`run_config_imputation.json`、审计报告、汇总 CSV 和图件索引。场景注册、状态字段、路径索引与备注统一由 `results\rdm_exp\experiment_registry.json` 管理；本文所有“主结果”“主表”“正式结论”等表述，若未特别说明，均仅指注册状态为 `ready` 且已纳入本稿统计的三类场景。
 
+在本轮通读与全项目遍历后，可以进一步把缺失值设置与填补相关模块划分为四类：
+
+**表 1-1 缺失值设置与补全相关模块全景梳理**
+
+| 模块类别 | 代表脚本 | 当前作用 |
+|---|---|---|
+| 场景生成主链路 | `global_missingness_setting_pipeline.py`、`structured_missingness_setting_pipeline.py`、`spatial_neighbor_holdout_setting_pipeline_fast.py` | 分别负责 `g_mcar_pt`、`ntb_mix/nso_mix`、`snh_mix` 的缺失场景生成与原始审计 |
+| 补全执行主链路 | `global_missingness_imputation_pipeline.py`、`structured_missingness_imputation_pipeline.py`、`spatial_neighbor_holdout_imputation_pipeline.py` | 按场景协议执行六方法补全、生成 summary 与审计结果 |
+| 可视化与分布分析 | `visualize_all_missingness_imputation_results.py`、`visualize_global_missingness_imputation.py`、`visualize_spatial_neighbor_holdout_results.py`、`analyze_structured_missingness_distribution.py` | 负责 comparison 层、单场景图件、结构化缺失分布报告与辅助表 |
+| 路径治理与一致性修复 | `missingness_experiment_paths.py`、`reorganize_missingness_experiment_layout.py`、`repair_structured_scenario_artifacts.py`、`extract_and_cleanup_imputed_datasets.py` | 负责目录重组、短路径迁移、单场景工件重建、归档清理与防复发 |
+| 回归验证 | `tests\test_structured_scenario_artifact_repair.py` | 覆盖单场景重建、共享状态污染过滤、文件名归一化与 manifest/report 一致性校验 |
+
+这意味着当前项目中“缺失值设置”和“缺失值填补”不再只是四个主脚本的线性串联，而是已经形成“场景生成 -> 补全执行 -> 可视化汇总 -> 工件修复与校验 -> 回归测试”的完整模块化链路。文档中的后续口径更新，均以该全景梳理结果为基础。
+
 ## 实验数据来源与预处理说明
 
 ### 数据来源与规模
@@ -135,7 +149,7 @@
 
 在 `ntb_mix` 中，连续缺失发生在单节点自身的时间轴上，因此更强调时间连续性破坏；在 `nso_mix` 中，连续缺失表现为部分节点在同一时段共同离线，更接近局部采集设备短时故障或通信中断。两类机制都不属于 MCAR，因为缺失并非独立点级均匀抽样，而是带有明确的时间结构与节点结构偏向。
 
-需要单独说明的是，`nso_mix` 目录下部分缺失分布报告与 manifest 文件存在内容疑似错位问题，部分文本仍显示 `node_temporal_block`。因此，本文在描述 `nso_mix` 的分布细节时，以 `run_config.json`、正式补全审计和主结果表为主，不把该分布报告作为唯一依据。
+需要单独说明的是，结构化场景目录中的共享工件复制问题已经完成修复。当前 `nso_mix` 与 `ntb_mix` 的分布报告、`manifest` 与一致性校验文件均由 `repair_structured_scenario_artifacts.py` 基于单场景本地 `masks`、`miss_data`、`run_config` 和 `chunk_status` 重新构建，并通过 `structured_missingness_consistency_validation.json` 验证为 `all_consistent = true`。因此，本文现在可以将 `nso_mix` 与 `ntb_mix` 的单场景分布报告作为辅助证据使用，而不再需要把它们视作未修复风险项。
 
 ## 缺失值补全算法实现与步骤
 
@@ -280,7 +294,7 @@
 
 注：图 3 来源于 `results\rdm_exp\scenarios\nso_mix\imp\figures\nso_mix_rmse_by_method.png`，文件 UTC 生成时间为 `2026-06-19T03:58:59Z`。
 
-图 4 给出了三类 ready 主结果场景的跨场景总体 RMSE 对比图。该图适合观察不同场景之间的整体误差层级。当前 comparison 层已经完成六方法名称统一，因此可作为辅助趋势展示与交叉核对材料使用；但考虑到 `snh_mix` 的扩展结果评估协议不同，且 `nso_mix` 的部分分布文件仍待复核，本文仍以场景级主 summary 和审计报告作为最终结论依据。
+图 4 给出了三类 ready 主结果场景的跨场景总体 RMSE 对比图。该图适合观察不同场景之间的整体误差层级。当前 comparison 层已经完成六方法名称统一，同时 `ntb_mix` 与 `nso_mix` 的结构化分布报告也已完成单场景重建和一致性校验，因此 comparison 图件可作为辅助趋势展示与交叉核对材料使用；不过，正式结论仍以各场景主 summary CSV 与对应审计报告为准，以避免把不同协议下的扩展产物混写进主结论链路。
 
 ![图 4 三类 ready 正式场景总体 RMSE 跨场景对比](../../../results/rdm_exp/comparison/figures/scenario_comparison_rmse_overall.png)
 
@@ -315,15 +329,16 @@
 | 跨场景图 | `results\rdm_exp\comparison\figures\scenario_comparison_rmse_overall.png` | 图 4 | `2026-06-16T14:29:07Z` |
 | 辅助表 | `results\rdm_exp\comparison\tables\best_method_summary.csv` | 辅助概览与交叉核对，不作为唯一结论依据 | `2026-06-20T14:16:52Z` |
 
-### 口径一致性风险
+### 口径一致性同步状态
 
-为保证学术归档的严谨性，本文需要显式记录当前结果目录中仍存在的一项一致性风险，以及两项已完成修复的口径同步事项。
+为保证学术归档的严谨性，本文需要显式记录本轮通读、检索和修复后已经完成的关键口径同步事项。
 
-1. 已修复项：`comparison` 层原有的旧方法名 `topology_function_hybrid` 已完成统一清理，当前 comparison 表和图件已统一采用正式六方法口径，即 `mean_fill`、`forward_fill`、`historical_linear_extrapolation`、`function_curve_fit`、`road_topology_neighbor_fill` 和 `correlation_topology_neighbor_fill`。因此，comparison 层现可作为辅助交叉核对材料使用，但正式分析仍以各场景主 summary CSV 和对应审计报告为准。
+1. 已修复项：`comparison` 层原有的旧方法名 `topology_function_hybrid` 已完成统一清理，当前 comparison 表和图件已统一采用正式六方法口径，即 `mean_fill`、`forward_fill`、`historical_linear_extrapolation`、`function_curve_fit`、`road_topology_neighbor_fill` 和 `correlation_topology_neighbor_fill`。
 2. 已修复项：`nso_mix` 的 `run_config_imputation.json` 已同步更新为正式结果口径，不再残留 `zero_fill` 与 `topology_function_hybrid` 等旧方法名，路径字段也已切换为当前 `results\rdm_exp\scenarios\nso_mix` 目录。
-3. 未修复风险：`nso_mix` 目录下部分缺失分布报告和 manifest 文件内容疑似仍显示 `node_temporal_block`，存在路径与文本不一致现象。因此，本文对 `nso_mix` 的结构分布描述主要依据 `run_config`、正式补全审计和主结果表，相关分布文件应在后续版本中复核。
+3. 已修复项：`nso_mix` 与 `ntb_mix` 目录下曾经因共享 structured 工件复制而出现的分布报告与 `manifest` 内容错位问题，现已通过单场景工件重建机制完成修复。两类结构化场景的 `structured_missingness_consistency_validation.json` 均给出 `validated = true`、`row_count = 4`、`all_consistent = true`。
+4. 已补强项：针对上述结构化工件错位问题，项目现已新增 `repair_structured_scenario_artifacts.py`、更新 `analyze_structured_missingness_distribution.py` 与 `reorganize_missingness_experiment_layout.py`，并通过 `tests\test_structured_scenario_artifact_repair.py` 覆盖共享状态污染过滤、`_mask.parquet` 文件名归一化、短路径目录解析与一致性校验失败场景。
 
-上述已修复事项不会改变本报告既有主结论，但提高了 comparison 层与配置文件的口径一致性；当前唯一仍需在归档稿中保留的实质性风险，是 `nso_mix` 部分分布文件的内容错位问题。
+上述同步事项不会改变本报告既有主结论，但显著提高了 comparison 层、场景配置、结构化分布报告与归档工件之间的口径一致性。当前主链路中已无已知的 `manifest/report` 内容错位风险；仍需在文稿中单独保留说明的，只是 `snh_mix` 的协议边界和完成状态尚未闭环，这属于扩展场景范围控制问题，而不是主结果链路的数据一致性缺陷。
 
 ## 未完成场景说明
 
@@ -408,7 +423,7 @@
 2. 修复 `visualization_contains_spatial_methods = False` 对应的缺失图件或命名不一致问题，补齐空间方法展示链路；
 3. 在保持 `online_spatial_interpolation` 协议边界清晰的前提下，补齐 `neighbor_coverage` 与 `constraint_level` 等空间诊断输出；
 4. 明确 `phase_1_six_baseline_methods` 是否为最终正式版本，还是需要继续纳入自适应空间方法形成 phase 2；
-5. 在 `snh_mix` 闭环推进之外，继续复核 `nso_mix` 的缺失分布报告与 manifest 内容错位问题，消除当前唯一剩余的主链路口径风险；
+5. 若后续需要把 `snh_mix` 进一步 formalize，可复用当前 `ntb_mix/nso_mix` 已建立的一致性校验链路，把 `manifest-summary-report-validation` 的闭环机制推广到空间插补扩展场景；
 6. 待完整性、可视化与协议说明均闭环后，再将注册状态从 `in_progress` 更新为 `ready`，并决定其是进入主稿附录扩展模块，还是单独形成“空间插补扩展实验”章节。
 
 ## 结论与展望
@@ -421,7 +436,7 @@
 4. 单纯依赖道路拓扑历史的 `road_topology_neighbor_fill` 效果明显不足，说明静态拓扑先验若缺少实时相关邻居支持，难以独立承担高质量补全任务；
 5. 当前真实数据缺失补全结果与前期仿真实验关于图结构重要性和扰动敏感性的结论在方向上相互支持，但二者分属数据恢复与预测建模两个层面，不能简单互相替代。
 
-后续工作可从三个方向继续推进。其一，继续复核 `nso_mix` 缺失分布文件与 manifest 的内容错位问题，进一步提高归档材料的一致性。其二，将当前最优补全方案与真实数据预测实验连接起来，直接评估“补全后输入质量提升”是否能够转化为下游联邦预测误差下降。其三，在当前 MCAR 与结构化非随机缺失之外，继续补充更明确的 MAR 或设备级故障机制，以扩展真实交通数据缺失建模的覆盖范围。
+后续工作可从三个方向继续推进。其一，将当前已在 `ntb_mix/nso_mix` 上验证通过的单场景工件重建与一致性校验机制推广到更多扩展场景，形成统一的归档前校验流程。其二，将当前最优补全方案与真实数据预测实验连接起来，直接评估“补全后输入质量提升”是否能够转化为下游联邦预测误差下降。其三，在当前 MCAR 与结构化非随机缺失之外，继续补充更明确的 MAR 或设备级故障机制，以扩展真实交通数据缺失建模的覆盖范围。
 
 ## 小结
 
