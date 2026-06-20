@@ -645,7 +645,8 @@ def main() -> None:
 
     paths = build_paths(args.output_dir)
     mkdirs(paths)
-    write_run_artifacts(args, paths)
+    if args.stage in {"prepare", "generate_missing", "all"}:
+        write_run_artifacts(args, paths)
 
     counts_df: pd.DataFrame | None = None
 

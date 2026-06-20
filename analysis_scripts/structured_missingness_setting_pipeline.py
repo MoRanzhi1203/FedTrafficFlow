@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import gc
@@ -2047,13 +2047,14 @@ def run_audit(
 
 def main() -> None:
     args = parse_args()
-    project_root = Path.cwd()
+    project_root = Path(__file__).resolve().parents[1]
     args.input_dir = ensure_absolute(project_root, args.input_dir)
     args.output_dir = ensure_absolute(project_root, args.output_dir)
     paths = build_paths(args.output_dir)
     mkdirs(paths)
     mechanisms, missing_rates, length_config = validate_args(args)
-    write_run_artifacts(args, paths, mechanisms, missing_rates, length_config)
+    if args.stage in {"prepare", "generate_missing", "all"}:
+        write_run_artifacts(args, paths, mechanisms, missing_rates, length_config)
 
     if args.stage in {"prepare", "all"}:
         prepare_artifacts = run_prepare(args, paths)

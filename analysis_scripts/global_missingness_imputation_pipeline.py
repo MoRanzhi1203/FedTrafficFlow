@@ -29,7 +29,6 @@ EXPECTED_MASK_SCOPE = "global"
 EXPECTED_MISSING_UNIT = "node_time_observation"
 METHOD_ALIASES = {
     "geo_neighbor_fill": "road_topology_neighbor_fill",
-    "geo_func_hybrid": "topology_function_hybrid",
 }
 METHOD_ORDER = [
     "mean_fill",
@@ -110,7 +109,6 @@ class RateScanResult:
     history_linear: deque[np.ndarray]
     history_road: deque[np.ndarray]
     history_function: deque[np.ndarray]
-    history_hybrid: deque[np.ndarray]
     history_clean: deque[np.ndarray]
 
 
@@ -246,7 +244,7 @@ def mkdirs(paths: StagePaths) -> None:
 def write_run_artifacts(args: argparse.Namespace, paths: StagePaths) -> None:
     config = {
         "experiment_name": EXPECTED_EXPERIMENT_NAME,
-        "stage": "imputation_only",
+        "stage": args.stage,
         "input_dir": str(args.input_dir),
         "missingness_dir": str(args.missingness_dir),
         "output_dir": str(args.output_dir),
@@ -266,6 +264,15 @@ def write_run_artifacts(args: argparse.Namespace, paths: StagePaths) -> None:
         "time_col": args.time_col,
         "period": args.period,
         "topology_file": str(args.topology_file),
+        "correlation_history_days": args.correlation_history_days,
+        "neighbor_scope": args.neighbor_scope,
+        "allow_current_time_neighbors": parse_bool(args.allow_current_time_neighbors),
+        "manifests_subdir": args.manifests_subdir,
+        "summaries_subdir": args.summaries_subdir,
+        "audits_subdir": args.audits_subdir,
+        "figures_subdir": args.figures_subdir,
+        "run_config_name": paths.run_config_path.name,
+        "run_commands_name": paths.run_commands_path.name,
     }
     write_json(paths.run_config_path, config)
     command_lines = [
@@ -545,7 +552,6 @@ def compute_method_outputs(
     history_linear: deque[np.ndarray],
     history_road: deque[np.ndarray],
     history_function: deque[np.ndarray],
-    history_hybrid: deque[np.ndarray],
     history_clean: deque[np.ndarray],
     weight_matrix: sparse.csr_matrix,
     row_sums: np.ndarray,
@@ -588,16 +594,6 @@ def compute_method_outputs(
         pseudo_inverse,
         forward_imputed,
     )
-    hybrid_imputed, hybrid_fallback = impute_topology_function_hybrid(
-        prepared.missing_sorted,
-        prepared.mask_matrix,
-        road_primary_pred,
-        road_primary_available,
-        function_primary_pred,
-        function_primary_available,
-        forward_imputed,
-        lam=0.5,
-    )
     masked_node_indices, masked_slot_indices = np.where(prepared.mask_matrix)
     corr_stack = historical_stack(history_clean, last_n=correlation_history_days)
     ctn_imputed, ctn_fallback = spatial_current_prediction(
@@ -616,7 +612,6 @@ def compute_method_outputs(
         "historical_linear_extrapolation": (linear_imputed, linear_fallback),
         "road_topology_neighbor_fill": (road_imputed, road_fallback),
         "function_curve_fit": (function_imputed, function_fallback),
-        "topology_function_hybrid": (hybrid_imputed, hybrid_fallback),
         "correlation_topology_neighbor_fill": (ctn_imputed, ctn_fallback),
     }
 
@@ -629,18 +624,15 @@ def update_histories_from_outputs(
     history_linear: deque[np.ndarray],
     history_road: deque[np.ndarray],
     history_function: deque[np.ndarray],
-    history_hybrid: deque[np.ndarray],
 ) -> np.ndarray:
     forward_imputed = method_outputs.get("forward_fill", (observed_matrix, None))[0]
     linear_imputed = method_outputs.get("historical_linear_extrapolation", (observed_matrix, None))[0]
     road_imputed = method_outputs.get("road_topology_neighbor_fill", (observed_matrix, None))[0]
     function_imputed = method_outputs.get("function_curve_fit", (observed_matrix, None))[0]
-    hybrid_imputed = method_outputs.get("topology_function_hybrid", (observed_matrix, None))[0]
     history_observed.append(observed_matrix.copy())
     history_linear.append(linear_imputed.copy())
     history_road.append(road_imputed.copy())
     history_function.append(function_imputed.copy())
-    history_hybrid.append(hybrid_imputed.copy())
     return forward_imputed[:, -1].copy()
 
 
@@ -1216,42 +1208,6 @@ def impute_function_curve_fit(
     return imputed, fallback_mask, primary_pred, primary_available
 
 
-def impute_topology_function_hybrid(
-    missing_matrix: np.ndarray,
-    mask_matrix: np.ndarray,
-    road_primary_pred: np.ndarray | None,
-    road_primary_available: np.ndarray | None,
-    function_primary_pred: np.ndarray | None,
-    function_primary_available: np.ndarray | None,
-    forward_fill_matrix: np.ndarray,
-    lam: float = 0.5,
-) -> tuple[np.ndarray, np.ndarray]:
-    imputed = missing_matrix.copy()
-    fallback_mask = np.zeros_like(mask_matrix, dtype=bool)
-    road_available = road_primary_available if road_primary_available is not None else np.zeros_like(mask_matrix, dtype=bool)
-    func_available = (
-        function_primary_available if function_primary_available is not None else np.zeros_like(mask_matrix, dtype=bool)
-    )
-
-    both_available = mask_matrix & road_available & func_available
-    road_only = mask_matrix & road_available & ~func_available
-    func_only = mask_matrix & ~road_available & func_available
-    neither_available = mask_matrix & ~road_available & ~func_available
-
-    if road_primary_pred is not None and function_primary_pred is not None:
-        imputed[both_available] = (lam * road_primary_pred[both_available]) + (
-            (1.0 - lam) * function_primary_pred[both_available]
-        )
-    if road_primary_pred is not None:
-        imputed[road_only] = road_primary_pred[road_only]
-    if function_primary_pred is not None:
-        imputed[func_only] = function_primary_pred[func_only]
-    if np.any(neither_available):
-        imputed[neither_available] = forward_fill_matrix[neither_available]
-        fallback_mask[neither_available] = True
-    return imputed, fallback_mask
-
-
 def build_group_ids(true_values: np.ndarray, thresholds: dict[str, Any]) -> np.ndarray:
     q33 = float(thresholds["quantiles"]["q33"])
     q66 = float(thresholds["quantiles"]["q66"])
@@ -1478,7 +1434,6 @@ def scan_existing_outputs_for_rate(
     history_linear: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_road: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_function: deque[np.ndarray] = deque(maxlen=args.history_days)
-    history_hybrid: deque[np.ndarray] = deque(maxlen=args.history_days)
     history_clean: deque[np.ndarray] = deque(maxlen=max(args.history_days, args.correlation_history_days))
     forward_last_state: np.ndarray | None = None
 
@@ -1540,7 +1495,6 @@ def scan_existing_outputs_for_rate(
             history_linear=history_linear,
             history_road=history_road,
             history_function=history_function,
-            history_hybrid=history_hybrid,
         )
         history_clean.append(prepared.clean_sorted.copy())
 
@@ -1555,7 +1509,6 @@ def scan_existing_outputs_for_rate(
         history_linear=copy_history(history_linear, args.history_days),
         history_road=copy_history(history_road, args.history_days),
         history_function=copy_history(history_function, args.history_days),
-        history_hybrid=copy_history(history_hybrid, args.history_days),
         history_clean=copy_history(history_clean, max(args.history_days, args.correlation_history_days)),
     )
 
@@ -1630,7 +1583,6 @@ def run_impute(
         history_linear = copy_history(scan_result.history_linear, args.history_days)
         history_road = copy_history(scan_result.history_road, args.history_days)
         history_function = copy_history(scan_result.history_function, args.history_days)
-        history_hybrid = copy_history(scan_result.history_hybrid, args.history_days)
         history_clean = copy_history(scan_result.history_clean, max(args.history_days, args.correlation_history_days))
         forward_last_state = None if scan_result.forward_last_state is None else scan_result.forward_last_state.copy()
 
@@ -1662,7 +1614,6 @@ def run_impute(
                 history_linear=history_linear,
                 history_road=history_road,
                 history_function=history_function,
-                history_hybrid=history_hybrid,
                 history_clean=history_clean,
                 weight_matrix=weight_matrix,
                 row_sums=row_sums,
@@ -1747,7 +1698,6 @@ def run_impute(
                 history_linear=history_linear,
                 history_road=history_road,
                 history_function=history_function,
-                history_hybrid=history_hybrid,
             )
             history_clean.append(prepared.clean_sorted.copy())
             persist_status_snapshot(status_rows, paths)
@@ -2006,7 +1956,8 @@ def main() -> None:
 
     paths = build_paths(args)
     mkdirs(paths)
-    write_run_artifacts(args, paths)
+    if args.stage in {"prepare", "impute", "all"}:
+        write_run_artifacts(args, paths)
 
     input_check_df: pd.DataFrame | None = None
     detail_df: pd.DataFrame | None = None
