@@ -18,13 +18,11 @@ METHOD_CODE_MAP = {
     "hle": "historical_linear_extrapolation",
     "mf": "mean_fill",
     "rtn": "road_topology_neighbor_fill",
-    "tfh": "topology_function_hybrid",
-    "ctnf": "correlation_topology_neighbor_fill",
+    "ctn": "correlation_topology_neighbor_fill",
     "zf": "zero_fill",
     "gnf": "geo_neighbor_fill",
-    "gfh": "geo_func_hybrid",
 }
-LEGACY_METHODS = set(["zero_fill", "geo_neighbor_fill", "geo_func_hybrid"])
+LEGACY_METHODS = set(["zero_fill", "geo_neighbor_fill"])
 SUMMARY_EXTENSIONS = set([".csv"])
 AUDIT_EXTENSIONS = set([".json", ".md"])
 FIGURE_EXTENSIONS = set([".png", ".pdf"])

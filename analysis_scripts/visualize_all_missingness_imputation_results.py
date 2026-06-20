@@ -14,7 +14,6 @@ import pandas as pd
 
 METHOD_ALIASES = {
     "geo_neighbor_fill": "road_topology_neighbor_fill",
-    "geo_func_hybrid": "topology_function_hybrid",
 }
 
 METHOD_DISPLAY = {
@@ -70,7 +69,6 @@ PLOT_COLORS = {
     "road_topology_neighbor_fill": "#8172B2",
     "function_curve_fit": "#CCB974",
     "correlation_topology_neighbor_fill": "#64B5CD",
-    "topology_function_hybrid": "#2A9D8F",
 }
 
 
@@ -111,6 +109,9 @@ def parse_method_list(raw: str) -> list[str]:
     normalized = [METHOD_ALIASES.get(method, method) for method in methods]
     if "zero_fill" in normalized:
         raise ValueError("zero_fill has been removed from the formal method set")
+    unsupported = [method for method in normalized if method not in METHOD_DISPLAY]
+    if unsupported:
+        raise ValueError(f"unsupported methods for formal visualization: {unsupported}")
     return normalized
 
 

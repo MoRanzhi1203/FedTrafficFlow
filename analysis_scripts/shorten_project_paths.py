@@ -88,12 +88,13 @@ FIXED_DIR_MAP = {
 }
 SHORT_TO_LONG_FIXED_DIR = {value: key for key, value in FIXED_DIR_MAP.items()}
 METHOD_ABBR = {
+    "mean_fill": "mf",
     "zero_fill": "zf",
     "forward_fill": "ff",
     "historical_linear_extrapolation": "hle",
     "road_topology_neighbor_fill": "rtn",
     "function_curve_fit": "fcf",
-    "topology_function_hybrid": "tfh",
+    "correlation_topology_neighbor_fill": "ctn",
 }
 SHORT_TO_LONG_METHOD = {value: key for key, value in METHOD_ABBR.items()}
 LEGACY_ROOT_ALIASES = {
@@ -847,7 +848,7 @@ def python_file_replacements() -> dict[str, list[tuple[str, str]]]:
         "analysis_scripts\\global_missingness_imputation_pipeline.py": [
             (
                 ']\nFLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]',
-                ']\nMETHOD_DIR_ABBREVIATIONS = {\n    "zero_fill": "zf",\n    "forward_fill": "ff",\n    "historical_linear_extrapolation": "hle",\n    "road_topology_neighbor_fill": "rtn",\n    "function_curve_fit": "fcf",\n    "topology_function_hybrid": "tfh",\n}\nFLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]',
+                ']\nMETHOD_DIR_ABBREVIATIONS = {\n    "mean_fill": "mf",\n    "forward_fill": "ff",\n    "historical_linear_extrapolation": "hle",\n    "road_topology_neighbor_fill": "rtn",\n    "function_curve_fit": "fcf",\n    "correlation_topology_neighbor_fill": "ctn",\n}\nFLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]',
             ),
             ('        imputed_datasets_dir=output_dir / "imputed_datasets",', '        imputed_datasets_dir=output_dir / "imp_data",'),
             (
@@ -889,7 +890,7 @@ def python_file_replacements() -> dict[str, list[tuple[str, str]]]:
         "analysis_scripts\\structured_missingness_imputation_pipeline.py": [
             (
                 ']\nFLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]',
-                ']\nMETHOD_DIR_ABBREVIATIONS = {\n    "zero_fill": "zf",\n    "forward_fill": "ff",\n    "historical_linear_extrapolation": "hle",\n    "road_topology_neighbor_fill": "rtn",\n    "function_curve_fit": "fcf",\n    "topology_function_hybrid": "tfh",\n}\nFLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]',
+                ']\nMETHOD_DIR_ABBREVIATIONS = {\n    "mean_fill": "mf",\n    "forward_fill": "ff",\n    "historical_linear_extrapolation": "hle",\n    "road_topology_neighbor_fill": "rtn",\n    "function_curve_fit": "fcf",\n    "correlation_topology_neighbor_fill": "ctn",\n}\nFLOW_GROUP_LABELS = ["low_flow", "mid_flow", "high_flow"]',
             ),
             ('        imputed_datasets_dir=output_dir / "imputed_datasets",', '        imputed_datasets_dir=output_dir / "imp_data",'),
             (
@@ -1233,7 +1234,6 @@ def write_report_files(
         "- `historical_linear_extrapolation -> hle`",
         "- `road_topology_neighbor_fill -> rtn`",
         "- `function_curve_fit -> fcf`",
-        "- `topology_function_hybrid -> tfh`",
         "",
         "## 逻辑变更审计",
         "",
