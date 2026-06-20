@@ -1,0 +1,6 @@
+{
+  "validated": true,
+  "row_count": 4,
+  "all_consistent": true,
+  "validation_csv": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\audits\\structured_missingness_consistency_validation.csv"
+}

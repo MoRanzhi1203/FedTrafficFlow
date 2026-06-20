@@ -1,9 +1,11 @@
 {
-  "experiment_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_structured_missingness_setting",
-  "complete_scenario_count": 2,
+  "experiment_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set",
+  "complete_scenario_count": 4,
   "complete_scenarios": [
-    "mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42",
-    "mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42"
+    "ntb_r05_mix_s42",
+    "ntb_r10_mix_s42",
+    "ntb_r20_mix_s42",
+    "ntb_r30_mix_s42"
   ],
   "target_col": "路口车流量",
   "original_columns": [
@@ -16,9 +18,9 @@
   "missing_pattern_overall": "non_random_structured_missingness",
   "scenario_summaries": [
     {
-      "scenario": "mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42",
+      "scenario": "ntb_r05_mix_s42",
       "mechanism": "node_temporal_block",
-      "missing_rate_target": "0.05",
+      "missing_rate_target": 0.05,
       "complete_mask_file_count": 61,
       "observed_missing_count": 12306677,
       "observed_missing_rate": 0.050000000812567044,
@@ -63,9 +65,9 @@
       }
     },
     {
-      "scenario": "mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42",
+      "scenario": "ntb_r10_mix_s42",
       "mechanism": "node_temporal_block",
-      "missing_rate_target": "0.10",
+      "missing_rate_target": 0.1,
       "complete_mask_file_count": 61,
       "observed_missing_count": 24613354,
       "observed_missing_rate": 0.10000000162513409,
@@ -108,11 +110,111 @@
         "23": 1136154,
         "24": 1173912
       }
+    },
+    {
+      "scenario": "ntb_r20_mix_s42",
+      "mechanism": "node_temporal_block",
+      "missing_rate_target": 0.2,
+      "complete_mask_file_count": 61,
+      "observed_missing_count": 49226707,
+      "observed_missing_rate": 0.19999999918743294,
+      "field_missing_rate_target_col": 0.19999999918743294,
+      "field_missing_rate_non_target_cols": 0.0,
+      "missing_pattern": "non_random_structured_missingness",
+      "is_random_missing": false,
+      "is_non_random_missing": true,
+      "node_missing_count_mean": 1171.1999952416074,
+      "node_missing_count_std": 34.505156984615574,
+      "node_missing_count_p95": 1228.0,
+      "node_missing_count_max": 1326,
+      "node_missing_gini": 0.016611553721997296,
+      "short_missing_ratio": 0.1926220455900087,
+      "mid_missing_ratio": 0.5251018923528644,
+      "long_missing_ratio": 0.28227606205712685,
+      "length_value_counts": {
+        "1": 1073207,
+        "2": 2022160,
+        "3": 2841606,
+        "4": 3545176,
+        "5": 2511080,
+        "6": 2832420,
+        "7": 3094385,
+        "8": 3287272,
+        "9": 3444975,
+        "10": 3546540,
+        "11": 3576573,
+        "12": 3555792,
+        "13": 1763684,
+        "14": 1779820,
+        "15": 1751055,
+        "16": 1690688,
+        "17": 1558390,
+        "18": 1396206,
+        "19": 1186987,
+        "20": 963160,
+        "21": 734328,
+        "22": 520608,
+        "23": 343643,
+        "24": 206952
+      }
+    },
+    {
+      "scenario": "ntb_r30_mix_s42",
+      "mechanism": "node_temporal_block",
+      "missing_rate_target": 0.3,
+      "complete_mask_file_count": 61,
+      "observed_missing_count": 73840061,
+      "observed_missing_rate": 0.30000000081256706,
+      "field_missing_rate_target_col": 0.30000000081256706,
+      "field_missing_rate_non_target_cols": 0.0,
+      "missing_pattern": "non_random_structured_missingness",
+      "is_random_missing": false,
+      "is_non_random_missing": true,
+      "node_missing_count_mean": 1756.8000047583926,
+      "node_missing_count_std": 41.881297537664615,
+      "node_missing_count_p95": 1826.0,
+      "node_missing_count_max": 1922,
+      "node_missing_gini": 0.013453520357530113,
+      "short_missing_ratio": 0.17072392451030072,
+      "mid_missing_ratio": 0.4875642234369227,
+      "long_missing_ratio": 0.3417118520527766,
+      "length_value_counts": {
+        "1": 1386901,
+        "2": 2651962,
+        "3": 3780786,
+        "4": 4786616,
+        "5": 3306780,
+        "6": 3772860,
+        "7": 4182416,
+        "8": 4527360,
+        "9": 4789827,
+        "10": 5016310,
+        "11": 5161079,
+        "12": 5245140,
+        "13": 2300311,
+        "14": 2322138,
+        "15": 2345310,
+        "16": 2330576,
+        "17": 2310997,
+        "18": 2270682,
+        "19": 2218991,
+        "20": 2112420,
+        "21": 2016651,
+        "22": 1856052,
+        "23": 1677896,
+        "24": 1470000
+      }
     }
   ],
+  "manifest_consistency": {
+    "validated": true,
+    "row_count": 4,
+    "all_consistent": true,
+    "validation_csv": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\audits\\structured_missingness_consistency_validation.csv"
+  },
   "figures": {
-    "observed_rate": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_structured_missingness_setting\\figures\\structured_missingness_observed_rate.png",
-    "length_group_ratio": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_structured_missingness_setting\\figures\\structured_missingness_length_group_ratio.png",
-    "time_slot_heatmap": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_structured_missingness_setting\\figures\\structured_missingness_time_slot_heatmap.png"
+    "observed_rate": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\audits\\structured_missingness_observed_rate.png",
+    "length_group_ratio": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\audits\\structured_missingness_length_group_ratio.png",
+    "time_slot_heatmap": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\ntb_mix\\miss_set\\audits\\structured_missingness_time_slot_heatmap.png"
   }
 }
