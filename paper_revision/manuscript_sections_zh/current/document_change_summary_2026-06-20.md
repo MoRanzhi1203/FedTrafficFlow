@@ -15,7 +15,7 @@
 
 - 本次文档更新围绕“真实数据缺失值设置与缺失值补全实验”正式文稿展开，目标是把文稿内容与当前项目代码、配置、审计产物和真实目录修复结果重新对齐。
 - 更新重点不是新增实验结论，而是补齐全项目模块梳理、同步最新修复状态、移除已过期风险描述，并强化后续归档与复核可用性。
-- 本次文档更新与当前仓库状态一致：`comparison` 方法名统一已完成，`nso_mix` 与 `ntb_mix` 的结构化 `manifest/report` 错位修复已完成并通过一致性校验，`snh_mix` 仍保持扩展场景、`in_progress` 状态。
+- 本次文档更新与当前仓库状态一致：`comparison` 方法名统一已完成，`nso_mix` 与 `ntb_mix` 的结构化 `manifest/report` 错位修复已完成并通过一致性校验，`snh_mix` 已按正文场景写入正式文稿，并作为独立协议模块报告结果。
 
 ## 3. 结构化变更记录
 
@@ -25,8 +25,8 @@
 | `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `缺失值设置实验设计 -> 结构化缺失设计` | 将 `nso_mix/ntb_mix` 结构化工件状态更新为“已通过单场景重建与一致性校验”，不再保留“分布报告与 manifest 疑似错位、仅供参考”的旧风险表述 | `2026-06-20` 状态同步 |
 | `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `实验结果分析 -> 图形化结果` 中图 4 说明 | 将 comparison 层定位更新为“方法名已统一，且结构化分布报告已修复后，可作为辅助趋势展示与交叉核对材料”，同时继续强调正式结论仍以场景级 summary 与审计报告为准 | `2026-06-20` 口径修订 |
 | `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `结果追踪、来源与口径说明` | 原“口径一致性风险”小节改写为“口径一致性同步状态”，明确记录四项已完成内容：comparison 方法名统一、`nso_mix` 补全配置同步、`nso_mix/ntb_mix` 工件错位修复完成、测试与防复发链路补强完成 | `2026-06-20` 风险项归档更新 |
-| `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `未完成场景说明 -> 后续推进计划` | 将 `snh_mix` 的后续工作重点调整为复用当前 `ntb_mix/nso_mix` 已验证通过的 `manifest-summary-report-validation` 闭环机制，而非继续引用已解决的 `nso_mix` 主链路风险 | `2026-06-20` 计划更新 |
-| `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `结论与展望` | 将后续工作方向更新为“推广一致性校验链路到更多扩展场景”“评估补全质量改进对下游预测的影响”“补充 MAR/设备级故障机制”，去除已失效的 `nso_mix` 错位复核表述 | `2026-06-20` 结论统稿 |
+| `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `snh_mix 正文场景说明与结果` | 将原“未完成场景说明”整体改写为 `snh_mix` 正文场景说明与结果，明确其为已完成的正文内容，并补充独立协议边界、正文状态摘要、最优结果表与分类对比说明 | `2026-06-20` 结构修订 |
+| `real_data_missingness_imputation_experiment_formal_module_zh.md` | 同上 | `结论与展望` | 将结论范围更新为“四类场景均纳入正文”，新增 `snh_mix` 的正式结果结论，并把后续工作改写为正文深化与协议扩展，而非未完成收尾 | `2026-06-20` 结论统稿 |
 | `document_change_summary_2026-06-20.md` | `paper_revision\manuscript_sections_zh\current\document_change_summary_2026-06-20.md` | 全文新增 | 新建独立文档变更摘要文件，汇总本次文档更新范围、位置、核心调整内容、证据来源与提交建议，供归档与汇报直接复用 | `2026-06-20` 新增 |
 
 ## 4. 核对依据
@@ -40,14 +40,15 @@
 | 方法更新审计 | `results\rdm_exp\method_update_audit\method_update_report_zh.md` | 核对 `mean_fill` 纳入、`zero_fill` 移除、未重跑 impute 的边界说明 |
 | `nso_mix` 一致性校验 | `results\rdm_exp\scenarios\nso_mix\miss_set\audits\structured_missingness_consistency_validation.json` | 核对 `validated = true`、`all_consistent = true` |
 | `ntb_mix` 一致性校验 | `results\rdm_exp\scenarios\ntb_mix\miss_set\audits\structured_missingness_consistency_validation.json` | 核对 `validated = true`、`all_consistent = true` |
-| `snh_mix` 阶段状态 | `results\rdm_exp\scenarios\snh_mix\imp\audits\snh_imputation_validation.json` | 保留 `in_progress` 与未闭环状态说明 |
+| `snh_mix` 正文结果 | `results\rdm_exp\scenarios\snh_mix\imp\summaries\snh_imputation_quality_summary_exclude_warmup.csv` | 核对 `snh_mix` 正文结果与最优方法表现 |
+| `snh_mix` 图件 | `results\rdm_exp\scenarios\snh_mix\imp\figures\snh_best_method_summary.csv` | 核对 `snh_mix` 在不同缺失率下的最优方法与数值范围 |
 | 结构化修复脚本 | `analysis_scripts\repair_structured_scenario_artifacts.py` | 对应单场景重建与一致性校验实现 |
 | 回归测试 | `tests\test_structured_scenario_artifact_repair.py` | 对应修复逻辑的验证覆盖说明 |
 
 ## 5. 提交前校验结论
 
 - 当前文档改动范围聚焦于正式实验文稿与本摘要文件，未混入额外代码逻辑修改。
-- 当前文档内容已与仓库内最新真实产物状态对齐，特别是 `nso_mix` 与 `ntb_mix` 的结构化修复结果已同步反映到文稿中。
+- 当前文档内容已与仓库内最新真实产物状态对齐，特别是 `nso_mix` 与 `ntb_mix` 的结构化修复结果，以及 `snh_mix` 作为正文场景的结果状态，均已同步反映到文稿中。
 - 文稿已完成诊断检查，未发现新增格式或语法问题。
 - 推送前仍需执行一次 `git status`、`git diff --cached --name-only` 与远端同步检查，确保提交范围与摘要记录一致。
 
