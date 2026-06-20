@@ -2,8 +2,8 @@
   "experiment_name": "real_data_structured_missingness_setting",
   "stage": "imputation_only",
   "input_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\analysis\\node_intersection_flow_parquet",
-  "missingness_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_structured_missingness_setting",
-  "output_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\real_data_structured_missingness_setting",
+  "missingness_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\miss_set",
+  "output_dir": "E:\\Jupter_Notebook\\FedTrafficFlow\\results\\rdm_exp\\scenarios\\nso_mix\\imp",
   "missing_rates": [
     0.05,
     0.1,
@@ -14,12 +14,12 @@
   "scenario_tag": "mixed_short_mid_long",
   "seed": 42,
   "impute_methods": [
-    "zero_fill",
+    "mean_fill",
     "forward_fill",
     "historical_linear_extrapolation",
-    "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid"
+    "road_topology_neighbor_fill",
+    "correlation_topology_neighbor_fill"
   ],
   "causal_history_only": true,
   "history_days": 7,

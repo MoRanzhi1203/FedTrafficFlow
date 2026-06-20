@@ -12,8 +12,10 @@ import pandas as pd
 
 try:
     from analysis_scripts.missingness_experiment_paths import SCENARIO_IDS
+    from analysis_scripts.repair_structured_scenario_artifacts import repair_structured_scenarios_under_target_root
 except ImportError:
     from missingness_experiment_paths import SCENARIO_IDS
+    from repair_structured_scenario_artifacts import repair_structured_scenarios_under_target_root
 
 
 GLOBAL_SCENARIO_ID = "global_mcar_point"
@@ -969,7 +971,7 @@ def write_plan_outputs(
         "",
         "- `is_large_data = true` 代表 masks、missing_datasets、imputed_datasets 或 parquet 大文件目录。",
         "- dry_run 阶段只生成计划，不实际移动文件。",
-        "- shared structured 审计与 manifest 会复制到 block/outage 两个 scenario 中。",
+        "- shared structured 原始文件会先迁移到 block/outage 两个 scenario 中，随后自动重建单场景 manifest 与分布报告，避免跨机制内容错位。",
     ]
     write_markdown(plan_md_path, lines)
 
@@ -1002,7 +1004,7 @@ def write_migration_report(
         "generated_path_aliases": (target_root / "path_aliases.json").exists(),
         "validation_passed": None if validation_summary is None else bool(validation_summary.get("all_complete")),
         "follow_up_recommendation": "Use results\\real_data_missingness_experiments as the primary root for future lookup and lightweight Git operations.",
-        "shared_structured_note": "Shared structured missingness audits/manifests were copied into both structured scenarios because the original source covered the whole structured root.",
+        "shared_structured_note": "Shared structured source files are migrated first, then per-scenario manifests and distribution reports are rebuilt from scenario-local outputs to prevent cross-mechanism misalignment.",
         "missing_or_skipped_items": skipped,
     }
     write_json(target_root / "layout_migration_report.json", payload)
@@ -1041,7 +1043,7 @@ def write_migration_report(
             "## 说明",
             "",
             "- 大体积 parquet 目录只在文件系统层面移动，不应提交到 Git。",
-            "- shared structured 审计与 manifest 采用复制方式放入 block/outage 两个 scenario。",
+            "- shared structured 原始文件会先复制到 block/outage 两个 scenario，随后重建为单场景版本。",
             "- 旧目录保留 `MIGRATED_TO_README.md` 指向新根目录。",
             f"- 是否生成 experiment_registry：`{'是' if payload['generated_experiment_registry'] else '否'}`",
             f"- 是否生成 path_aliases：`{'是' if payload['generated_path_aliases'] else '否'}`",
@@ -1241,6 +1243,7 @@ def run_migrate(args: argparse.Namespace) -> tuple[list[dict[str, Any]], dict[st
         source_path = args.project_root.resolve() / Path(item["source_path"])
         target_path = args.project_root.resolve() / Path(item["target_path"])
         item["status"] = execute_action(source_path, target_path, item["action"])
+    repair_structured_scenarios_under_target_root(args.project_root.resolve(), metadata["roots"]["target_root"])
     create_legacy_readmes(args.project_root.resolve(), metadata["roots"]["target_root"], metadata["roots"])
     write_path_aliases(metadata["roots"]["target_root"], aliases)
     write_registry(args.project_root.resolve(), metadata["roots"]["target_root"])

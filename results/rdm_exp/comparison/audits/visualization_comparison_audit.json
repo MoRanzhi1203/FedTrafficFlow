@@ -30,7 +30,7 @@
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid"
+    "correlation_topology_neighbor_fill"
   ],
   "formal_methods": [
     "mean_fill",
@@ -38,7 +38,7 @@
     "historical_linear_extrapolation",
     "road_topology_neighbor_fill",
     "function_curve_fit",
-    "topology_function_hybrid"
+    "correlation_topology_neighbor_fill"
   ],
   "added_methods": [
     "mean_fill"

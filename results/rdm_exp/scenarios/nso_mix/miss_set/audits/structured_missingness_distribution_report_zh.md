@@ -9,52 +9,107 @@
 
 ## 2. 场景摘要
 
-### mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42
+### nso_r05_mix_s42
 
 - observed_missing_rate: `0.0500`
 - field_missing_rate_target_col: `0.0500`
 - field_missing_rate_non_target_cols: `0.0000`
 - missing_pattern: `non_random_structured_missingness`
-- node_missing_gini: `0.0328`
-- short_missing_ratio: `0.1282`
-- mid_missing_ratio: `0.4270`
-- long_missing_ratio: `0.4449`
+- node_missing_gini: `0.0598`
+- short_missing_ratio: `0.7956`
+- mid_missing_ratio: `0.1117`
+- long_missing_ratio: `0.0927`
 
-### mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42
+### nso_r10_mix_s42
 
 - observed_missing_rate: `0.1000`
 - field_missing_rate_target_col: `0.1000`
 - field_missing_rate_non_target_cols: `0.0000`
 - missing_pattern: `non_random_structured_missingness`
-- node_missing_gini: `0.0232`
-- short_missing_ratio: `0.1257`
-- mid_missing_ratio: `0.4230`
-- long_missing_ratio: `0.4513`
+- node_missing_gini: `0.0319`
+- short_missing_ratio: `0.9040`
+- mid_missing_ratio: `0.0586`
+- long_missing_ratio: `0.0374`
+
+### nso_r20_mix_s42
+
+- observed_missing_rate: `0.2000`
+- field_missing_rate_target_col: `0.2000`
+- field_missing_rate_non_target_cols: `0.0000`
+- missing_pattern: `non_random_structured_missingness`
+- node_missing_gini: `0.0181`
+- short_missing_ratio: `0.9507`
+- mid_missing_ratio: `0.0282`
+- long_missing_ratio: `0.0212`
+
+### nso_r30_mix_s42
+
+- observed_missing_rate: `0.3000`
+- field_missing_rate_target_col: `0.3000`
+- field_missing_rate_non_target_cols: `0.0000`
+- missing_pattern: `non_random_structured_missingness`
+- node_missing_gini: `0.0128`
+- short_missing_ratio: `0.9669`
+- mid_missing_ratio: `0.0191`
+- long_missing_ratio: `0.0140`
 
 ## 3. 空间分布 Top Nodes
 
-### mechanism_node_temporal_block__rate_0p05__mixed_short_mid_long__seed_42
+### nso_r05_mix_s42
 
-- 节点 `1520443330`: `368`
-- 节点 `1520314318`: `364`
-- 节点 `1520420156`: `361`
-- 节点 `1520460174`: `361`
-- 节点 `1526675432`: `361`
-- 节点 `1520480209`: `359`
-- 节点 `1520488431`: `359`
-- 节点 `1520460897`: `355`
-- 节点 `1520461972`: `355`
-- 节点 `1520498325`: `354`
+- 节点 `1520469545`: `440`
+- 节点 `1552898162`: `437`
+- 节点 `1520421958`: `436`
+- 节点 `1520413040`: `435`
+- 节点 `1520336062`: `433`
+- 节点 `1526676974`: `429`
+- 节点 `1554153003`: `429`
+- 节点 `1520459348`: `427`
+- 节点 `1520457229`: `425`
+- 节点 `1530829936`: `421`
 
-### mechanism_node_temporal_block__rate_0p10__mixed_short_mid_long__seed_42
+### nso_r10_mix_s42
 
-- 节点 `1520465622`: `699`
-- 节点 `1549752873`: `679`
-- 节点 `1520461350`: `677`
-- 节点 `1530637497`: `677`
-- 节点 `1549742558`: `677`
-- 节点 `1520290604`: `676`
-- 节点 `1520426081`: `676`
-- 节点 `1532872325`: `676`
-- 节点 `1520287735`: `675`
-- 节点 `1520492202`: `675`
+- 节点 `1531067909`: `764`
+- 节点 `1520319277`: `749`
+- 节点 `1520440364`: `729`
+- 节点 `1520500479`: `726`
+- 节点 `1520403049`: `724`
+- 节点 `1520468150`: `723`
+- 节点 `1520321825`: `719`
+- 节点 `1520466422`: `718`
+- 节点 `1529960419`: `716`
+- 节点 `1553819492`: `716`
+
+### nso_r20_mix_s42
+
+- 节点 `1520496835`: `1340`
+- 节点 `1549752378`: `1339`
+- 节点 `1520435265`: `1333`
+- 节点 `1549300201`: `1321`
+- 节点 `1520483508`: `1317`
+- 节点 `1520495845`: `1317`
+- 节点 `1554151940`: `1316`
+- 节点 `1554157575`: `1316`
+- 节点 `1530632849`: `1315`
+- 节点 `1520430691`: `1313`
+
+### nso_r30_mix_s42
+
+- 节点 `1553471206`: `1937`
+- 节点 `1549751605`: `1920`
+- 节点 `1520422639`: `1916`
+- 节点 `1549300036`: `1915`
+- 节点 `1520460778`: `1911`
+- 节点 `1553396637`: `1908`
+- 节点 `1520412192`: `1905`
+- 节点 `1520468485`: `1905`
+- 节点 `1520495014`: `1905`
+- 节点 `1549428209`: `1905`
+
+## 4. Manifest 一致性校验
+
+- validated: `True`
+- all_consistent: `True`
+- validation_rows: `4`
+- validation_csv: `structured_missingness_consistency_validation.csv`

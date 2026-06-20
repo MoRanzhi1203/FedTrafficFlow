@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+NODE_TEMPORAL_BLOCK = "node_temporal_block"
+NODE_SUBSET_TEMPORAL_OUTAGE = "node_subset_temporal_outage"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -44,6 +47,14 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def format_rate(value: float) -> str:
     return f"{value:.4f}"
+
+
+def resolve_missing_root(experiment_dir: Path) -> Path:
+    for candidate in ("miss_data", "missing_datasets"):
+        path = experiment_dir / candidate
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"missing datasets directory not found under {experiment_dir}")
 
 
 def discover_complete_scenarios(mask_root: Path, missing_root: Path, expected_count: int) -> list[str]:
@@ -86,18 +97,56 @@ def compute_gini(values: np.ndarray) -> float:
     return float((2.0 * np.sum(index * sorted_values) / (len(sorted_values) * total)) - ((len(sorted_values) + 1) / len(sorted_values)))
 
 
-def scenario_to_display_name(scenario: str) -> str:
-    parts = scenario.split("__")
-    mechanism = next((part.replace("mechanism_", "") for part in parts if part.startswith("mechanism_")), scenario)
-    rate = next((part.replace("rate_", "") for part in parts if part.startswith("rate_")), "unknown")
-    return f"{mechanism}\n{rate}"
+def parse_structured_scenario_name(scenario: str) -> dict[str, Any]:
+    long_match = None
+    short_match = None
+    if "__" in scenario:
+        parts = scenario.split("__")
+        mechanism = next((part.replace("mechanism_", "") for part in parts if part.startswith("mechanism_")), scenario)
+        rate_token = next((part.replace("rate_", "") for part in parts if part.startswith("rate_")), "unknown")
+        long_match = {
+            "mechanism": mechanism,
+            "missing_rate_target": float(rate_token.replace("p", ".")) if rate_token != "unknown" else np.nan,
+            "display_name": f"{mechanism}\n{rate_token}",
+        }
+    else:
+        match = pd.Series([scenario]).str.extract(r"^(ntb|nso)_r(\d{1,2})_mix_s(\d+)$").iloc[0]
+        if not match.isna().all():
+            prefix = str(match[0])
+            rate_digits = str(match[1]).zfill(2)
+            mechanism = NODE_TEMPORAL_BLOCK if prefix == "ntb" else NODE_SUBSET_TEMPORAL_OUTAGE
+            short_match = {
+                "mechanism": mechanism,
+                "missing_rate_target": float(f"0.{rate_digits}"),
+                "display_name": f"{mechanism}\n0p{rate_digits}",
+            }
+    if long_match is not None:
+        return long_match
+    if short_match is not None:
+        return short_match
+    return {
+        "mechanism": scenario,
+        "missing_rate_target": np.nan,
+        "display_name": scenario,
+    }
 
+
+def scenario_to_display_name(scenario: str) -> str:
+    return str(parse_structured_scenario_name(scenario)["display_name"])
+
+
+def normalize_mask_file_name(file_name: str) -> str:
+    if file_name.endswith("_mask.parquet"):
+        return file_name.replace("_mask.parquet", ".parquet")
+    return file_name
+ 
 
 def analyze_scenario(
     *,
     scenario: str,
     mask_dir: Path,
     total_rows: int,
+    rows_per_file: dict[str, int],
     node_col: str,
     period: int,
 ) -> tuple[dict[str, Any], pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -114,13 +163,14 @@ def analyze_scenario(
 
     for file_path in mask_files:
         mask_df = pd.read_parquet(file_path)
+        source_file_name = normalize_mask_file_name(file_path.name)
         file_missing = int(len(mask_df))
         total_missing += file_missing
         if file_missing == 0:
             day_rows.append(
                 {
                     "scenario": scenario,
-                    "file_name": file_path.name,
+                    "file_name": source_file_name,
                     "observed_missing_count": 0,
                     "observed_missing_rate": 0.0,
                 }
@@ -146,9 +196,9 @@ def analyze_scenario(
         day_rows.append(
             {
                 "scenario": scenario,
-                "file_name": file_path.name,
+                "file_name": source_file_name,
                 "observed_missing_count": file_missing,
-                "observed_missing_rate": float(file_missing / 4034976.0),
+                "observed_missing_rate": float(file_missing / float(rows_per_file[source_file_name])),
             }
         )
 
@@ -179,10 +229,11 @@ def analyze_scenario(
     day_summary = pd.DataFrame(day_rows).sort_values("file_name").reset_index(drop=True)
 
     observed_rate = float(total_missing / float(total_rows))
+    scenario_meta = parse_structured_scenario_name(scenario)
     summary = {
         "scenario": scenario,
-        "mechanism": scenario.split("__")[0].replace("mechanism_", ""),
-        "missing_rate_target": scenario.split("__")[1].replace("rate_", "").replace("p", "."),
+        "mechanism": scenario_meta["mechanism"],
+        "missing_rate_target": scenario_meta["missing_rate_target"],
         "complete_mask_file_count": int(len(mask_files)),
         "observed_missing_count": int(total_missing),
         "observed_missing_rate": observed_rate,
@@ -311,7 +362,7 @@ def main() -> None:
     experiment_dir = args.experiment_dir if args.experiment_dir.is_absolute() else (project_root / args.experiment_dir)
     input_dir = args.input_dir if args.input_dir.is_absolute() else (project_root / args.input_dir)
     mask_root = experiment_dir / "masks"
-    missing_root = experiment_dir / "missing_datasets"
+    missing_root = resolve_missing_root(experiment_dir)
     manifests_dir = experiment_dir / "manifests"
     audits_dir = experiment_dir / "audits"
     figures_dir = experiment_dir / "figures"
@@ -321,6 +372,10 @@ def main() -> None:
     prepare_df = load_prepare_summary(manifests_dir / "structured_prepare_chunk_summary.csv")
     expected_count = int(len(prepare_df))
     total_rows = int(prepare_df["row_count"].sum())
+    rows_per_file = {
+        str(row["file_name"]): int(row["row_count"])
+        for row in prepare_df.loc[:, ["file_name", "row_count"]].to_dict(orient="records")
+    }
     original_columns = load_original_columns(input_dir)
     complete_scenarios = discover_complete_scenarios(mask_root, missing_root, expected_count)
     if not complete_scenarios:
@@ -335,6 +390,7 @@ def main() -> None:
             scenario=scenario,
             mask_dir=mask_root / scenario,
             total_rows=total_rows,
+            rows_per_file=rows_per_file,
             node_col=args.node_col,
             period=args.period,
         )

@@ -79,16 +79,21 @@ class LengthStatsAccumulator:
         self.actual_length_value_counts: Dict[int, int] = {}
 
     def add(self, actual_length: int, length_group: str) -> None:
-        self.event_count += 1
-        self.sum_length += float(actual_length)
-        self.sum_sq_length += float(actual_length * actual_length)
-        self.actual_length_value_counts[int(actual_length)] = self.actual_length_value_counts.get(int(actual_length), 0) + 1
+        self.add_many(actual_length, length_group, 1)
+
+    def add_many(self, actual_length: int, length_group: str, count: int) -> None:
+        if count <= 0:
+            return
+        self.event_count += int(count)
+        self.sum_length += float(actual_length * count)
+        self.sum_sq_length += float(actual_length * actual_length * count)
+        self.actual_length_value_counts[int(actual_length)] = self.actual_length_value_counts.get(int(actual_length), 0) + int(count)
         if length_group == "short":
-            self.short_event_count += 1
+            self.short_event_count += int(count)
         elif length_group == "mid":
-            self.mid_event_count += 1
+            self.mid_event_count += int(count)
         elif length_group == "long":
-            self.long_event_count += 1
+            self.long_event_count += int(count)
         else:
             raise ValueError(f"unsupported length group: {length_group}")
 
@@ -1268,13 +1273,15 @@ def load_length_stats_from_masks(
         mask_df = pd.read_parquet(mask_path, columns=["row_index", "actual_length", "length_group"])
         if mask_df.empty:
             continue
-        event_df = (
+        event_counts_df = (
             mask_df.loc[:, ["row_index", "actual_length", "length_group"]]
             .drop_duplicates()
-            .sort_values(["row_index", "actual_length", "length_group"], kind="mergesort")
+            .groupby(["actual_length", "length_group"], dropna=False)
+            .size()
+            .reset_index(name="event_count")
         )
-        for item in event_df.itertuples(index=False):
-            stats.add(int(item.actual_length), str(item.length_group))
+        for item in event_counts_df.itertuples(index=False):
+            stats.add_many(int(item.actual_length), str(item.length_group), int(item.event_count))
     return stats
 
 

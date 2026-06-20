@@ -14,6 +14,8 @@ import pandas as pd
 
 METHOD_ALIASES = {
     "geo_neighbor_fill": "road_topology_neighbor_fill",
+    "topology_function_hybrid": "correlation_topology_neighbor_fill",
+    "tfh": "correlation_topology_neighbor_fill",
 }
 
 METHOD_DISPLAY = {
