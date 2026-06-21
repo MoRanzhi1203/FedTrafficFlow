@@ -13,34 +13,36 @@ import torch.nn.functional as F
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-DEFAULT_INPUT_DIR = ROOT_DIR / "test"
+DEFAULT_INPUT_DIR = ROOT_DIR / "data" / "analysis" / "node_intersection_flow_parquet"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "data" / "processed" / "node_flow_grid"
+DEFAULT_TOPOLOGY_FILE = ROOT_DIR / "data" / "processed" / "rnsd_processed.csv"
 
 REQUIRED_NODE_COLUMNS = {"节点ID", "节点经度", "节点纬度"}
 REQUIRED_TRAFFIC_COLUMNS = {"节点ID", "时间段", "路口车流量"}
+REQUIRED_TOPOLOGY_COLUMNS = {"起始节点ID", "结束节点ID", "start_lat", "start_lon", "end_lat", "end_lon"}
 
 
 @dataclass(frozen=True)
 class Config:
     input_dir: Path
     output_dir: Path
-    nodes_csv: Path
-    traffic_dir: Path
+    topology_file: Path
     raw_output: Path
     pooled_output: Path
     grid_resolution: float = 0.009
+    target_grid_size: int = 64
     pool_kernel_size: int = 2
     pool_stride: int = 2
     pool_padding: int = 0
 
 
 def parse_args() -> Config:
-    parser = argparse.ArgumentParser(description="将路口节点车流量处理为网格双通道张量与池化张量。")
+    parser = argparse.ArgumentParser(description="将节点车流量 parquet 分片处理为网格双通道张量与池化张量。")
     parser.add_argument(
         "--input-dir",
         type=Path,
         default=DEFAULT_INPUT_DIR,
-        help="输入数据目录，默认使用项目下的 test 目录。",
+        help="中间 parquet 输入目录，默认使用 data/analysis/node_intersection_flow_parquet。",
     )
     parser.add_argument(
         "--output-dir",
@@ -48,11 +50,16 @@ def parse_args() -> Config:
         default=DEFAULT_OUTPUT_DIR,
         help="输出数据目录，默认使用 data/processed/node_flow_grid。",
     )
-    parser.add_argument("--nodes-csv", type=Path, default=None, help="节点经纬度 CSV 路径。")
-    parser.add_argument("--traffic-dir", type=Path, default=None, help="路口节点车流量目录。")
+    parser.add_argument(
+        "--topology-file",
+        type=Path,
+        default=DEFAULT_TOPOLOGY_FILE,
+        help="用于恢复节点坐标的拓扑 CSV，默认使用 data/processed/rnsd_processed.csv。",
+    )
     parser.add_argument("--raw-output", type=Path, default=None, help="原始双通道网格张量输出 .npy 路径。")
     parser.add_argument("--pooled-output", type=Path, default=None, help="池化后网格张量输出 .npy 路径。")
     parser.add_argument("--grid-resolution", type=float, default=0.009, help="网格分辨率。")
+    parser.add_argument("--target-grid-size", type=int, default=64, help="自动分辨率回退时的最大网格边长目标。")
     parser.add_argument("--pool-kernel-size", type=int, default=2, help="最大池化窗口大小。")
     parser.add_argument("--pool-stride", type=int, default=2, help="最大池化步幅。")
     parser.add_argument("--pool-padding", type=int, default=0, help="最大池化 padding。")
@@ -65,11 +72,11 @@ def parse_args() -> Config:
     return Config(
         input_dir=input_dir,
         output_dir=output_dir,
-        nodes_csv=(args.nodes_csv or (input_dir / "1.路口节点经纬度.csv")).resolve(),
-        traffic_dir=(args.traffic_dir or (input_dir / "4.路口节点车流量")).resolve(),
+        topology_file=args.topology_file.resolve(),
         raw_output=(args.raw_output or (output_dir / "node_flow_grid_2ch.npy")).resolve(),
         pooled_output=(args.pooled_output or (output_dir / "node_flow_grid_pooled.npy")).resolve(),
         grid_resolution=args.grid_resolution,
+        target_grid_size=args.target_grid_size,
         pool_kernel_size=args.pool_kernel_size,
         pool_stride=args.pool_stride,
         pool_padding=args.pool_padding,
@@ -88,20 +95,36 @@ def validate_columns(df: pd.DataFrame, required_columns: set[str], file_label: s
         raise KeyError(f"{file_label} 缺少必要字段: {missing_text}")
 
 
+def build_node_coordinates(topology_df: pd.DataFrame) -> pd.DataFrame:
+    validate_columns(topology_df, REQUIRED_TOPOLOGY_COLUMNS, "rnsd_processed.csv")
+
+    start_nodes = topology_df.loc[:, ["起始节点ID", "start_lon", "start_lat"]].rename(
+        columns={"起始节点ID": "节点ID", "start_lon": "节点经度", "start_lat": "节点纬度"}
+    )
+    end_nodes = topology_df.loc[:, ["结束节点ID", "end_lon", "end_lat"]].rename(
+        columns={"结束节点ID": "节点ID", "end_lon": "节点经度", "end_lat": "节点纬度"}
+    )
+    nodes_df = pd.concat([start_nodes, end_nodes], axis=0, ignore_index=True)
+    validate_columns(nodes_df, REQUIRED_NODE_COLUMNS, "node_coordinates")
+    return nodes_df
+
+
 def load_data(config: Config) -> tuple[pd.DataFrame, list[Path]]:
-    if not config.nodes_csv.exists():
-        raise FileNotFoundError(f"未找到节点经纬度文件: {config.nodes_csv}")
-    if not config.traffic_dir.exists():
-        raise FileNotFoundError(f"未找到车流量目录: {config.traffic_dir}")
+    if not config.input_dir.exists():
+        raise FileNotFoundError(f"未找到中间 parquet 目录: {config.input_dir}")
+    if not config.topology_file.exists():
+        raise FileNotFoundError(f"未找到拓扑坐标文件: {config.topology_file}")
 
-    nodes_df = pd.read_csv(config.nodes_csv)
-    validate_columns(nodes_df, REQUIRED_NODE_COLUMNS, config.nodes_csv.name)
+    topology_df = pd.read_csv(config.topology_file)
+    nodes_df = build_node_coordinates(topology_df)
 
-    traffic_files = sorted(config.traffic_dir.glob("*.csv"))
+    traffic_files = sorted(config.input_dir.glob("node_flow_chunk_*.parquet"))
     if not traffic_files:
-        raise FileNotFoundError(f"{config.traffic_dir} 下未找到任何 CSV 文件。")
+        traffic_files = sorted(config.input_dir.glob("*.parquet"))
+    if not traffic_files:
+        raise FileNotFoundError(f"{config.input_dir} 下未找到任何 parquet 文件。")
 
-    logging.info("已加载节点文件，共 %s 行；待处理车流量分块 %s 个。", len(nodes_df), len(traffic_files))
+    logging.info("已恢复节点坐标，共 %s 行；待处理 parquet 分块 %s 个。", len(nodes_df), len(traffic_files))
     return nodes_df, traffic_files
 
 
@@ -111,8 +134,14 @@ def preprocess(nodes_df: pd.DataFrame, config: Config) -> tuple[pd.DataFrame, tu
     clean_nodes["节点经度"] = pd.to_numeric(clean_nodes["节点经度"], errors="coerce")
     clean_nodes["节点纬度"] = pd.to_numeric(clean_nodes["节点纬度"], errors="coerce")
     clean_nodes = clean_nodes.dropna(subset=["节点ID", "节点经度", "节点纬度"])
+    clean_nodes = clean_nodes[(clean_nodes["节点经度"] != 0) | (clean_nodes["节点纬度"] != 0)]
     clean_nodes["节点ID"] = clean_nodes["节点ID"].astype(np.int64)
-    clean_nodes = clean_nodes.drop_duplicates(subset=["节点ID"], keep="first")
+    clean_nodes = (
+        clean_nodes.groupby("节点ID", as_index=False)[["节点经度", "节点纬度"]]
+        .mean()
+        .sort_values("节点ID")
+        .reset_index(drop=True)
+    )
 
     if clean_nodes.empty:
         raise ValueError("节点经纬度数据为空，无法继续网格化。")
@@ -122,16 +151,39 @@ def preprocess(nodes_df: pd.DataFrame, config: Config) -> tuple[pd.DataFrame, tu
     lat_min = clean_nodes["节点纬度"].min()
     lat_max = clean_nodes["节点纬度"].max()
 
-    lon_grid_count = int(np.floor((lon_max - lon_min) / config.grid_resolution)) + 1
-    lat_grid_count = int(np.floor((lat_max - lat_min) / config.grid_resolution)) + 1
+    lon_span = float(lon_max - lon_min)
+    lat_span = float(lat_max - lat_min)
+    auto_resolution = max(
+        max(lon_span, lat_span) / max(config.target_grid_size - 1, 1),
+        1e-6,
+    )
+    resolution = float(config.grid_resolution)
+    lon_grid_count = int(np.floor(lon_span / resolution)) + 1
+    lat_grid_count = int(np.floor(lat_span / resolution)) + 1
+    if min(lon_grid_count, lat_grid_count) < max(config.pool_kernel_size, 2):
+        logging.warning(
+            "当前 grid_resolution=%.6f 生成的网格仅为 %s x %s，无法完成池化；已自动回退为 %.6f。",
+            resolution,
+            lon_grid_count,
+            lat_grid_count,
+            auto_resolution,
+        )
+        resolution = auto_resolution
+        lon_grid_count = int(np.floor(lon_span / resolution)) + 1
+        lat_grid_count = int(np.floor(lat_span / resolution)) + 1
     grid_shape = (lon_grid_count, lat_grid_count)
 
-    lon_grid = np.floor((clean_nodes["节点经度"] - lon_min) / config.grid_resolution).astype(np.int32)
-    lat_grid = np.floor((clean_nodes["节点纬度"] - lat_min) / config.grid_resolution).astype(np.int32)
+    lon_grid = np.floor((clean_nodes["节点经度"] - lon_min) / resolution).astype(np.int32)
+    lat_grid = np.floor((clean_nodes["节点纬度"] - lat_min) / resolution).astype(np.int32)
     clean_nodes["经度网格"] = np.clip(lon_grid, 0, lon_grid_count - 1)
     clean_nodes["纬度网格"] = np.clip(lat_grid, 0, lat_grid_count - 1)
 
-    logging.info("网格化完成，网格大小为 %s x %s。", lon_grid_count, lat_grid_count)
+    logging.info(
+        "网格化完成，分辨率 %.6f，网格大小为 %s x %s。",
+        resolution,
+        lon_grid_count,
+        lat_grid_count,
+    )
     return clean_nodes, grid_shape
 
 
@@ -157,7 +209,7 @@ def build_features(
     counter = 0
 
     for traffic_file in traffic_files:
-        traffic_df = clean_traffic_data(pd.read_csv(traffic_file), traffic_file)
+        traffic_df = clean_traffic_data(pd.read_parquet(traffic_file), traffic_file)
         merged_df = prepared_nodes.merge(traffic_df, on="节点ID", how="inner")
         if merged_df.empty:
             logging.warning("%s 合并后为空，已跳过。", traffic_file.name)

@@ -41,8 +41,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from analysis_scripts.federated_learning.ccn_region_client_train import (  # noqa: E402
-    DEFAULT_DATASET_DIR,
-    DEFAULT_DATASET_FILE,
+    DEFAULT_DATASET_PATH,
     Attention,
     RegionDataset,
     configure_logging,
@@ -73,8 +72,7 @@ class AblationConfig:
     test_ratio: float = 0.15
     stride: int = 1
     hidden_dim: int = 64
-    dataset_dir: Path = DEFAULT_DATASET_DIR
-    dataset_file: str = DEFAULT_DATASET_FILE
+    dataset_path: Path = DEFAULT_DATASET_PATH
     output_dir: Path = DEFAULT_OUTPUT_DIR
     show_plot: bool = False
     verbose: bool = False
@@ -90,8 +88,6 @@ MODEL_SPECS = {
 
 def parse_args() -> AblationConfig:
     parser = argparse.ArgumentParser(description="区域客户端消融实验脚本。")
-    parser.add_argument("--dataset-dir", type=Path, default=DEFAULT_DATASET_DIR)
-    parser.add_argument("--dataset-file", type=str, default=DEFAULT_DATASET_FILE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--num-clients", type=int, default=3)
     parser.add_argument("--t-in", type=int, default=24)
@@ -123,8 +119,7 @@ def parse_args() -> AblationConfig:
         test_ratio=args.test_ratio,
         stride=args.stride,
         hidden_dim=args.hidden_dim,
-        dataset_dir=args.dataset_dir.resolve(),
-        dataset_file=str(args.dataset_file).strip(),
+        dataset_path=DEFAULT_DATASET_PATH.resolve(),
         output_dir=args.output_dir.resolve(),
         show_plot=bool(args.show_plot),
         verbose=bool(args.verbose),
@@ -142,8 +137,8 @@ def validate_config(config: AblationConfig) -> None:
         raise ValueError("lr 必须为正数。")
     if config.stride <= 0:
         raise ValueError("stride 必须为正数。")
-    if not str(config.dataset_file).strip():
-        raise ValueError("dataset_file 不能为空。")
+    if config.dataset_path.resolve() != DEFAULT_DATASET_PATH.resolve():
+        raise ValueError(f"联邦训练仅允许读取预处理最终产物: {DEFAULT_DATASET_PATH}")
     ratio_sum = config.train_ratio + config.val_ratio + config.test_ratio
     if abs(ratio_sum - 1.0) > 1e-6:
         raise ValueError("train_ratio + val_ratio + test_ratio 必须等于 1。")
@@ -507,7 +502,7 @@ def main() -> None:
         json.dumps(
             {
                 **asdict(config),
-                "dataset_dir": str(config.dataset_dir),
+                "dataset_path": str(config.dataset_path),
                 "output_dir": str(config.output_dir),
                 "data_shape": list(map(int, data_tensor.shape)),
             },

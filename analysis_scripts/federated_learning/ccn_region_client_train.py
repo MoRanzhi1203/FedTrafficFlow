@@ -40,6 +40,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DATASET_DIR = PROJECT_ROOT / "data" / "processed" / "node_flow_grid"
 DEFAULT_DATASET_FILE = "node_flow_grid_tensor.pt"
+DEFAULT_DATASET_PATH = DEFAULT_DATASET_DIR / DEFAULT_DATASET_FILE
 DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "data" / "analysis" / "federated_learning" / "region_client_train"
 
 
@@ -66,8 +67,7 @@ class TrainConfig:
     beta_huber: float = 0.3
     hidden_dim: int = 64
     model_kind: str = "full"
-    dataset_dir: Path = DEFAULT_DATASET_DIR
-    dataset_file: str = DEFAULT_DATASET_FILE
+    dataset_path: Path = DEFAULT_DATASET_PATH
     output_dir: Path = DEFAULT_OUTPUT_DIR
     show_plot: bool = False
     verbose: bool = False
@@ -86,18 +86,6 @@ def configure_logging(verbose: bool) -> None:
 
 def parse_args() -> TrainConfig:
     parser = argparse.ArgumentParser(description="区域客户端正式联邦训练脚本。")
-    parser.add_argument(
-        "--dataset-dir",
-        type=Path,
-        default=DEFAULT_DATASET_DIR,
-        help="预处理最后一步输出的数据集目录，默认使用 data/processed/node_flow_grid。",
-    )
-    parser.add_argument(
-        "--dataset-file",
-        type=str,
-        default=DEFAULT_DATASET_FILE,
-        help="预处理最终输出的数据集文件名，默认使用 node_flow_grid_tensor.pt。",
-    )
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="训练结果输出目录。")
     parser.add_argument("--num-clients", type=int, default=3)
     parser.add_argument("--t-in", type=int, default=24)
@@ -143,8 +131,7 @@ def parse_args() -> TrainConfig:
         alpha_mse=args.alpha_mse,
         beta_huber=args.beta_huber,
         hidden_dim=args.hidden_dim,
-        dataset_dir=args.dataset_dir.resolve(),
-        dataset_file=str(args.dataset_file).strip(),
+        dataset_path=DEFAULT_DATASET_PATH.resolve(),
         output_dir=args.output_dir.resolve(),
         show_plot=bool(args.show_plot),
         verbose=bool(args.verbose),
@@ -170,8 +157,8 @@ def validate_config(config: TrainConfig) -> None:
         raise ValueError("stride 必须为正数。")
     if config.hidden_dim <= 0:
         raise ValueError("hidden_dim 必须为正数。")
-    if not str(config.dataset_file).strip():
-        raise ValueError("dataset_file 不能为空。")
+    if config.dataset_path.resolve() != DEFAULT_DATASET_PATH.resolve():
+        raise ValueError(f"联邦训练仅允许读取预处理最终产物: {DEFAULT_DATASET_PATH}")
     ratio_sum = config.train_ratio + config.val_ratio + config.test_ratio
     if abs(ratio_sum - 1.0) > 1e-6:
         raise ValueError("train_ratio + val_ratio + test_ratio 必须等于 1。")
@@ -197,10 +184,10 @@ def get_device() -> torch.device:
 
 
 def load_data(config: TrainConfig) -> torch.Tensor:
-    dataset_path = config.dataset_dir / config.dataset_file
-    if not config.dataset_dir.exists():
+    dataset_path = config.dataset_path.resolve()
+    if not dataset_path.parent.exists():
         raise FileNotFoundError(
-            f"未找到预处理输出目录: {config.dataset_dir}。请先执行完整预处理流程，并确认最终数据集已生成。"
+            f"未找到预处理输出目录: {dataset_path.parent}。请先执行完整预处理流程，并确认最终数据集已生成。"
         )
     if not dataset_path.exists():
         raise FileNotFoundError(
@@ -888,7 +875,7 @@ def main() -> None:
     summary = {
         "config": {
             **asdict(config),
-            "dataset_dir": str(config.dataset_dir),
+            "dataset_path": str(config.dataset_path),
             "output_dir": str(config.output_dir),
         },
         "data_shape": list(map(int, data_tensor.shape)),
