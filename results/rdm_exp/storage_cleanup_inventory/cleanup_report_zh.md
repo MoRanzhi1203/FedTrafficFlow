@@ -1,4 +1,9 @@
-# 前三个机制补全数据集清理报告
+# 前三个机制补全数据集清理报告 / Cleanup Report for the First Three Mechanisms
+
+## Summary / 摘要
+
+- 中文说明：本报告记录对前三个缺失机制场景中 `imp_data` 大体积补全数据目录的清理情况，目标是在不影响掩码、缺失数据、审计和汇总文件的前提下释放磁盘空间。
+- English: This report records the cleanup of large `imp_data` directories for the first three missingness-mechanism scenarios, with the goal of reclaiming disk space while preserving masks, missing datasets, audits, and summaries.
 
 - stage: `validate`
 - scenarios: `g_mcar_pt,ntb_mix,nso_mix`
@@ -9,19 +14,19 @@
 - deleted_size_gb: `236.936642`
 - deleted_path_count: `3`
 
-## 处理对象
+## 处理对象 / Cleanup Targets
 
 - `g_mcar_pt`: mechanism=`mcar_point`, mask_file_count=`244`, miss_data_file_count=`244`, imputed_data_file_count_before_cleanup=`1464`
 - `ntb_mix`: mechanism=`node_temporal_block`, mask_file_count=`244`, miss_data_file_count=`244`, imputed_data_file_count_before_cleanup=`1464`
 - `nso_mix`: mechanism=`node_subset_temporal_outage`, mask_file_count=`244`, miss_data_file_count=`244`, imputed_data_file_count_before_cleanup=`1464`
 
-## 待删或已删目录
+## 待删或已删目录 / Deleted or Targeted Directories
 
 - `E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\g_mcar_pt\imp\imp_data`: exists_before_cleanup=`True`, total_size_gb=`78.981182`, delete_mode=`deleted_reconstructed_from_manifests`
 - `E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\ntb_mix\imp\imp_data`: exists_before_cleanup=`True`, total_size_gb=`78.97495`, delete_mode=`deleted_reconstructed_from_manifests`
 - `E:\Jupter_Notebook\FedTrafficFlow\results\rdm_exp\scenarios\nso_mix\imp\imp_data`: exists_before_cleanup=`True`, total_size_gb=`78.98051`, delete_mode=`deleted_reconstructed_from_manifests`
 
-## 验证结果
+## 验证结果 / Verification Results
 
 - missing_datasets_preserved: `True`
 - masks_preserved: `True`

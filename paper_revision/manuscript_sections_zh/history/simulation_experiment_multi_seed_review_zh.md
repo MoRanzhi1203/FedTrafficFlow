@@ -1,14 +1,16 @@
-# Multi-seed Overall Review
+# Multi-seed Overall Review / 多随机种子总体审查
 
-## Review Scope
+## Review Scope / 审查范围
+- 中文说明：本文件汇总仿真实验在 5 个随机种子下的完成状态、主指标、收敛表现与审计结果，用于支撑论文中“FedAvg 具有跨随机种子稳定性”的论述。
 - This round uses five seeds: `42, 2024, 3407, 1234, 5678`.
 - The paper narrative is centered on `FedAvg` as the core method for federated traffic flow prediction.
 - Therefore, the review focuses on `FedAvg` stability, convergence, and robustness rather than framing `FedAvg` as a disposable baseline.
 - In enhanced experiment directories, `Proposed` is treated only as a `FedAvg-based enhanced setting` or `FedAvg variant`.
 
-## Directory Status
+## Directory Status / 目录状态
 
-### `cnn_fed_base`
+### `cnn_fed_base` / CNN 基础目录
+- 中文摘要：该目录已完成目标 5 种子主实验与收敛实验，核心 CSV 与主要图件完整，`FedAvg` 与 `Independent` 在主实验中均覆盖全部 5 个种子。
 - This directory completed the target `5-seed` main experiment and `5-seed` convergence experiment.
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
 - Main figures exist: `main_metrics_comparison.png`, `main_predictions_comparison.png`, `multi_seed_mean_std_metrics.png`, `multi_seed_rmse_boxplot.png`, `multi_seed_rmse_seed_pairing.png`, `convergence_curve.png`.
@@ -17,7 +19,8 @@
 - FedAvg convergence at final round: `Val RMSE=0.011603 +- 0.000924`, `Val MAE=0.009328 +- 0.000911`, `Val MAPE=0.932841 +- 0.091108`.
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
-### `gcn_fed_base`
+### `gcn_fed_base` / GCN 基础目录
+- 中文摘要：该目录同样完成 5 种子主实验与收敛实验，主指标与收敛结果均可直接用于多种子稳定性论证。
 - This directory completed the target `5-seed` main experiment and `5-seed` convergence experiment.
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
 - Main figures exist: `main_metrics_comparison.png`, `main_predictions_comparison.png`, `multi_seed_mean_std_metrics.png`, `multi_seed_rmse_boxplot.png`, `multi_seed_rmse_seed_pairing.png`, `convergence_curve.png`.
@@ -26,7 +29,8 @@
 - FedAvg convergence at final round: `Val RMSE=0.012812 +- 0.000736`, `Val MAE=0.010221 +- 0.000566`, `Val MAPE=1.022112 +- 0.056613`.
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
-### `cnn_fed_enhanced_experiments`
+### `cnn_fed_enhanced_experiments` / CNN 增强目录
+- 中文摘要：该目录已经补齐为完整的 5 种子增强实验结果；其中 `Proposed` 仅可表述为 `FedAvg-based enhanced setting`，不应写成替代 `FedAvg` 的正式主方法。
 - This directory has now completed both the target `5-seed` main experiment and the target `5-seed` convergence experiment for the enhanced FedAvg setting.
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
 - Main and convergence figures exist: `cnn_enhanced_multi_seed_mean_std.png`, `cnn_enhanced_multi_seed_rmse_boxplot.png`, `cnn_enhanced_multi_seed_seed_pairing.png`, `convergence_curve.png`, `cnn_enhanced_multi_seed_convergence_curve.png`.
@@ -38,7 +42,8 @@
 - Status update: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, and `multi_seed_improvement_summary.csv` have been refreshed from the earlier `2-seed` state to full `5-seed` outputs.
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
-### `gcn_fed_enhanced_experiments`
+### `gcn_fed_enhanced_experiments` / GCN 增强目录
+- 中文摘要：该目录也完成了 5 种子增强实验与收敛结果补齐，`FedAvg` 仍是主线，`Proposed` 只保留为变体字段与补充分析。
 - This directory has now completed both the target `5-seed` main experiment and the target `5-seed` convergence experiment for the enhanced FedAvg setting.
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`, `multi_seed_convergence_raw.csv`, `multi_seed_convergence_summary.csv`.
 - Main and convergence figures exist: `gcn_enhanced_multi_seed_mean_std.png`, `gcn_enhanced_multi_seed_rmse_boxplot.png`, `gcn_enhanced_multi_seed_seed_pairing.png`, `convergence_curve.png`, `gcn_enhanced_multi_seed_convergence_curve.png`.
@@ -50,7 +55,8 @@
 - Status update: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, and `multi_seed_improvement_summary.csv` have been refreshed from the earlier `2-seed` state to full `5-seed` outputs.
 - Audit issues: no empty table, no missing seed, no all-seed-identical anomaly.
 
-### `fed_robustness_experiments`
+### `fed_robustness_experiments` / 鲁棒性目录
+- 中文摘要：该目录完成了 5 种子鲁棒性实验，说明 `FedAvg` 在客户端掉线、通信延迟与轻度梯度噪声场景下仍保持可用稳定性。
 - This directory completed the target `5-seed` robustness experiment.
 - Core CSV files exist and are non-empty: `multi_seed_raw_results.csv`, `multi_seed_summary.csv`, `multi_seed_improvement_summary.csv`, `multi_seed_stability_report.txt`.
 - Robustness figures exist: `multi_seed_robustness_mean_std_metrics.png`, `multi_seed_robustness_rmse_boxplot.png`, `multi_seed_robustness_seed_pairing.png`, `multi_seed_robustness_improvement_heatmap.png`.
@@ -69,7 +75,8 @@
 - Overall interpretation: `FedAvg` remains relatively stable under client dropout and mild noise, while larger communication delay and stronger noise introduce a measurable but bounded degradation.
 - Audit issues: no empty table, no missing seed, no duplicate scenario-method seed coverage issue, no all-seed-identical anomaly.
 
-## Cross-directory Findings
+## Cross-directory Findings / 跨目录结论
+- 中文总结：本轮目标目录均已完成 5 种子输出，未发现空表、缺种子或全种子结果完全一致等明显异常，因此可以作为稳定性与可复现性证据使用。
 - `cnn_fed_base`, `gcn_fed_base`, `cnn_fed_enhanced_experiments`, `gcn_fed_enhanced_experiments`, and `fed_robustness_experiments` completed their target `5-seed` outputs for this round.
 - `cnn_fed_enhanced_experiments` and `gcn_fed_enhanced_experiments` now contain complete `5-seed` main results and `5-seed` convergence results.
 - Across all targeted `5-seed` outputs, the seed set is exactly `42, 2024, 3407, 1234, 5678`.
@@ -77,7 +84,8 @@
 - No targeted `method` or `scenario + method` group is missing seeds.
 - No targeted group shows an abnormal all-seed-identical metric pattern.
 
-## Paper-oriented Notes
+## Paper-oriented Notes / 面向论文的说明
+- 中文说明：本轮最重要的结论是 `FedAvg` 在联邦交通流预测中具备可复现的多种子表现。增强实验中的 `Proposed` 不应写成“优于并替代 FedAvg 的新主方法”，而应写成 `FedAvg` 框架下的扩展或补充分析。
 - The core conclusion of this round is that `FedAvg` demonstrates reproducible behavior across multiple random seeds in federated traffic flow prediction.
 - On both CNN and GCN structures, `FedAvg` shows stable main metrics and a clear convergence trend when results are reported as `mean +- std`.
 - Under federated perturbation scenarios including client dropout, communication delay, and gradient noise, `FedAvg` preserves workable predictive performance with moderate variation across seeds.

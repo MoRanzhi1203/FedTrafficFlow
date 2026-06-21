@@ -1,10 +1,15 @@
-# 路径缩短 dry-run 计划
+# 路径缩短 dry-run 计划 / Path Shortening Dry-run Plan
+
+## Summary / 摘要
+
+- 中文说明：本文件是一次路径缩短与目录重命名的 dry-run 计划，用于在不立即执行真实移动操作的前提下，预览旧路径到新路径的映射关系，并标记哪些条目属于大体积数据、不应直接纳入 Git。
+- English: This file is a dry-run plan for path shortening and directory renaming. It previews the mapping from old paths to new paths without executing the actual move, and marks which entries correspond to large data that should not be committed to Git.
 
 - 计划条目数: 394
 - 目录条目数: 384
 - 文件条目数: 10
 
-## 缩写说明
+## 缩写说明 / Abbreviation Guide
 
 - `rdm_exp = real data missingness experiments`
 - `g_mcar_pt = global MCAR point`
@@ -21,7 +26,7 @@
 - `fcf = function curve fit`
 - `tfh = topology-function hybrid`
 
-## 计划预览
+## 计划预览 / Plan Preview
 
 | old_path | new_path | path_type | action | is_large_data | notes |
 | --- | --- | --- | --- | --- | --- |
