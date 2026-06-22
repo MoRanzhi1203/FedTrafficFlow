@@ -1,0 +1,898 @@
+[
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 0,
+    "y_true": 10386.068359375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 1,
+    "y_true": 10294.453125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 2,
+    "y_true": 10051.73828125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 3,
+    "y_true": 9788.416015625,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 4,
+    "y_true": 9611.8154296875,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 5,
+    "y_true": 9774.28125,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 6,
+    "y_true": 9877.017578125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 7,
+    "y_true": 9811.2119140625,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 8,
+    "y_true": 9954.6806640625,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 9,
+    "y_true": 10223.73828125,
+    "y_pred": -0.31592291593551636,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 10,
+    "y_true": 10335.810546875,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 11,
+    "y_true": 10297.849609375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 12,
+    "y_true": 10295.8505859375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 13,
+    "y_true": 10307.685546875,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 14,
+    "y_true": 10280.734375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 15,
+    "y_true": 10246.9052734375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 16,
+    "y_true": 10193.41796875,
+    "y_pred": -0.31592321395874023,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 17,
+    "y_true": 10276.037109375,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 18,
+    "y_true": 10344.146484375,
+    "y_pred": -0.3159237802028656,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 19,
+    "y_true": 10337.998046875,
+    "y_pred": -0.3154768943786621,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 20,
+    "y_true": 10153.16796875,
+    "y_pred": -0.31549057364463806,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 21,
+    "y_true": 10292.1572265625,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 22,
+    "y_true": 9937.1005859375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 23,
+    "y_true": 9745.8330078125,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 24,
+    "y_true": 9633.154296875,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 25,
+    "y_true": 9259.904296875,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 26,
+    "y_true": 9047.873046875,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 27,
+    "y_true": 9326.232421875,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 0,
+    "y_true": 9381.197265625,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 1,
+    "y_true": 9334.23046875,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 2,
+    "y_true": 9191.421875,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 3,
+    "y_true": 8798.4833984375,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 4,
+    "y_true": 8968.5,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 5,
+    "y_true": 9337.0380859375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 6,
+    "y_true": 9273.8876953125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 7,
+    "y_true": 8882.28515625,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 8,
+    "y_true": 9111.228515625,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 9,
+    "y_true": 9564.17578125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 10,
+    "y_true": 9403.2509765625,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 11,
+    "y_true": 9035.6298828125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 12,
+    "y_true": 9157.306640625,
+    "y_pred": -0.31592392921447754,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 13,
+    "y_true": 9345.01953125,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 14,
+    "y_true": 9397.58984375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 15,
+    "y_true": 9533.51953125,
+    "y_pred": -0.3154768645763397,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 16,
+    "y_true": 9562.724609375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 17,
+    "y_true": 9609.3359375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 18,
+    "y_true": 9763.0859375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 19,
+    "y_true": 9779.1572265625,
+    "y_pred": -0.31547683477401733,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 20,
+    "y_true": 9874.703125,
+    "y_pred": -0.3159239590167999,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 21,
+    "y_true": 9905.359375,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 22,
+    "y_true": 9899.4140625,
+    "y_pred": -0.3159239888191223,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 23,
+    "y_true": 9962.9619140625,
+    "y_pred": -0.3155186176300049,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 24,
+    "y_true": 10094.19140625,
+    "y_pred": -0.31549108028411865,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 25,
+    "y_true": 10006.720703125,
+    "y_pred": -0.31592386960983276,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 26,
+    "y_true": 9647.0859375,
+    "y_pred": -0.3159235715866089,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 27,
+    "y_true": 9910.3701171875,
+    "y_pred": -0.31592392921447754,
+    "method": "FedAvg"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 0,
+    "y_true": 10386.068359375,
+    "y_pred": 0.08198791742324829,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 1,
+    "y_true": 10294.453125,
+    "y_pred": 0.07109403610229492,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 2,
+    "y_true": 10051.73828125,
+    "y_pred": 0.07202354073524475,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 3,
+    "y_true": 9788.416015625,
+    "y_pred": 0.07522350549697876,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 4,
+    "y_true": 9611.8154296875,
+    "y_pred": 0.071431964635849,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 5,
+    "y_true": 9774.28125,
+    "y_pred": 0.07114216685295105,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 6,
+    "y_true": 9877.017578125,
+    "y_pred": 0.07105967402458191,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 7,
+    "y_true": 9811.2119140625,
+    "y_pred": 0.07953181862831116,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 8,
+    "y_true": 9954.6806640625,
+    "y_pred": 0.07034774124622345,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 9,
+    "y_true": 10223.73828125,
+    "y_pred": 0.07016149163246155,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 10,
+    "y_true": 10335.810546875,
+    "y_pred": 0.07035385072231293,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 11,
+    "y_true": 10297.849609375,
+    "y_pred": 0.07604151964187622,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 12,
+    "y_true": 10295.8505859375,
+    "y_pred": 0.09860220551490784,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 13,
+    "y_true": 10307.685546875,
+    "y_pred": 0.09847773611545563,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 14,
+    "y_true": 10280.734375,
+    "y_pred": 0.08428288996219635,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 15,
+    "y_true": 10246.9052734375,
+    "y_pred": 0.07102850079536438,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 16,
+    "y_true": 10193.41796875,
+    "y_pred": 0.07114695012569427,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 17,
+    "y_true": 10276.037109375,
+    "y_pred": 0.07629141211509705,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 18,
+    "y_true": 10344.146484375,
+    "y_pred": 0.07104671001434326,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 19,
+    "y_true": 10337.998046875,
+    "y_pred": 0.07102769613265991,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 20,
+    "y_true": 10153.16796875,
+    "y_pred": 0.07115840911865234,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 21,
+    "y_true": 10292.1572265625,
+    "y_pred": 0.07355830073356628,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 22,
+    "y_true": 9937.1005859375,
+    "y_pred": 0.07166863977909088,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 23,
+    "y_true": 9745.8330078125,
+    "y_pred": 0.07155334949493408,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 24,
+    "y_true": 9633.154296875,
+    "y_pred": 0.07241003215312958,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 25,
+    "y_true": 9259.904296875,
+    "y_pred": 0.07246723771095276,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 26,
+    "y_true": 9047.873046875,
+    "y_pred": 0.07325384020805359,
+    "method": "Independent"
+  },
+  {
+    "client_id": 0,
+    "node_id": 1520479950,
+    "sample_index": 27,
+    "y_true": 9326.232421875,
+    "y_pred": 0.07157054543495178,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 0,
+    "y_true": 9381.197265625,
+    "y_pred": 0.015645891427993774,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 1,
+    "y_true": 9334.23046875,
+    "y_pred": 0.008873775601387024,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 2,
+    "y_true": 9191.421875,
+    "y_pred": 0.0017523020505905151,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 3,
+    "y_true": 8798.4833984375,
+    "y_pred": 0.015770748257637024,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 4,
+    "y_true": 8968.5,
+    "y_pred": 0.015421763062477112,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 5,
+    "y_true": 9337.0380859375,
+    "y_pred": 0.0042592063546180725,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 6,
+    "y_true": 9273.8876953125,
+    "y_pred": 0.017002061009407043,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 7,
+    "y_true": 8882.28515625,
+    "y_pred": 0.0017421543598175049,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 8,
+    "y_true": 9111.228515625,
+    "y_pred": 0.0017505958676338196,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 9,
+    "y_true": 9564.17578125,
+    "y_pred": 0.015793412923812866,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 10,
+    "y_true": 9403.2509765625,
+    "y_pred": 0.0035465434193611145,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 11,
+    "y_true": 9035.6298828125,
+    "y_pred": 0.015774868428707123,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 12,
+    "y_true": 9157.306640625,
+    "y_pred": 0.015792734920978546,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 13,
+    "y_true": 9345.01953125,
+    "y_pred": 0.004533983767032623,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 14,
+    "y_true": 9397.58984375,
+    "y_pred": 0.001758672297000885,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 15,
+    "y_true": 9533.51953125,
+    "y_pred": 0.005668766796588898,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 16,
+    "y_true": 9562.724609375,
+    "y_pred": 0.016855351626873016,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 17,
+    "y_true": 9609.3359375,
+    "y_pred": 0.0020891129970550537,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 18,
+    "y_true": 9763.0859375,
+    "y_pred": 0.0017454475164413452,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 19,
+    "y_true": 9779.1572265625,
+    "y_pred": 0.00545676052570343,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 20,
+    "y_true": 9874.703125,
+    "y_pred": 0.015448100864887238,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 21,
+    "y_true": 9905.359375,
+    "y_pred": 0.0022035837173461914,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 22,
+    "y_true": 9899.4140625,
+    "y_pred": 0.0019699111580848694,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 23,
+    "y_true": 9962.9619140625,
+    "y_pred": 0.0016928166151046753,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 24,
+    "y_true": 10094.19140625,
+    "y_pred": 0.0017528310418128967,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 25,
+    "y_true": 10006.720703125,
+    "y_pred": 0.0021298006176948547,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 26,
+    "y_true": 9647.0859375,
+    "y_pred": 0.0017557963728904724,
+    "method": "Independent"
+  },
+  {
+    "client_id": 1,
+    "node_id": 1520338299,
+    "sample_index": 27,
+    "y_true": 9910.3701171875,
+    "y_pred": 0.0017567351460456848,
+    "method": "Independent"
+  }
+]

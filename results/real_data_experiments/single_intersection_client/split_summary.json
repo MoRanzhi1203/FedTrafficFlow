@@ -1,0 +1,41 @@
+{
+  "split_strategy": "temporal_contiguous",
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "test_ratio": 0.15000000000000005,
+  "sequence_length": 12,
+  "prediction_horizon": 1,
+  "num_time_steps": 192,
+  "selected_node_ids": [
+    1520479950,
+    1520338299
+  ],
+  "clients": [
+    {
+      "client_id": 0,
+      "node_id": 1520479950,
+      "total_size": 180,
+      "train_ratio": 0.7,
+      "val_ratio": 0.15,
+      "test_ratio": 0.15000000000000005,
+      "train_size": 125,
+      "val_size": 27,
+      "test_size": 28,
+      "split_strategy": "temporal_contiguous"
+    },
+    {
+      "client_id": 1,
+      "node_id": 1520338299,
+      "total_size": 180,
+      "train_ratio": 0.7,
+      "val_ratio": 0.15,
+      "test_ratio": 0.15000000000000005,
+      "train_size": 125,
+      "val_size": 27,
+      "test_size": 28,
+      "split_strategy": "temporal_contiguous"
+    }
+  ],
+  "resolved_input_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\analysis\\node_intersection_flow_parquet",
+  "max_chunks": 2
+}

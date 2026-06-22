@@ -1,0 +1,23 @@
+{
+  "experiment_name": "single_intersection_client",
+  "seed": 42,
+  "input_path": "data/analysis/node_intersection_flow_parquet",
+  "output_dir": "results/real_data_experiments/single_intersection_client",
+  "num_clients": 2,
+  "selected_clients": null,
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "batch_size": 32,
+  "learning_rate": 0.001,
+  "local_epochs": 1,
+  "communication_rounds": 1,
+  "sequence_length": 12,
+  "prediction_horizon": 1,
+  "model_name": "cnn_lstm_attention",
+  "device": "cpu",
+  "target_column": "路口车流量",
+  "max_chunks": 2,
+  "prediction_sample_limit": 200,
+  "workflow": "all",
+  "independent_total_epochs": null
+}

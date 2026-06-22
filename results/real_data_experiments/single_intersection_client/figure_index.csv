@@ -1,0 +1,5 @@
+figure_name,title_en,title_zh
+main_metrics_comparison.png,Single-Intersection Main Metrics (Test Set),单路口主指标对比（测试集）
+client_metrics_comparison.png,Client RMSE Comparison (Test Set),客户端 RMSE 对比（测试集）
+convergence_curve.png,FedAvg Convergence Curve,FedAvg 收敛曲线
+prediction_vs_ground_truth.png,Prediction vs Ground Truth,预测值与真实值对比

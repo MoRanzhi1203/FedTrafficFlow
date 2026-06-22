@@ -1,0 +1,12 @@
+[
+  {
+    "method": "FedAvg",
+    "communication_round": 1,
+    "train_loss": 93457127.0,
+    "val_rmse": 9817.228341245633,
+    "val_rmse_std": 239.11371211099322,
+    "val_mae": 9816.404161248494,
+    "test_rmse": 9753.628157858733,
+    "test_rmse_std": 256.29583470509624
+  }
+]
