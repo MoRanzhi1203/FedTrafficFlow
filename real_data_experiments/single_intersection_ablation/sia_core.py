@@ -27,8 +27,6 @@ from real_data_experiments.single_intersection_client.sic_core import (
     Attention,
     ClientData,
     build_client_data,
-    build_single_intersection_matrix,
-    choose_node_ids,
     collect_predictions,
 )
 
@@ -47,6 +45,7 @@ class SingleIntersectionAblationModel(nn.Module):
     def __init__(
         self,
         variant: str,
+        input_channels: int,
         hidden_dim: int = 32,
         prediction_horizon: int = 1,
     ) -> None:
@@ -58,7 +57,7 @@ class SingleIntersectionAblationModel(nn.Module):
 
         if self.use_cnn:
             self.encoder = nn.Sequential(
-                nn.Conv1d(1, 16, kernel_size=3, padding=1),
+                nn.Conv1d(input_channels, 16, kernel_size=3, padding=1),
                 nn.ReLU(),
                 nn.Conv1d(16, 32, kernel_size=3, padding=1),
                 nn.ReLU(),
@@ -66,7 +65,7 @@ class SingleIntersectionAblationModel(nn.Module):
             feature_dim = 32
         else:
             self.encoder = None
-            feature_dim = 1
+            feature_dim = input_channels
 
         if self.use_lstm:
             self.lstm = nn.LSTM(input_size=feature_dim, hidden_size=hidden_dim, num_layers=1, batch_first=True)
@@ -95,9 +94,18 @@ class SingleIntersectionAblationModel(nn.Module):
         return self.head(features)
 
 
-def build_model_fn(variant: str, prediction_horizon: int) -> callable:
+def build_model_fn(variant: str, input_channels: int, prediction_horizon: int) -> callable:
     """Build a zero-argument model factory for one ablation variant."""
-    return lambda: SingleIntersectionAblationModel(variant=variant, prediction_horizon=prediction_horizon)
+    return lambda: SingleIntersectionAblationModel(
+        variant=variant,
+        input_channels=input_channels,
+        prediction_horizon=prediction_horizon,
+    )
+
+
+def resolve_input_channels(config: ExperimentConfig) -> int:
+    """Resolve model input channels for tensor vs parquet modes."""
+    return len(config.use_channels) if config.data_mode == "tensor" else 1
 
 
 def evaluate_round(model: nn.Module, clients: list[ClientData], device: str) -> dict[str, float]:
@@ -134,15 +142,26 @@ def evaluate_variant(
     for client in clients:
         y_true, y_pred = collect_predictions(model, client.test_loader, device)
         metrics = compute_regression_metrics(y_true, y_pred)
+        entity_columns = {
+            "client_id": client.client_id,
+            "entity_kind": client.entity_kind,
+            "entity_id": client.entity_id,
+            "train_samples": len(client.train_loader.dataset),
+            "val_samples": len(client.val_loader.dataset),
+            "test_samples": len(client.test_loader.dataset),
+        }
+        if client.entity_kind == "region":
+            entity_columns["region_id"] = client.entity_id
+        if client.entity_kind == "node":
+            entity_columns["node_id"] = client.entity_id
+        for key, value in client.entity_metadata.items():
+            if key != "client_id":
+                entity_columns[key] = value
         client_rows.append(
             {
                 "variant": variant,
                 "variant_label": VARIANT_LABELS[variant],
-                "client_id": client.client_id,
-                "node_id": client.node_id,
-                "train_samples": len(client.train_loader.dataset),
-                "val_samples": len(client.val_loader.dataset),
-                "test_samples": len(client.test_loader.dataset),
+                **entity_columns,
                 **metrics,
             }
         )
@@ -152,7 +171,10 @@ def evaluate_variant(
                     "variant": variant,
                     "variant_label": VARIANT_LABELS[variant],
                     "client_id": client.client_id,
-                    "node_id": client.node_id,
+                    "entity_kind": client.entity_kind,
+                    "entity_id": client.entity_id,
+                    "region_id": client.entity_id if client.entity_kind == "region" else None,
+                    "node_id": client.entity_id if client.entity_kind == "node" else None,
                     "sample_index": np.arange(len(y_true), dtype=int),
                     "y_true": y_true,
                     "y_pred": y_pred,
@@ -164,7 +186,7 @@ def evaluate_variant(
 
 def run_variant(config: ExperimentConfig, clients: list[ClientData], device: str, variant: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Run one ablation variant using standard FedAvg only."""
-    model_fn = build_model_fn(variant, config.prediction_horizon)
+    model_fn = build_model_fn(variant, resolve_input_channels(config), config.prediction_horizon)
     global_model = model_fn().to(device)
     criterion = nn.MSELoss()
     fed_clients = [
@@ -198,6 +220,7 @@ def export_results(
     output_dir: Path,
     environment_summary: dict[str, object],
     split_summary: dict[str, object],
+    selected_regions_df: pd.DataFrame | None,
     ablation_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
     prediction_df: pd.DataFrame,
@@ -215,6 +238,8 @@ def export_results(
     write_text("python -m real_data_experiments.single_intersection_ablation.sia_core " + " ".join(sys.argv[1:]), output_dir / "run_commands.txt")
     write_json(environment_summary, output_dir / "environment_summary.json")
     write_json(split_summary, output_dir / "split_summary.json")
+    if selected_regions_df is not None and "region_id" in selected_regions_df.columns:
+        write_csv(selected_regions_df, output_dir / "selected_regions.csv")
     write_csv(ablation_metrics_df, output_dir / "ablation_metrics.csv")
     write_csv(ablation_summary_df, output_dir / "ablation_summary.csv")
     write_csv(ablation_client_df, output_dir / "ablation_client_metrics.csv")
@@ -226,8 +251,9 @@ def export_results(
                 "# 单路口消融实验说明",
                 "",
                 "- 本实验仅比较模型结构变体，不改变标准样本量加权 FedAvg 聚合。",
-                "- 数据入口与单路口主实验一致，均使用 data/analysis/node_intersection_flow_parquet。",
-                "- 数据划分为时间顺序 train/val/test，不复用训练集、验证集与测试集。",
+                "- 当前正式默认输入为 tensor-only：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。",
+                "- 当前客户端表示 pooled-grid-region client，并默认仅使用 active regions。",
+                "- 数据划分为按 target time 的时间顺序 train/val/test，不复用训练集、验证集与测试集。",
             ]
         ),
         output_dir / "experiment_notes_zh.md",
@@ -241,11 +267,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     set_global_seed(config.seed)
     start_time = datetime.now().isoformat(timespec="seconds")
 
-    node_ids = choose_node_ids(config)
-    matrix = build_single_intersection_matrix(config, node_ids)
-    clients, split_summary = build_client_data(config, matrix, device)
-    split_summary["resolved_input_path"] = str(resolve_path(config.input_path))
-    split_summary["max_chunks"] = config.max_chunks
+    clients, split_summary, selected_regions_df = build_client_data(config)
     split_summary["variants"] = [VARIANT_LABELS[name] for name in (config.variants or DEFAULT_VARIANTS)]
 
     variant_names = config.variants or DEFAULT_VARIANTS
@@ -266,12 +288,14 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     environment_summary["seed"] = config.seed
     environment_summary["start_time"] = start_time
     environment_summary["end_time"] = datetime.now().isoformat(timespec="seconds")
+    environment_summary["data_mode"] = config.data_mode
 
     export_results(
         config=config,
         output_dir=output_dir,
         environment_summary=environment_summary,
         split_summary=split_summary,
+        selected_regions_df=selected_regions_df,
         ablation_client_df=ablation_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
@@ -279,7 +303,11 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     return {
         "output_dir": str(output_dir),
         "variants": [VARIANT_LABELS[name] for name in variant_names],
-        "selected_node_ids": node_ids,
+        "selected_ids": (
+            selected_regions_df["region_id"].tolist()
+            if selected_regions_df is not None and "region_id" in selected_regions_df.columns
+            else split_summary.get("selected_node_ids", [])
+        ),
     }
 
 
@@ -291,6 +319,7 @@ def main() -> None:
     result = run_experiment(config)
     print(f"[single_intersection_ablation] completed -> {result['output_dir']}")
     print(f"[variants] {result['variants']}")
+    print(f"[selected_ids] {result['selected_ids']}")
 
 
 if __name__ == "__main__":

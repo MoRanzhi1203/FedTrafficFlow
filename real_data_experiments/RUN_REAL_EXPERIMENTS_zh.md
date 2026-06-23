@@ -11,9 +11,14 @@ pip install torch matplotlib
 
 ## 数据准备
 
-- 当前真实实验最小可运行版本直接读取：
-- `data/analysis/node_intersection_flow_parquet/`
-- 不再依赖 notebook 中缺失的 `6.池化网格张量.pt`。
+- 当前正式单路口实验默认读取：
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
+- 配套 sidecar：
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor_metadata.json`
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_metadata.json`
+- 正式 tensor shape 为 `(2, 630, 5856)`。
+- `parquet-direct` 版本仅保留为历史 smoke test fallback。
 
 ## 当前可运行模块
 
@@ -27,14 +32,18 @@ python -m real_data_experiments.single_intersection_client.sic_visualization --w
 ### 快速 smoke test
 
 ```bash
-python -m real_data_experiments.single_intersection_client.sic_core --workflow all --max-chunks 2 --num-clients 2 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --device cpu
-python -m real_data_experiments.single_intersection_client.sic_visualization --workflow all
+python -m real_data_experiments.single_intersection_client.sic_core --workflow all --data-mode tensor --num-clients 2 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --device cpu
+python -m real_data_experiments.single_intersection_client.sic_visualization --workflow all --input-dir results/real_data_experiments/single_intersection_client_tensor
+python -m real_data_experiments.single_intersection_ablation.sia_core --workflow all --data-mode tensor --num-clients 2 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --device cpu
+python -m real_data_experiments.single_intersection_ablation.sia_visualization --workflow all --input-dir results/real_data_experiments/single_intersection_ablation_tensor
 ```
 
 ## 输出目录
 
 - 单路口客户端结果：
-- `results/real_data_experiments/single_intersection_client/`
+- `results/real_data_experiments/single_intersection_client_tensor/`
+- 单路口消融结果：
+- `results/real_data_experiments/single_intersection_ablation_tensor/`
 
 ## 当前已生成的关键结果文件
 
@@ -42,6 +51,7 @@ python -m real_data_experiments.single_intersection_client.sic_visualization --w
 - `run_commands.txt`
 - `environment_summary.json`
 - `split_summary.json`
+- `selected_regions.csv`
 - `main_metrics.csv`
 - `main_summary.csv`
 - `client_metrics.csv`
@@ -53,20 +63,18 @@ python -m real_data_experiments.single_intersection_client.sic_visualization --w
 
 ## 常见错误
 
-- 若提示找不到 `data/analysis/node_intersection_flow_parquet/`，请先确认真实数据预处理链路已完成。
-- 若训练过慢，可通过 `--max-chunks`、`--num-clients`、`--rounds`、`--device cpu` 进行 smoke test。
-- 若需要固定客户端，可通过后续版本的 `--selected-clients` 指定节点 ID。
+- 若提示找不到 `final_sum_mean_standard/node_flow_grid_tensor.pt`，请先确认正式 tensor-only 预处理链路已完成。
+- 若训练过慢，可通过 `--num-clients`、`--rounds`、`--device cpu` 进行 smoke test。
+- 若需要固定客户端，可通过 `--selected-clients` 指定 region ID。
 
 ## 如何复现当前图表
 
 1. 先运行 `sic_core.py` 导出 CSV/JSON 结果。
 2. 再运行 `sic_visualization.py` 生成图表。
-3. 图表与索引默认写回 `results/real_data_experiments/single_intersection_client/`。
+3. 图表与索引默认写回 `results/real_data_experiments/single_intersection_client_tensor/`。
 
-## 待补齐模块
+## 当前说明
 
-- `single_intersection_ablation`
-- `region_client`
-- `region_ablation`
-
-上述模块目录骨架已创建，但本轮首次交付尚未完成正式迁移与重跑。
+- 当前单路口实验中的 `client` 表示 `pooled-grid-region client`。
+- `FedAvg` 仍然是标准样本量加权 `FedAvg`。
+- 区域实验仍待后续阶段迁移，本阶段未改动。

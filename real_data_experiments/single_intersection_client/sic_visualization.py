@@ -16,7 +16,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI arguments for visualization."""
     parser = argparse.ArgumentParser(description="Single-intersection visualization")
     parser.add_argument("--workflow", choices=["all"], default="all")
-    parser.add_argument("--input-dir", type=str, default="results/real_data_experiments/single_intersection_client")
+    parser.add_argument("--input-dir", type=str, default="results/real_data_experiments/single_intersection_client_tensor")
     parser.add_argument("--output-dir", type=str, default="")
     parser.add_argument("--format", type=str, default="png")
     parser.add_argument("--dpi", type=int, default=300)
@@ -128,8 +128,8 @@ def generate_figures(input_dir: Path, output_dir: Path, image_format: str, dpi: 
             [
                 "# 图表说明",
                 "",
-                "- `main_metrics_comparison`: 展示 FedAvg 与 Independent 在测试集上的总体 RMSE/MAE/MAPE 对比。",
-                "- `client_metrics_comparison`: 展示各客户端测试集 RMSE 的方法对比。",
+                "- `main_metrics_comparison`: 展示 pooled-grid-region client 上 FedAvg 与 Independent 在测试集上的总体 RMSE/MAE/MAPE 对比。",
+                "- `client_metrics_comparison`: 展示各 pooled-grid-region client 测试集 RMSE 的方法对比。",
                 "- `convergence_curve`: 展示通信轮次上的 train loss、val RMSE 与 test RMSE。",
                 "- `prediction_vs_ground_truth`: 展示部分样本上的预测值与真实值对比曲线。",
             ]

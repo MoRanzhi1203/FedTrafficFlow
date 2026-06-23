@@ -5,6 +5,8 @@
 - 本目录用于迁移 `test/单路口客户端消融实验_2×2.ipynb`。
 - 当前实现仅比较模型结构变体，不改变联邦聚合方式。
 - 默认联邦聚合仍为标准样本量加权 `FedAvg`。
+- 当前正式默认输入为 `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。
+- 当前 `client` 的含义为 `single pooled-grid-region client`，即每个客户端对应一个 active pooled region。
 
 ## 变体对应关系
 
@@ -16,14 +18,20 @@
 ## 文件说明
 
 - `sia_config.py`：消融实验配置与 CLI。
-- `sia_core.py`：真实数据读取、时间顺序划分、四种结构变体的联邦训练与结果导出。
+- `sia_core.py`：正式 tensor 读取、active region 选择、时间顺序划分、四种结构变体的联邦训练与结果导出。
 - `sia_visualization.py`：读取已有 CSV，生成消融对比图。
 
 ## 数据与划分
 
-- 数据入口与单路口主实验一致：`data/analysis/node_intersection_flow_parquet/`。
-- 训练、验证、测试采用时间顺序划分。
+- 正式数据入口与单路口主实验一致：`final_sum_mean_standard/node_flow_grid_tensor.pt`。
+- 默认仅使用 active regions，并按 `channel 0` 平均总流量选择 top-K region 作为客户端。
+- 训练、验证、测试采用 target time 的时间顺序划分。
 - 不允许 `train/val/test` 复用。
+
+## Legacy Fallback
+
+- `data_mode = parquet` 仍保留，但仅作为历史 smoke test fallback。
+- `parquet-direct` 不作为后续正式消融结果入口。
 
 ## 禁止进入主流程的内容
 

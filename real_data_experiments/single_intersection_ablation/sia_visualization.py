@@ -16,7 +16,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI arguments for ablation visualization."""
     parser = argparse.ArgumentParser(description="Single-intersection ablation visualization")
     parser.add_argument("--workflow", choices=["all"], default="all")
-    parser.add_argument("--input-dir", type=str, default="results/real_data_experiments/single_intersection_ablation")
+    parser.add_argument("--input-dir", type=str, default="results/real_data_experiments/single_intersection_ablation_tensor")
     parser.add_argument("--output-dir", type=str, default="")
     parser.add_argument("--format", type=str, default="png")
     parser.add_argument("--dpi", type=int, default=300)
@@ -103,8 +103,8 @@ def generate_figures(input_dir: Path, output_dir: Path, image_format: str, dpi: 
             [
                 "# 图表说明",
                 "",
-                "- `ablation_metrics_comparison`: 比较四种结构变体在测试集上的总体误差指标。",
-                "- `ablation_client_rmse`: 比较各客户端在不同消融变体下的测试集 RMSE。",
+                "- `ablation_metrics_comparison`: 比较四种结构变体在 pooled-grid-region client 测试集上的总体误差指标。",
+                "- `ablation_client_rmse`: 比较各 pooled-grid-region client 在不同消融变体下的测试集 RMSE。",
                 "- `ablation_convergence_curve`: 比较四种结构变体在通信轮次上的测试集 RMSE 变化。",
             ]
         ),

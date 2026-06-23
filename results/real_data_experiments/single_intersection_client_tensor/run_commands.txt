@@ -1,0 +1,1 @@
+python -m real_data_experiments.single_intersection_client.sic_core --workflow all --data-mode tensor --num-clients 2 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --learning-rate 0.001 --device cpu

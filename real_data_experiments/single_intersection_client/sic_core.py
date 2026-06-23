@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import argparse
 import copy
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset, Subset
+from torch.utils.data import DataLoader, Dataset
 
 from real_data_experiments.common.data_splits import temporal_split_indices
 from real_data_experiments.common.fedavg import fedavg_aggregate
@@ -21,11 +21,18 @@ from real_data_experiments.common.io_utils import read_node_flow_frame, resolve_
 from real_data_experiments.common.metrics import METRIC_COLUMNS, compute_regression_metrics, summarize_metric_frame
 from real_data_experiments.common.result_writer import prepare_output_dir, write_csv, write_json, write_text
 from real_data_experiments.common.seed import build_environment_summary, resolve_default_device, set_global_seed
+from real_data_experiments.common.tensor_dataset import (
+    GridTensorWindowDataset,
+    build_time_split_bounds,
+    get_region_usage_summary,
+    load_grid_tensor_bundle,
+    select_region_clients,
+)
 from real_data_experiments.single_intersection_client.sic_config import ExperimentConfig, build_arg_parser, config_from_args
 
 
 class IntersectionDataset(Dataset):
-    """Sliding-window dataset for a single node client."""
+    """Legacy parquet-direct sliding-window dataset for one node series."""
 
     def __init__(self, series: np.ndarray, sequence_length: int, prediction_horizon: int) -> None:
         self.series = np.asarray(series, dtype=np.float32).reshape(-1)
@@ -60,12 +67,12 @@ class Attention(nn.Module):
 
 
 class CNNLSTMAttentionRegressor(nn.Module):
-    """Notebook-aligned CNN + LSTM + Attention regressor."""
+    """CNN + LSTM + Attention regressor that supports 1 or more input channels."""
 
-    def __init__(self, hidden_dim: int = 32, prediction_horizon: int = 1) -> None:
+    def __init__(self, input_channels: int = 1, hidden_dim: int = 32, prediction_horizon: int = 1) -> None:
         super().__init__()
         self.encoder = nn.Sequential(
-            nn.Conv1d(1, 16, kernel_size=3, padding=1),
+            nn.Conv1d(input_channels, 16, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv1d(16, 32, kernel_size=3, padding=1),
             nn.ReLU(),
@@ -76,8 +83,7 @@ class CNNLSTMAttentionRegressor(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         encoded = self.encoder(inputs)
-        lstm_in = encoded.transpose(1, 2)
-        outputs, _ = self.lstm(lstm_in)
+        outputs, _ = self.lstm(encoded.transpose(1, 2))
         context = self.attention(outputs)
         return self.head(context)
 
@@ -87,11 +93,18 @@ class ClientData:
     """Per-client datasets and loaders."""
 
     client_id: int
-    node_id: int
+    entity_id: int
+    entity_kind: str
     train_loader: DataLoader
     val_loader: DataLoader
     test_loader: DataLoader
     split_metadata: dict[str, object]
+    entity_metadata: dict[str, object] = field(default_factory=dict)
+
+
+def resolve_input_channels(config: ExperimentConfig) -> int:
+    """Resolve the effective model input channel count for the chosen data mode."""
+    return len(config.use_channels) if config.data_mode == "tensor" else 1
 
 
 def build_single_intersection_matrix(config: ExperimentConfig, node_ids: list[int]) -> pd.DataFrame:
@@ -102,17 +115,12 @@ def build_single_intersection_matrix(config: ExperimentConfig, node_ids: list[in
         node_ids=node_ids,
         max_chunks=config.max_chunks,
     )
-    matrix = (
-        frame.pivot(index="时间段", columns="节点ID", values=config.target_column)
-        .sort_index()
-        .fillna(0.0)
-    )
-    matrix = matrix.reindex(columns=node_ids, fill_value=0.0)
-    return matrix
+    matrix = frame.pivot(index="时间段", columns="节点ID", values=config.target_column).sort_index().fillna(0.0)
+    return matrix.reindex(columns=node_ids, fill_value=0.0)
 
 
 def choose_node_ids(config: ExperimentConfig) -> list[int]:
-    """Choose deterministic node ids for the experiment."""
+    """Choose deterministic node ids for the legacy parquet fallback."""
     if config.selected_clients:
         return [int(node_id) for node_id in config.selected_clients[: config.num_clients]]
     bootstrap = read_node_flow_frame(
@@ -124,11 +132,35 @@ def choose_node_ids(config: ExperimentConfig) -> list[int]:
     return select_top_nodes_by_activity(bootstrap, num_clients=config.num_clients, target_col=config.target_column)
 
 
-def build_client_data(config: ExperimentConfig, matrix: pd.DataFrame, device: str) -> tuple[list[ClientData], dict[str, object]]:
-    """Construct client datasets and split metadata from the time-indexed matrix."""
+def _make_entity_record(client: ClientData) -> dict[str, object]:
+    """Build a shared entity record for metrics and prediction exports."""
+    record: dict[str, object] = {
+        "client_id": client.client_id,
+        "entity_kind": client.entity_kind,
+        "entity_id": client.entity_id,
+        "train_samples": len(client.train_loader.dataset),
+        "val_samples": len(client.val_loader.dataset),
+        "test_samples": len(client.test_loader.dataset),
+    }
+    if client.entity_kind == "region":
+        record["region_id"] = client.entity_id
+    if client.entity_kind == "node":
+        record["node_id"] = client.entity_id
+    for key, value in client.entity_metadata.items():
+        if key != "client_id":
+            record[key] = value
+    return record
+
+
+def build_parquet_client_data(config: ExperimentConfig) -> tuple[list[ClientData], dict[str, object], pd.DataFrame | None]:
+    """Construct legacy parquet-direct client datasets from node-level time series."""
+    node_ids = choose_node_ids(config)
+    matrix = build_single_intersection_matrix(config, node_ids)
     clients: list[ClientData] = []
     split_summary: dict[str, object] = {
-        "split_strategy": "temporal_contiguous",
+        "data_mode": "parquet",
+        "legacy_fallback": True,
+        "split_strategy": "temporal_contiguous_over_window_index",
         "train_ratio": config.train_ratio,
         "val_ratio": config.val_ratio,
         "test_ratio": 1.0 - config.train_ratio - config.val_ratio,
@@ -136,6 +168,8 @@ def build_client_data(config: ExperimentConfig, matrix: pd.DataFrame, device: st
         "prediction_horizon": config.prediction_horizon,
         "num_time_steps": int(matrix.shape[0]),
         "selected_node_ids": [int(col) for col in matrix.columns.tolist()],
+        "resolved_input_path": str(resolve_path(config.input_path)),
+        "max_chunks": config.max_chunks,
         "clients": [],
     }
 
@@ -150,27 +184,133 @@ def build_client_data(config: ExperimentConfig, matrix: pd.DataFrame, device: st
             train_ratio=config.train_ratio,
             val_ratio=config.val_ratio,
         )
-        train_subset = Subset(dataset, train_idx)
-        val_subset = Subset(dataset, val_idx)
-        test_subset = Subset(dataset, test_idx)
-        clients.append(
-            ClientData(
-                client_id=client_id,
-                node_id=int(node_id),
-                train_loader=DataLoader(train_subset, batch_size=config.batch_size, shuffle=False),
-                val_loader=DataLoader(val_subset, batch_size=config.batch_size, shuffle=False),
-                test_loader=DataLoader(test_subset, batch_size=config.batch_size, shuffle=False),
-                split_metadata=metadata,
-            )
+        client = ClientData(
+            client_id=client_id,
+            entity_id=int(node_id),
+            entity_kind="node",
+            train_loader=DataLoader(torch.utils.data.Subset(dataset, train_idx), batch_size=config.batch_size, shuffle=False),
+            val_loader=DataLoader(torch.utils.data.Subset(dataset, val_idx), batch_size=config.batch_size, shuffle=False),
+            test_loader=DataLoader(torch.utils.data.Subset(dataset, test_idx), batch_size=config.batch_size, shuffle=False),
+            split_metadata=metadata,
+            entity_metadata={
+                "node_id": int(node_id),
+                "mean_total_flow": float(matrix[node_id].mean()),
+            },
         )
+        clients.append(client)
+        split_summary["clients"].append({"client_id": client_id, "node_id": int(node_id), **metadata})
+
+    return clients, split_summary, None
+
+
+def build_tensor_client_data(config: ExperimentConfig) -> tuple[list[ClientData], dict[str, object], pd.DataFrame]:
+    """Construct tensor-only client datasets from the formal pooled-grid tensor."""
+    bundle = load_grid_tensor_bundle(config.tensor_path, config.regions_path)
+    selected_regions_df = select_region_clients(
+        bundle=bundle,
+        num_clients=config.num_clients,
+        selected_region_ids=config.selected_clients,
+        target_channel=config.target_channel,
+        use_active_regions_only=config.use_active_regions_only,
+    )
+    time_bounds = build_time_split_bounds(
+        time_count=int(bundle.tensor.shape[2]),
+        train_ratio=config.train_ratio,
+        val_ratio=config.val_ratio,
+    )
+    region_usage = get_region_usage_summary(bundle.regions_df)
+    split_summary: dict[str, object] = {
+        "data_mode": "tensor",
+        "legacy_fallback": False,
+        "tensor_path": str(resolve_path(config.tensor_path)),
+        "regions_path": str(resolve_path(config.regions_path)),
+        "tensor_shape": list(bundle.tensor.shape),
+        "sequence_length": config.sequence_length,
+        "prediction_horizon": config.prediction_horizon,
+        "use_channels": list(config.use_channels),
+        "target_channel": int(config.target_channel),
+        "use_active_regions_only": bool(config.use_active_regions_only),
+        "total_region_count": region_usage["total_region_count"],
+        "active_region_count": region_usage["active_region_count"],
+        "used_region_count": int(len(selected_regions_df)),
+        "selected_region_ids": [int(region_id) for region_id in selected_regions_df["region_id"].tolist()],
+        "split_strategy": "temporal_contiguous_by_target_time",
+        **time_bounds,
+        "clients": [],
+    }
+
+    clients: list[ClientData] = []
+    for row in selected_regions_df.to_dict(orient="records"):
+        region_id = int(row["region_id"])
+        train_dataset = GridTensorWindowDataset(
+            tensor=bundle.tensor,
+            region_id=region_id,
+            input_length=config.sequence_length,
+            horizon=config.prediction_horizon,
+            target_channel=config.target_channel,
+            use_channels=config.use_channels,
+            start_time=int(time_bounds["train_start"]),
+            end_time=int(time_bounds["train_end"]),
+        )
+        val_dataset = GridTensorWindowDataset(
+            tensor=bundle.tensor,
+            region_id=region_id,
+            input_length=config.sequence_length,
+            horizon=config.prediction_horizon,
+            target_channel=config.target_channel,
+            use_channels=config.use_channels,
+            start_time=int(time_bounds["val_start"]),
+            end_time=int(time_bounds["val_end"]),
+        )
+        test_dataset = GridTensorWindowDataset(
+            tensor=bundle.tensor,
+            region_id=region_id,
+            input_length=config.sequence_length,
+            horizon=config.prediction_horizon,
+            target_channel=config.target_channel,
+            use_channels=config.use_channels,
+            start_time=int(time_bounds["test_start"]),
+            end_time=int(time_bounds["test_end"]),
+        )
+        client = ClientData(
+            client_id=int(row["client_id"]),
+            entity_id=region_id,
+            entity_kind="region",
+            train_loader=DataLoader(train_dataset, batch_size=config.batch_size, shuffle=False),
+            val_loader=DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False),
+            test_loader=DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False),
+            split_metadata={
+                "train": train_dataset.describe(),
+                "val": val_dataset.describe(),
+                "test": test_dataset.describe(),
+            },
+            entity_metadata=row,
+        )
+        clients.append(client)
         split_summary["clients"].append(
             {
-                "client_id": client_id,
-                "node_id": int(node_id),
-                **metadata,
+                "client_id": int(row["client_id"]),
+                "region_id": region_id,
+                "pooled_row": int(row["pooled_row"]),
+                "pooled_col": int(row["pooled_col"]),
+                "source_node_count": int(row["source_node_count"]),
+                "mean_total_flow": float(row["mean_total_flow"]),
+                "train": train_dataset.describe(),
+                "val": val_dataset.describe(),
+                "test": test_dataset.describe(),
             }
         )
-    return clients, split_summary
+
+    return clients, split_summary, selected_regions_df
+
+
+def build_client_data(config: ExperimentConfig) -> tuple[list[ClientData], dict[str, object], pd.DataFrame | None]:
+    """Dispatch between tensor-only formal input and parquet legacy fallback."""
+    if config.data_mode == "tensor":
+        return build_tensor_client_data(config)
+    if config.data_mode == "parquet":
+        return build_parquet_client_data(config)
+    raise ValueError(f"Unsupported data_mode: {config.data_mode}")
 
 
 def train_local_model(
@@ -216,23 +356,14 @@ def collect_predictions(model: nn.Module, loader: DataLoader, device: str) -> tu
     return np.concatenate(truths).astype(np.float64), np.concatenate(preds).astype(np.float64)
 
 
-def evaluate_client_model(model: nn.Module, client: ClientData, device: str) -> tuple[dict[str, float], pd.DataFrame]:
+def evaluate_client_model(model: nn.Module, client: ClientData, device: str) -> tuple[dict[str, Any], pd.DataFrame]:
     """Evaluate a model on one client's test split and return metrics plus prediction samples."""
     y_true, y_pred = collect_predictions(model, client.test_loader, device)
-    metrics = compute_regression_metrics(y_true, y_pred)
-    metrics.update(
-        {
-            "client_id": client.client_id,
-            "node_id": client.node_id,
-            "train_samples": len(client.train_loader.dataset),
-            "val_samples": len(client.val_loader.dataset),
-            "test_samples": len(client.test_loader.dataset),
-        }
-    )
+    metrics: dict[str, Any] = compute_regression_metrics(y_true, y_pred)
+    metrics.update(_make_entity_record(client))
     prediction_df = pd.DataFrame(
         {
-            "client_id": client.client_id,
-            "node_id": client.node_id,
+            **{key: value for key, value in _make_entity_record(client).items() if key not in {"train_samples", "val_samples", "test_samples"}},
             "sample_index": np.arange(len(y_true), dtype=int),
             "y_true": y_true,
             "y_pred": y_pred,
@@ -263,16 +394,27 @@ def evaluate_round(global_model: nn.Module, clients: list[ClientData], device: s
     }
 
 
-def run_fedavg_experiment(config: ExperimentConfig, clients: list[ClientData], device: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def run_fedavg_experiment(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+    device: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Run standard FedAvg across single-intersection clients."""
-    global_model = CNNLSTMAttentionRegressor(prediction_horizon=config.prediction_horizon).to(device)
+    input_channels = resolve_input_channels(config)
+    global_model = CNNLSTMAttentionRegressor(
+        input_channels=input_channels,
+        prediction_horizon=config.prediction_horizon,
+    ).to(device)
     round_history: list[dict[str, float]] = []
     for round_idx in range(1, config.communication_rounds + 1):
         local_state_dicts: list[dict[str, torch.Tensor]] = []
         sample_counts: list[int] = []
         train_losses: list[float] = []
         for client in clients:
-            local_model = CNNLSTMAttentionRegressor(prediction_horizon=config.prediction_horizon).to(device)
+            local_model = CNNLSTMAttentionRegressor(
+                input_channels=input_channels,
+                prediction_horizon=config.prediction_horizon,
+            ).to(device)
             local_model.load_state_dict(copy.deepcopy(global_model.state_dict()))
             state_dict, train_loss = train_local_model(
                 local_model,
@@ -290,7 +432,7 @@ def run_fedavg_experiment(config: ExperimentConfig, clients: list[ClientData], d
         history_record.update(evaluate_round(global_model, clients, device))
         round_history.append(history_record)
 
-    client_rows: list[dict[str, float | int | str]] = []
+    client_rows: list[dict[str, Any]] = []
     prediction_frames: list[pd.DataFrame] = []
     for client in clients:
         metrics, prediction_df = evaluate_client_model(global_model, client, device)
@@ -302,10 +444,14 @@ def run_fedavg_experiment(config: ExperimentConfig, clients: list[ClientData], d
 def run_independent_experiment(config: ExperimentConfig, clients: list[ClientData], device: str) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the independent baseline with the same data splits."""
     total_epochs = config.independent_total_epochs or (config.communication_rounds * config.local_epochs)
-    client_rows: list[dict[str, float | int | str]] = []
+    input_channels = resolve_input_channels(config)
+    client_rows: list[dict[str, Any]] = []
     prediction_frames: list[pd.DataFrame] = []
     for client in clients:
-        model = CNNLSTMAttentionRegressor(prediction_horizon=config.prediction_horizon).to(device)
+        model = CNNLSTMAttentionRegressor(
+            input_channels=input_channels,
+            prediction_horizon=config.prediction_horizon,
+        ).to(device)
         train_local_model(
             model,
             client.train_loader,
@@ -324,6 +470,7 @@ def export_results(
     output_dir: Path,
     environment_summary: dict[str, object],
     split_summary: dict[str, object],
+    selected_regions_df: pd.DataFrame | None,
     fed_client_df: pd.DataFrame,
     ind_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
@@ -340,9 +487,14 @@ def export_results(
     main_summary_df = summarize_metric_frame(client_metrics_df, group_cols=["method"])
 
     write_json(config.to_dict(), output_dir / "run_config.json")
-    write_text("python -m real_data_experiments.single_intersection_client.sic_core " + " ".join(sys.argv[1:]), output_dir / "run_commands.txt")
+    write_text(
+        "python -m real_data_experiments.single_intersection_client.sic_core " + " ".join(sys.argv[1:]),
+        output_dir / "run_commands.txt",
+    )
     write_json(environment_summary, output_dir / "environment_summary.json")
     write_json(split_summary, output_dir / "split_summary.json")
+    if selected_regions_df is not None and "region_id" in selected_regions_df.columns:
+        write_csv(selected_regions_df, output_dir / "selected_regions.csv")
     write_csv(main_metrics_df, output_dir / "main_metrics.csv")
     write_json(main_metrics_df.to_dict(orient="records"), output_dir / "main_metrics.json")
     write_csv(main_summary_df, output_dir / "main_summary.csv")
@@ -353,19 +505,18 @@ def export_results(
     write_json(convergence_df.to_dict(orient="records"), output_dir / "convergence_history.json")
     write_csv(prediction_df.head(config.prediction_sample_limit), output_dir / "prediction_samples.csv")
     write_json(prediction_df.head(config.prediction_sample_limit).to_dict(orient="records"), output_dir / "prediction_samples.json")
-    write_text(
-        "\n".join(
-            [
-                "# 单路口客户端实验说明",
-                "",
-                "- 本次迁移默认主方法为标准样本量加权 FedAvg。",
-                "- 数据入口为 data/analysis/node_intersection_flow_parquet，而非 notebook 中缺失的 6.池化网格张量.pt。",
-                "- 数据划分采用时间顺序 train/val/test，不使用随机打乱。",
-                "- 当前最小交付版本先完成单路口主实验主线与指标导出。",
-            ]
-        ),
-        output_dir / "experiment_notes_zh.md",
-    )
+    note_lines = [
+        "# 单路口客户端实验说明",
+        "",
+        "- 当前主线方法始终为标准样本量加权 FedAvg。",
+        "- 当前正式默认输入为 tensor-only：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。",
+        "- 当前客户端表示 pooled-grid-region client，每个客户端对应一个 active pooled region。",
+        "- 数据划分按 target time 的时间顺序执行，不使用随机切分。",
+        "- `parquet-direct` 仅保留为 legacy fallback，不作为正式默认结果入口。",
+    ]
+    if config.data_mode == "parquet":
+        note_lines.append("- 本次运行使用了 legacy parquet fallback，仅用于兼容旧 smoke test。")
+    write_text("\n".join(note_lines), output_dir / "experiment_notes_zh.md")
 
 
 def run_experiment(config: ExperimentConfig) -> dict[str, object]:
@@ -375,12 +526,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     set_global_seed(config.seed)
     start_time = datetime.now().isoformat(timespec="seconds")
 
-    node_ids = choose_node_ids(config)
-    matrix = build_single_intersection_matrix(config, node_ids)
-    clients, split_summary = build_client_data(config, matrix, device)
-    split_summary["resolved_input_path"] = str(resolve_path(config.input_path))
-    split_summary["max_chunks"] = config.max_chunks
-
+    clients, split_summary, selected_regions_df = build_client_data(config)
     fed_client_df, convergence_df, fed_prediction_df = run_fedavg_experiment(config, clients, device)
     ind_client_df, ind_prediction_df = run_independent_experiment(config, clients, device)
     prediction_df = pd.concat([fed_prediction_df, ind_prediction_df], ignore_index=True)
@@ -389,20 +535,27 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     environment_summary["seed"] = config.seed
     environment_summary["start_time"] = start_time
     environment_summary["end_time"] = datetime.now().isoformat(timespec="seconds")
+    environment_summary["data_mode"] = config.data_mode
 
     export_results(
         config=config,
         output_dir=output_dir,
         environment_summary=environment_summary,
         split_summary=split_summary,
+        selected_regions_df=selected_regions_df,
         fed_client_df=fed_client_df,
         ind_client_df=ind_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
     )
+    selected_ids = []
+    if selected_regions_df is not None:
+        selected_ids = selected_regions_df["region_id"].tolist() if "region_id" in selected_regions_df.columns else []
+    elif "selected_node_ids" in split_summary:
+        selected_ids = split_summary["selected_node_ids"]
     return {
         "output_dir": str(output_dir),
-        "selected_node_ids": node_ids,
+        "selected_ids": selected_ids,
         "client_metrics_rows": int(len(fed_client_df) + len(ind_client_df)),
     }
 
@@ -414,7 +567,7 @@ def main() -> None:
     config = config_from_args(args)
     result = run_experiment(config)
     print(f"[single_intersection_client] completed -> {result['output_dir']}")
-    print(f"[selected_node_ids] {result['selected_node_ids']}")
+    print(f"[selected_ids] {result['selected_ids']}")
 
 
 if __name__ == "__main__":

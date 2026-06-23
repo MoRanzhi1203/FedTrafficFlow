@@ -1,0 +1,157 @@
+{
+  "data_mode": "tensor",
+  "legacy_fallback": false,
+  "tensor_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\processed\\node_flow_grid\\final_sum_mean_standard\\node_flow_grid_tensor.pt",
+  "regions_path": "E:\\Jupter_Notebook\\FedTrafficFlow\\data\\processed\\node_flow_grid\\final_sum_mean_standard\\node_flow_grid_regions.csv",
+  "tensor_shape": [
+    2,
+    630,
+    5856
+  ],
+  "sequence_length": 12,
+  "prediction_horizon": 1,
+  "use_channels": [
+    0,
+    1
+  ],
+  "target_channel": 0,
+  "use_active_regions_only": true,
+  "total_region_count": 630,
+  "active_region_count": 223,
+  "used_region_count": 2,
+  "selected_region_ids": [
+    290,
+    284
+  ],
+  "split_strategy": "temporal_contiguous_by_target_time",
+  "train_start": 0,
+  "train_end": 4099,
+  "val_start": 4099,
+  "val_end": 4977,
+  "test_start": 4977,
+  "test_end": 5856,
+  "train_ratio": 0.7,
+  "val_ratio": 0.15,
+  "test_ratio": 0.15000000000000005,
+  "time_count": 5856,
+  "clients": [
+    {
+      "client_id": 0,
+      "region_id": 290,
+      "pooled_row": 9,
+      "pooled_col": 20,
+      "source_node_count": 667,
+      "mean_total_flow": 1953917.875,
+      "train": {
+        "region_id": 290,
+        "input_length": 12,
+        "horizon": 1,
+        "target_channel": 0,
+        "use_channels": [
+          0,
+          1
+        ],
+        "sample_count": 4087,
+        "window_start_min": 0,
+        "window_start_max": 4086,
+        "target_time_min": 12,
+        "target_time_max": 4098,
+        "split_start_time": 0,
+        "split_end_time": 4099
+      },
+      "val": {
+        "region_id": 290,
+        "input_length": 12,
+        "horizon": 1,
+        "target_channel": 0,
+        "use_channels": [
+          0,
+          1
+        ],
+        "sample_count": 878,
+        "window_start_min": 4087,
+        "window_start_max": 4964,
+        "target_time_min": 4099,
+        "target_time_max": 4976,
+        "split_start_time": 4099,
+        "split_end_time": 4977
+      },
+      "test": {
+        "region_id": 290,
+        "input_length": 12,
+        "horizon": 1,
+        "target_channel": 0,
+        "use_channels": [
+          0,
+          1
+        ],
+        "sample_count": 879,
+        "window_start_min": 4965,
+        "window_start_max": 5843,
+        "target_time_min": 4977,
+        "target_time_max": 5855,
+        "split_start_time": 4977,
+        "split_end_time": 5856
+      }
+    },
+    {
+      "client_id": 1,
+      "region_id": 284,
+      "pooled_row": 9,
+      "pooled_col": 14,
+      "source_node_count": 698,
+      "mean_total_flow": 1914353.125,
+      "train": {
+        "region_id": 284,
+        "input_length": 12,
+        "horizon": 1,
+        "target_channel": 0,
+        "use_channels": [
+          0,
+          1
+        ],
+        "sample_count": 4087,
+        "window_start_min": 0,
+        "window_start_max": 4086,
+        "target_time_min": 12,
+        "target_time_max": 4098,
+        "split_start_time": 0,
+        "split_end_time": 4099
+      },
+      "val": {
+        "region_id": 284,
+        "input_length": 12,
+        "horizon": 1,
+        "target_channel": 0,
+        "use_channels": [
+          0,
+          1
+        ],
+        "sample_count": 878,
+        "window_start_min": 4087,
+        "window_start_max": 4964,
+        "target_time_min": 4099,
+        "target_time_max": 4976,
+        "split_start_time": 4099,
+        "split_end_time": 4977
+      },
+      "test": {
+        "region_id": 284,
+        "input_length": 12,
+        "horizon": 1,
+        "target_channel": 0,
+        "use_channels": [
+          0,
+          1
+        ],
+        "sample_count": 879,
+        "window_start_min": 4965,
+        "window_start_max": 5843,
+        "target_time_min": 4977,
+        "target_time_max": 5855,
+        "split_start_time": 4977,
+        "split_end_time": 5856
+      }
+    }
+  ]
+}

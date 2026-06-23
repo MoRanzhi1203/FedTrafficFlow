@@ -1,0 +1,4 @@
+figure_name,title_en,title_zh
+ablation_metrics_comparison.png,Single-Intersection Ablation Metrics (Test Set),单路口消融指标对比（测试集）
+ablation_client_rmse.png,Client RMSE by Ablation Variant,单路口消融客户端 RMSE 对比
+ablation_convergence_curve.png,Ablation Convergence Curve,单路口消融收敛曲线

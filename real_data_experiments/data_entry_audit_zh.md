@@ -2,7 +2,16 @@
 
 ## 1. 当前问题
 
-当前 `single_intersection_client` 与 `single_intersection_ablation` 之所以临时使用 `data/analysis/node_intersection_flow_parquet/`，原因不是论文主线改变，而是此前迁移时优先保证 Python 工程结构、标准 `FedAvg`、指标导出和可视化链路可运行；当时 notebook 直接依赖的临时命名 `6.池化网格张量.pt` 没有对应的正式 `.py` 生成脚本，也没有以规范命名存在于仓库的数据产物，因此只能采用“上游节点流量 parquet 直接读入”的 fallback 方案完成 smoke test。
+当前 `single_intersection_client` 与 `single_intersection_ablation` 最初之所以临时使用 `data/analysis/node_intersection_flow_parquet/`，原因不是论文主线改变，而是此前迁移时优先保证 Python 工程结构、标准 `FedAvg`、指标导出和可视化链路可运行；当时 notebook 直接依赖的临时命名 `6.池化网格张量.pt` 没有对应的正式 `.py` 生成脚本，也没有以规范命名存在于仓库的数据产物，因此只能采用“上游节点流量 parquet 直接读入”的 fallback 方案完成 smoke test。
+
+当前状态已经更新为：
+
+- `parquet-direct` 仅保留为历史 smoke test fallback；
+- 当前正式单路口主实验与单路口消融实验默认使用 tensor-only 输入；
+- 正式输入为 `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`；
+- 正式 tensor shape 为 `(2, 630, 5856)`；
+- 正式 `pool_mode = sum_mean`；
+- 正式 `layout = standard`，即 `row = lat`、`col = lon`。
 
 现在重新审计后可以确认：
 
@@ -13,15 +22,15 @@
   - `data/analysis/node_flow_curve_fit/`
 - 但面向 CCN 网格联邦训练的正式“网格化 -> 池化 -> `.pt` 张量”链路仍未 `.py` 化。
 - `test/预处理5.ipynb` 与 `test/预处理6.ipynb` 中确实保留了 notebook 版网格化、池化和临时命名 `6.池化网格张量.pt` 的保存逻辑。
-- 仓库当前不存在：
+- 上述缺失项现已补齐，当前正式产物位于：
   - `preprocessing_scripts/process_node_flow_grids.py`
   - `preprocessing_scripts/process_node_flow_tensor.py`
-  - `data/processed/node_flow_grid/node_flow_grid_2ch.npy`
-  - `data/processed/node_flow_grid/node_flow_grid_pooled.npy`
-  - `data/processed/node_flow_grid/node_flow_grid_tensor.pt`
-  - `data/processed/node_flow_grid/node_flow_grid_regions.csv`
+  - `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_2ch.npy`
+  - `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_pooled.npy`
+  - `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
+  - `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
 
-因此，当前单路口实验使用 `node_intersection_flow_parquet` 只是用于 Python 工程 smoke test 的 fallback，不应当被视为最终 CCN 网格联邦训练入口。
+因此，`node_intersection_flow_parquet` 只应被视为上游节点流量中间结果，而不再是当前单路口实验的正式默认训练入口。
 
 ## 2. 基础预处理 py 化状态
 
@@ -42,7 +51,7 @@
 | 函数聚类可视化 | `预处理4.ipynb` 历史来源 | `analysis_scripts/real_data_analysis/visualize_fitted_function_clusters.py` | 是 | `date_type_curve_method_comparison/` | `function_cluster_visualization/` | 是 | 否 | 当前磁盘存在函数聚类图。 |
 | 节点流量网格化 | `预处理5.ipynb` | 无正式 `.py` | 否 | `node_intersection_flow_parquet` + 节点经纬度表 | 理应输出 `node_flow_grid_2ch.npy` | 否 | 是 | notebook 中使用 `1.路口节点经纬度.csv` 和 `4.路口节点车流量/*.csv`。 |
 | 网格池化 | `预处理5.ipynb` | 无正式 `.py` | 否 | 网格化双通道 `.npy` | 理应输出 `node_flow_grid_pooled.npy` | 否 | 是 | notebook 通过 `torch.nn.functional.max_pool2d` 完成。 |
-| 网格张量保存为 `.pt` | `预处理6.ipynb` | 无正式 `.py` | 否 | 池化后的网格化 `.npy` | notebook 临时输出 `6.池化网格张量.pt` | 否 | 是 | 当前工程化代码统一输出 `node_flow_grid_tensor.pt`，不再生成该历史命名文件。 |
+| 网格张量保存为 `.pt` | `预处理6.ipynb` | `preprocessing_scripts/process_node_flow_tensor.py` | 是 | 池化后的网格化 `.npy` | `final_sum_mean_standard/node_flow_grid_tensor.pt` | 是 | 否 | 当前工程化代码统一输出 `node_flow_grid_tensor.pt`，不再生成历史命名文件。 |
 
 ## 3. 网格化 / 池化 / 张量化状态
 
@@ -50,13 +59,13 @@
 
 | 路径 | 状态 | 结论 |
 |---|---|---|
-| `preprocessing_scripts/process_node_flow_grids.py` | 不存在 | 缺失正式网格化/池化脚本 |
-| `preprocessing_scripts/process_node_flow_tensor.py` | 不存在 | 缺失正式 `.pt` 张量保存脚本 |
-| `data/processed/node_flow_grid/` | 不存在 | 缺失正式网格化输出目录 |
-| `data/processed/node_flow_grid/node_flow_grid_2ch.npy` | 不存在 | 缺失 |
-| `data/processed/node_flow_grid/node_flow_grid_pooled.npy` | 不存在 | 缺失 |
-| `data/processed/node_flow_grid/node_flow_grid_tensor.pt` | 不存在 | 缺失 |
-| `data/processed/node_flow_grid/node_flow_grid_regions.csv` | 不存在 | 缺失 |
+| `preprocessing_scripts/process_node_flow_grids.py` | 已存在 | 已补齐正式网格化/池化脚本 |
+| `preprocessing_scripts/process_node_flow_tensor.py` | 已存在 | 已补齐正式 `.pt` 张量保存脚本 |
+| `data/processed/node_flow_grid/` | 已存在 | 正式网格化输出目录 |
+| `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_2ch.npy` | 已存在 | 正式全量 raw grid |
+| `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_pooled.npy` | 已存在 | 正式全量 pooled grid |
+| `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt` | 已存在 | 正式全量 tensor-only 输入 |
+| `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv` | 已存在 | 正式 region sidecar |
 
 ### 3.2 当前已存在的上游节点流量链路
 
@@ -73,7 +82,7 @@ data/processed/speed_data_chunks/speed_chunk_*.parquet
 
 ### 3.3 关键结论
 
-网格化/池化/张量化 py 链路缺失，需要从 `预处理5.ipynb` 和 `预处理6.ipynb` 迁移。
+网格化/池化/张量化 py 链路此前确实缺失，但当前已从 `预处理5.ipynb` 和 `预处理6.ipynb` 迁移并补齐。
 
 ## 4. notebook 与 py 的差异
 
@@ -107,7 +116,7 @@ data/processed/speed_data_chunks/speed_chunk_*.parquet
 
 ### 4.3 `6.池化网格张量.pt` 与 `node_flow_grid_tensor.pt` 的关系
 
-- 二者不是当前仓库中“同一个已存在文件”，因为后者不存在；
+- 二者不是当前仓库中“同一个已存在文件”，因为前者属于历史 notebook 临时命名，而后者是当前正式工程化文件；
 - 但从角色和语义上看，它们应当属于同一类产物：
   - 都是“池化后的节点流量网格张量，供后续 CCN 类模型训练使用”；
   - 差别主要在于命名规范、保存目录与是否由正式 `.py` 脚本生成。
@@ -134,19 +143,19 @@ data/processed/speed_data_chunks/speed_chunk_*.parquet
 - 来源：`预处理5.ipynb` + `预处理6.ipynb`；
 - 当前没有正式 `.py` 对应实现和规范输出目录。
 
-3. `data/processed/node_flow_grid/node_flow_grid_tensor.pt`
+3. `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
 
 - 性质：未来应补齐的正式工程化训练输入；
 - 角色：应作为真实 CCN 网格联邦训练的最终 tensor-only 输入；
-- 当前状态：文件不存在，但目标定位明确。
+- 当前状态：文件已存在，并已成为单路口实验的正式默认 tensor-only 输入。
 
 ### 5.2 为什么当前单路口实验临时使用 parquet
 
 当前单路口主实验和单路口消融实验直接读取 `node_intersection_flow_parquet`，是因为：
 
 - 上游节点流量 parquet 已经真实存在、可审计、可复现；
-- 正式网格化 / 池化 / `.pt` 张量脚本缺失；
-- 正式 `node_flow_grid_tensor.pt` 也不存在；
+- 正式网格化 / 池化 / `.pt` 张量脚本已补齐；
+- 正式 `node_flow_grid_tensor.pt` 已生成并完成 shape / finite 校验；
 - 为了先完成 Python 工程迁移、`FedAvg` 主线验证、指标和图表导出，只能用 parquet-direct 方式做 smoke test。
 
 明确标注如下：
@@ -159,7 +168,7 @@ data/processed/speed_data_chunks/speed_chunk_*.parquet
 
 结论：是。
 
-如果后续确认 `node_flow_grid_tensor.pt` 可重建，则真实 CCN 联邦训练应从：
+当前 `node_flow_grid_tensor.pt` 已可稳定重建，因此真实 CCN 联邦训练应从：
 
 ```text
 parquet-direct 输入
@@ -232,7 +241,7 @@ tensor-only 输入
 补齐情况说明：
 
 - 本阶段已新增正式 Python 预处理脚本，承接 `test/预处理5.ipynb` 与 `test/预处理6.ipynb` 的工程化迁移；
-- `process_node_flow_grids.py` 负责真实节点流量的网格化、平均池化、region sidecar 与 metadata 输出；
+- `process_node_flow_grids.py` 负责真实节点流量的网格化、可配置池化、region sidecar 与 metadata 输出；
 - `process_node_flow_tensor.py` 负责把池化网格从 `(T, C, H, W)` 转为正式训练输入 `(C, R, T)`；
 - 本阶段仍未修改训练代码；
 - `single_intersection_client` 和 `single_intersection_ablation` 仍然是 parquet-direct smoke test；
@@ -266,23 +275,23 @@ tensor-only 输入
 
 ### Q3. 是否存在 `process_node_flow_grids.py`？
 
-答：不存在。
+答：存在，已补齐为正式工程化脚本。
 
 ### Q4. 是否存在 `process_node_flow_tensor.py`？
 
-答：不存在。
+答：存在，已补齐为正式工程化脚本。
 
 ### Q5. 是否存在 `node_flow_grid_2ch.npy`？
 
-答：不存在。
+答：存在，正式全量文件位于 `final_sum_mean_standard/node_flow_grid_2ch.npy`。
 
 ### Q6. 是否存在 `node_flow_grid_pooled.npy`？
 
-答：不存在。
+答：存在，正式全量文件位于 `final_sum_mean_standard/node_flow_grid_pooled.npy`。
 
 ### Q7. 是否存在 `node_flow_grid_tensor.pt`？
 
-答：不存在。
+答：存在，正式全量文件位于 `final_sum_mean_standard/node_flow_grid_tensor.pt`。
 
 ### Q8. notebook 中的 `6.池化网格张量.pt` 与 `node_flow_grid_tensor.pt` 是否是同一类产物？
 

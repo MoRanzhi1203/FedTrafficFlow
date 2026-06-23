@@ -1,0 +1,3 @@
+client_id,region_id,pooled_row,pooled_col,centroid_lon,centroid_lat,source_node_count,mean_total_flow,is_active_region
+0,290,9,20,116.465194,39.91456970750988,667,1953917.875,True
+1,284,9,14,116.357194,39.91456970750988,698,1914353.125,True

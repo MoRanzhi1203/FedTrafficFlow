@@ -35,10 +35,22 @@
 - `data/analysis/node_intersection_flow_parquet/node_flow_chunk_*.parquet`
 - `data/processed/rnsd_processed.csv`
 
+### 当前正式数据入口
+
+- 当前正式 tensor-only 输入为 `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。
+- 配套 sidecar 为：
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor_metadata.json`
+- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_metadata.json`
+- 正式 tensor shape 为 `(2, 630, 5856)`。
+- 正式 `pool_mode = sum_mean`。
+- 正式 `layout = standard`，即 `row = lat`、`col = lon`。
+
 ### 当前发现的问题
 
-- 4 个真实实验 notebook 默认读取 `6.池化网格张量.pt`，但仓库内未发现该文件。
-- 因此正式工程不能继续依赖该黑箱产物，必须改为从 `node_intersection_flow_parquet` 显式构建时序张量、滑动窗口样本和客户端划分。
+- 4 个真实实验 notebook 曾默认读取 `6.池化网格张量.pt`，但该命名只属于历史 notebook 临时文件。
+- 当前工程化代码不再生成该文件，正式入口统一为 `node_flow_grid_tensor.pt`。
+- 此前 `parquet-direct` 版本仅用于 smoke test fallback，不应再视为正式主实验输入。
 - 单路口主实验 notebook 未实现严格的 `train/val/test` 拆分。
 - 区域主实验 notebook 采用随机打乱再切分，存在未来信息泄漏风险。
 
@@ -94,6 +106,8 @@ The server aggregates local model parameters using only the client training samp
 ### 迁移策略
 
 - 保留模型结构与联邦/独立对比主线。
+- 当前单路口主实验已切换到正式 tensor-only 输入，不再默认使用 `parquet-direct`。
+- 当前 `client` 表示 `pooled-grid-region client`，默认仅使用 active pooled regions。
 - 将数据读取、窗口构造、时间划分、客户端训练、指标计算和结果导出拆分到正式模块。
 - 增加每客户端指标、总体平均指标、标准差、变异系数和收敛历史导出。
 
@@ -112,6 +126,7 @@ The server aggregates local model parameters using only the client training samp
 ### 迁移策略
 
 - 保留消融对比范围，不改变 `FedAvg` 聚合。
+- 当前单路口消融已切换到正式 tensor-only 输入，不再默认使用 `parquet-direct`。
 - 对齐单路口主实验的数据划分、训练轮数、batch size 与指标输出格式。
 
 ## 8. 区域客户端实验
