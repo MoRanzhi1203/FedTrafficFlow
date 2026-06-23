@@ -1,8 +1,4 @@
-"""Build grid-based node-flow tensors from node intersection flow parquet files.
-
-This script is the formal Python replacement for the gridification and pooling
-logic previously kept in `test/预处理5.ipynb`.
-"""
+"""Build grid-based node-flow tensors from node intersection flow parquet files."""
 
 from __future__ import annotations
 
@@ -38,6 +34,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--time-col", type=str, default="时间段")
     parser.add_argument("--max-chunks", type=int, default=None)
     parser.add_argument("--link-gps-path", type=Path, default=DEFAULT_LINK_GPS_PATH)
+    parser.add_argument("--pool-mode", type=str, choices=["avg", "max", "sum_mean"], default="max")
     return parser
 
 
@@ -251,15 +248,21 @@ def build_node_coordinate_table(topology_path: Path, link_gps_path: Path) -> tup
 
 
 def infer_grid_indices(node_coords: pd.DataFrame, grid_resolution: float) -> tuple[pd.DataFrame, dict[str, float | int]]:
-    """Assign each node to a raw spatial grid cell."""
+    """Assign each node to a raw spatial grid cell.
+
+    The grid-count formula intentionally follows the historical notebook:
+    int((max - min) / resolution), with out-of-bound max values clipped back to
+    the last valid cell. This avoids the +1 expansion that previously inflated
+    the smoke-test region count from 630 to 660.
+    """
     lon_min = float(node_coords["lon"].min())
     lon_max = float(node_coords["lon"].max())
     lat_min = float(node_coords["lat"].min())
     lat_max = float(node_coords["lat"].max())
-    width = max(lon_max - lon_min, grid_resolution)
-    height = max(lat_max - lat_min, grid_resolution)
-    grid_cols = int(np.floor(width / grid_resolution)) + 1
-    grid_rows = int(np.floor(height / grid_resolution)) + 1
+    width = max(lon_max - lon_min, 0.0)
+    height = max(lat_max - lat_min, 0.0)
+    grid_cols = max(1, int(width / grid_resolution))
+    grid_rows = max(1, int(height / grid_resolution))
 
     enriched = node_coords.copy()
     enriched["grid_col"] = np.floor((enriched["lon"] - lon_min) / grid_resolution).astype(int).clip(0, grid_cols - 1)
@@ -292,13 +295,15 @@ def build_grids_from_parquet(
     target_flow_col: str,
     grid_rows: int,
     grid_cols: int,
-) -> tuple[np.ndarray, dict[str, object]]:
+) -> tuple[np.ndarray, dict[str, object], pd.DataFrame]:
     """Aggregate chunked node-flow parquet data into dense T,C,H,W arrays."""
     time_matrices: list[np.ndarray] = []
     time_values: list[int] = []
     flow_node_ids: set[int] = set()
     missing_coordinate_node_ids: set[int] = set()
     coord_lookup = node_grid_df.rename(columns={"node_id": node_col})
+    raw_input_total_by_time: dict[int, float] = {}
+    grid_total_by_time: dict[int, float] = {}
 
     for file_index, parquet_path in enumerate(parquet_files, start=1):
         print(f"[gridify] reading chunk {file_index}/{len(parquet_files)}: {parquet_path.name}")
@@ -314,6 +319,10 @@ def build_grids_from_parquet(
         chunk_df[node_col] = chunk_df[node_col].astype(np.int64)
         chunk_df[time_col] = chunk_df[time_col].astype(np.int64)
         flow_node_ids.update(chunk_df[node_col].unique().tolist())
+        raw_time_sum = chunk_df.groupby(time_col, as_index=False)[target_flow_col].sum()
+        for _, row in raw_time_sum.iterrows():
+            time_value = int(row[time_col])
+            raw_input_total_by_time[time_value] = raw_input_total_by_time.get(time_value, 0.0) + float(row[target_flow_col])
 
         merged_df = chunk_df.merge(coord_lookup[[node_col, "grid_row", "grid_col"]], on=node_col, how="left")
         missing_coordinate_node_ids.update(merged_df.loc[merged_df["grid_row"].isna(), node_col].unique().tolist())
@@ -322,11 +331,13 @@ def build_grids_from_parquet(
         merged_df["grid_col"] = merged_df["grid_col"].astype(int)
 
         grouped_df = (
-            merged_df.groupby([time_col, "grid_row", "grid_col"], as_index=False)[target_flow_col]
-            .agg(["sum", "count"])
-            .reset_index()
-            .rename(columns={"sum": "total_flow", "count": "node_count"})
+            merged_df.groupby([time_col, "grid_row", "grid_col"], as_index=False)
+            .agg(total_flow=(target_flow_col, "sum"), node_count=(target_flow_col, "count"))
         )
+        grid_time_sum = grouped_df.groupby(time_col, as_index=False)["total_flow"].sum()
+        for _, row in grid_time_sum.iterrows():
+            time_value = int(row[time_col])
+            grid_total_by_time[time_value] = grid_total_by_time.get(time_value, 0.0) + float(row["total_flow"])
 
         for current_time in sorted(grouped_df[time_col].unique().tolist()):
             time_group = grouped_df[grouped_df[time_col] == current_time]
@@ -344,8 +355,17 @@ def build_grids_from_parquet(
         raise ValueError("No grid matrices were created from the provided parquet files.")
 
     raw_grid = np.stack(time_matrices, axis=0).astype(np.float32)
-    raw_grid = raw_grid[np.argsort(np.asarray(time_values))]
-    sorted_time_values = sorted(time_values)
+    sort_index = np.argsort(np.asarray(time_values))
+    raw_grid = raw_grid[sort_index]
+    sorted_time_values = [time_values[index] for index in sort_index]
+    flow_audit_df = pd.DataFrame(
+        {
+            "time_index": np.arange(len(sorted_time_values), dtype=np.int64),
+            "time_period": sorted_time_values,
+            "raw_input_total_flow": [raw_input_total_by_time[int(time_value)] for time_value in sorted_time_values],
+            "grid_total_flow_channel0_sum": [grid_total_by_time[int(time_value)] for time_value in sorted_time_values],
+        }
+    )
     audit = {
         "time_min": int(min(sorted_time_values)),
         "time_max": int(max(sorted_time_values)),
@@ -353,14 +373,24 @@ def build_grids_from_parquet(
         "node_count_with_flow": int(len(flow_node_ids)),
         "missing_coordinate_node_count": int(len(missing_coordinate_node_ids)),
         "missing_coordinate_node_ids_sample": sorted(list(missing_coordinate_node_ids))[:20],
+        "time_periods": sorted_time_values,
     }
-    return raw_grid, audit
+    return raw_grid, audit, flow_audit_df
 
 
-def average_pool_raw_grid(raw_grid: np.ndarray, kernel: int, stride: int) -> np.ndarray:
-    """Average-pool only the spatial dimensions H/W."""
+def pool_raw_grid(raw_grid: np.ndarray, kernel: int, stride: int, pool_mode: str) -> np.ndarray:
+    """Pool only the spatial dimensions H/W."""
     raw_tensor = torch.from_numpy(raw_grid)
-    pooled_tensor = F.avg_pool2d(raw_tensor, kernel_size=kernel, stride=stride)
+    if pool_mode == "avg":
+        pooled_tensor = F.avg_pool2d(raw_tensor, kernel_size=kernel, stride=stride)
+    elif pool_mode == "max":
+        pooled_tensor = F.max_pool2d(raw_tensor, kernel_size=kernel, stride=stride)
+    elif pool_mode == "sum_mean":
+        pooled_total = F.avg_pool2d(raw_tensor[:, 0:1, :, :], kernel_size=kernel, stride=stride) * float(kernel * kernel)
+        pooled_mean = F.avg_pool2d(raw_tensor[:, 1:2, :, :], kernel_size=kernel, stride=stride)
+        pooled_tensor = torch.cat([pooled_total, pooled_mean], dim=1)
+    else:
+        raise ValueError(f"Unsupported pool mode: {pool_mode}")
     return pooled_tensor.numpy().astype(np.float32)
 
 
@@ -402,6 +432,7 @@ def build_region_sidecar(
                     "centroid_lon": centroid_lon,
                     "centroid_lat": centroid_lat,
                     "source_node_count": source_node_count,
+                    "is_active_region": bool(source_node_count > 0),
                 }
             )
             region_id += 1
@@ -411,6 +442,13 @@ def build_region_sidecar(
 def count_invalid_values(array: np.ndarray) -> tuple[int, int]:
     """Count NaN and Inf values in a NumPy array."""
     return int(np.isnan(array).sum()), int(np.isinf(array).sum())
+
+
+def relative_difference(reference: float, candidate: float) -> float:
+    """Compute a stable relative difference."""
+    if abs(reference) < 1e-12:
+        return 0.0 if abs(candidate) < 1e-12 else 1.0
+    return float(abs(candidate - reference) / abs(reference))
 
 
 def main() -> None:
@@ -423,7 +461,7 @@ def main() -> None:
     node_grid_df, grid_meta = infer_grid_indices(node_coords, args.grid_resolution)
     raw_node_count_matrix = build_node_count_matrix(node_grid_df, grid_meta["grid_rows"], grid_meta["grid_cols"])
 
-    raw_grid, flow_audit = build_grids_from_parquet(
+    raw_grid, flow_audit, flow_audit_df = build_grids_from_parquet(
         parquet_files=parquet_files,
         node_grid_df=node_grid_df,
         node_col=args.node_col,
@@ -432,7 +470,7 @@ def main() -> None:
         grid_rows=grid_meta["grid_rows"],
         grid_cols=grid_meta["grid_cols"],
     )
-    pooled_grid = average_pool_raw_grid(raw_grid, kernel=args.pool_kernel, stride=args.pool_stride)
+    pooled_grid = pool_raw_grid(raw_grid, kernel=args.pool_kernel, stride=args.pool_stride, pool_mode=args.pool_mode)
 
     raw_nan_count, raw_inf_count = count_invalid_values(raw_grid)
     pooled_nan_count, pooled_inf_count = count_invalid_values(pooled_grid)
@@ -455,10 +493,29 @@ def main() -> None:
     pooled_path = args.output_dir / "node_flow_grid_pooled.npy"
     regions_path = args.output_dir / "node_flow_grid_regions.csv"
     metadata_path = args.output_dir / "node_flow_grid_metadata.json"
+    flow_audit_path = args.output_dir / "node_flow_grid_flow_audit.csv"
+
+    pooled_channel0_sum = pooled_grid[:, 0, :, :].sum(axis=(1, 2)).astype(np.float64)
+    flow_audit_df["pooled_total_flow_channel0_sum"] = pooled_channel0_sum
+    flow_audit_df["pool_mode"] = args.pool_mode
+    flow_audit_df["relative_difference_raw_vs_grid"] = [
+        relative_difference(raw_value, grid_value)
+        for raw_value, grid_value in zip(flow_audit_df["raw_input_total_flow"], flow_audit_df["grid_total_flow_channel0_sum"])
+    ]
+    flow_audit_df["relative_difference_grid_vs_pooled"] = [
+        relative_difference(grid_value, pooled_value)
+        for grid_value, pooled_value in zip(flow_audit_df["grid_total_flow_channel0_sum"], flow_audit_df["pooled_total_flow_channel0_sum"])
+    ]
+
+    active_region_count = int(regions_df["is_active_region"].sum())
+    empty_region_count = int((~regions_df["is_active_region"]).sum())
+    region_count = int(len(regions_df))
+    active_region_ratio = float(active_region_count / region_count) if region_count else 0.0
 
     np.save(raw_path, raw_grid)
     np.save(pooled_path, pooled_grid)
     regions_df.to_csv(regions_path, index=False)
+    flow_audit_df.to_csv(flow_audit_path, index=False)
 
     metadata = {
         "input_dir": str(args.input_dir),
@@ -468,6 +525,7 @@ def main() -> None:
         "grid_resolution": args.grid_resolution,
         "pool_kernel": args.pool_kernel,
         "pool_stride": args.pool_stride,
+        "pool_mode": args.pool_mode,
         "target_flow_col": args.target_flow_col,
         "node_col": args.node_col,
         "time_col": args.time_col,
@@ -475,6 +533,14 @@ def main() -> None:
         "raw_shape_meaning": ["time", "channel", "grid_row", "grid_col"],
         "pooled_shape": list(pooled_grid.shape),
         "pooled_shape_meaning": ["time", "channel", "pooled_row", "pooled_col"],
+        "raw_grid_height": int(raw_grid.shape[2]),
+        "raw_grid_width": int(raw_grid.shape[3]),
+        "pooled_grid_height": int(pooled_grid.shape[2]),
+        "pooled_grid_width": int(pooled_grid.shape[3]),
+        "region_count": region_count,
+        "active_region_count": active_region_count,
+        "empty_region_count": empty_region_count,
+        "active_region_ratio": active_region_ratio,
         "time_min": flow_audit["time_min"],
         "time_max": flow_audit["time_max"],
         "time_count": flow_audit["time_count"],
@@ -484,7 +550,7 @@ def main() -> None:
         "missing_coordinate_node_ids_sample": flow_audit["missing_coordinate_node_ids_sample"],
         "grid_rows": grid_meta["grid_rows"],
         "grid_cols": grid_meta["grid_cols"],
-        "pooled_region_count": int(regions_df.shape[0]),
+        "pooled_region_count": region_count,
         "nan_count_raw": raw_nan_count,
         "inf_count_raw": raw_inf_count,
         "nan_count_pooled": pooled_nan_count,
@@ -492,14 +558,16 @@ def main() -> None:
         "is_smoke_test": args.max_chunks is not None,
         "max_chunks": args.max_chunks,
         "coordinate_audit": coordinate_audit,
+        "flow_audit_path": str(flow_audit_path),
     }
     metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"[gridify] raw grid saved to: {raw_path}")
     print(f"[gridify] pooled grid saved to: {pooled_path}")
     print(f"[gridify] region sidecar saved to: {regions_path}")
+    print(f"[gridify] flow audit saved to: {flow_audit_path}")
     print(f"[gridify] metadata saved to: {metadata_path}")
-    print(f"[gridify] raw shape={tuple(raw_grid.shape)}, pooled shape={tuple(pooled_grid.shape)}")
+    print(f"[gridify] pool_mode={args.pool_mode}, raw shape={tuple(raw_grid.shape)}, pooled shape={tuple(pooled_grid.shape)}")
 
 
 if __name__ == "__main__":

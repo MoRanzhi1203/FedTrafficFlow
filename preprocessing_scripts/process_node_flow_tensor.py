@@ -13,19 +13,18 @@ import torch
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_PATH = ROOT_DIR / "data" / "processed" / "node_flow_grid" / "node_flow_grid_pooled.npy"
-DEFAULT_GRID_METADATA_PATH = ROOT_DIR / "data" / "processed" / "node_flow_grid" / "node_flow_grid_metadata.json"
-DEFAULT_REGIONS_PATH = ROOT_DIR / "data" / "processed" / "node_flow_grid" / "node_flow_grid_regions.csv"
 DEFAULT_OUTPUT_DIR = ROOT_DIR / "data" / "processed" / "node_flow_grid"
+DEFAULT_OUTPUT_NAME = "node_flow_grid_tensor.pt"
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI arguments."""
     parser = argparse.ArgumentParser(description="Convert pooled node-flow grids to a PyTorch tensor.")
     parser.add_argument("--input-path", type=Path, default=DEFAULT_INPUT_PATH)
-    parser.add_argument("--grid-metadata-path", type=Path, default=DEFAULT_GRID_METADATA_PATH)
-    parser.add_argument("--regions-path", type=Path, default=DEFAULT_REGIONS_PATH)
+    parser.add_argument("--metadata-path", type=Path, default=None)
+    parser.add_argument("--regions-path", type=Path, default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--save-legacy-copy", action="store_true")
+    parser.add_argument("--output-name", type=str, default=DEFAULT_OUTPUT_NAME)
     return parser
 
 
@@ -38,17 +37,19 @@ def ensure_exists(path: Path, label: str) -> None:
 def main() -> None:
     """CLI entrypoint."""
     args = build_arg_parser().parse_args()
+    metadata_path = args.metadata_path if args.metadata_path is not None else args.input_path.with_name("node_flow_grid_metadata.json")
+    regions_path = args.regions_path if args.regions_path is not None else args.input_path.with_name("node_flow_grid_regions.csv")
     ensure_exists(args.input_path, "Input pooled grid")
-    ensure_exists(args.grid_metadata_path, "Grid metadata")
-    ensure_exists(args.regions_path, "Region sidecar")
+    ensure_exists(metadata_path, "Grid metadata")
+    ensure_exists(regions_path, "Region sidecar")
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     pooled_np = np.load(args.input_path).astype(np.float32, copy=False)
     if pooled_np.ndim != 4:
         raise ValueError(f"Expected pooled grid rank 4, got shape {pooled_np.shape}")
 
-    grid_metadata = json.loads(args.grid_metadata_path.read_text(encoding="utf-8"))
-    regions_df = pd.read_csv(args.regions_path)
+    grid_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    regions_df = pd.read_csv(regions_path)
     time_count, channel_count, pooled_rows, pooled_cols = pooled_np.shape
     region_count = pooled_rows * pooled_cols
 
@@ -69,20 +70,18 @@ def main() -> None:
         raise ValueError(
             f"Region sidecar row count {len(regions_df)} does not match pooled region count {region_count}"
         )
+    metadata_region_count = grid_metadata.get("region_count")
+    if metadata_region_count is not None and int(metadata_region_count) != region_count:
+        raise ValueError(f"Metadata region_count {metadata_region_count} does not match inferred region count {region_count}")
 
     tensor = torch.from_numpy(tensor_np)
-    output_path = args.output_dir / "node_flow_grid_tensor.pt"
+    output_path = args.output_dir / args.output_name
     torch.save(tensor, output_path)
-
-    legacy_copy_path = None
-    if args.save_legacy_copy:
-        legacy_copy_path = args.output_dir / "6.池化网格张量.pt"
-        torch.save(tensor, legacy_copy_path)
 
     tensor_metadata = {
         "input_path": str(args.input_path),
-        "grid_metadata_path": str(args.grid_metadata_path),
-        "regions_path": str(args.regions_path),
+        "metadata_path": str(metadata_path),
+        "regions_path": str(regions_path),
         "output_path": str(output_path),
         "input_shape": list(pooled_np.shape),
         "tensor_shape": list(tensor_np.shape),
@@ -95,13 +94,8 @@ def main() -> None:
         "nan_count": nan_count,
         "inf_count": inf_count,
         "grid_metadata_time_count": grid_metadata.get("time_count"),
-        "legacy_notebook_copy_path": str(legacy_copy_path) if legacy_copy_path else None,
-        "legacy_notebook_copy_note": (
-            "6.池化网格张量.pt is a historical notebook compatibility file; "
-            "node_flow_grid_tensor.pt is the formal engineering output."
-            if legacy_copy_path
-            else None
-        ),
+        "formal_tensor_name": args.output_name,
+        "legacy_notebook_name_note": "Historical notebook used `6.池化网格张量.pt` as a temporary name; current engineering code does not generate it and only writes `node_flow_grid_tensor.pt`.",
     }
     metadata_path = args.output_dir / "node_flow_grid_tensor_metadata.json"
     metadata_path.write_text(json.dumps(tensor_metadata, ensure_ascii=False, indent=2), encoding="utf-8")

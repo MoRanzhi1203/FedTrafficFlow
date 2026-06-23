@@ -2,7 +2,7 @@
 
 ## 1. 当前问题
 
-当前 `single_intersection_client` 与 `single_intersection_ablation` 之所以临时使用 `data/analysis/node_intersection_flow_parquet/`，原因不是论文主线改变，而是此前迁移时优先保证 Python 工程结构、标准 `FedAvg`、指标导出和可视化链路可运行；当时 notebook 直接依赖的 `6.池化网格张量.pt` 没有对应的正式 `.py` 生成脚本，也没有以规范命名存在于仓库的数据产物，因此只能采用“上游节点流量 parquet 直接读入”的 fallback 方案完成 smoke test。
+当前 `single_intersection_client` 与 `single_intersection_ablation` 之所以临时使用 `data/analysis/node_intersection_flow_parquet/`，原因不是论文主线改变，而是此前迁移时优先保证 Python 工程结构、标准 `FedAvg`、指标导出和可视化链路可运行；当时 notebook 直接依赖的临时命名 `6.池化网格张量.pt` 没有对应的正式 `.py` 生成脚本，也没有以规范命名存在于仓库的数据产物，因此只能采用“上游节点流量 parquet 直接读入”的 fallback 方案完成 smoke test。
 
 现在重新审计后可以确认：
 
@@ -12,7 +12,7 @@
   - `data/analysis/node_intersection_flow_parquet/`
   - `data/analysis/node_flow_curve_fit/`
 - 但面向 CCN 网格联邦训练的正式“网格化 -> 池化 -> `.pt` 张量”链路仍未 `.py` 化。
-- `test/预处理5.ipynb` 与 `test/预处理6.ipynb` 中确实保留了 notebook 版网格化、池化和 `6.池化网格张量.pt` 保存逻辑。
+- `test/预处理5.ipynb` 与 `test/预处理6.ipynb` 中确实保留了 notebook 版网格化、池化和临时命名 `6.池化网格张量.pt` 的保存逻辑。
 - 仓库当前不存在：
   - `preprocessing_scripts/process_node_flow_grids.py`
   - `preprocessing_scripts/process_node_flow_tensor.py`
@@ -42,7 +42,7 @@
 | 函数聚类可视化 | `预处理4.ipynb` 历史来源 | `analysis_scripts/real_data_analysis/visualize_fitted_function_clusters.py` | 是 | `date_type_curve_method_comparison/` | `function_cluster_visualization/` | 是 | 否 | 当前磁盘存在函数聚类图。 |
 | 节点流量网格化 | `预处理5.ipynb` | 无正式 `.py` | 否 | `node_intersection_flow_parquet` + 节点经纬度表 | 理应输出 `node_flow_grid_2ch.npy` | 否 | 是 | notebook 中使用 `1.路口节点经纬度.csv` 和 `4.路口节点车流量/*.csv`。 |
 | 网格池化 | `预处理5.ipynb` | 无正式 `.py` | 否 | 网格化双通道 `.npy` | 理应输出 `node_flow_grid_pooled.npy` | 否 | 是 | notebook 通过 `torch.nn.functional.max_pool2d` 完成。 |
-| 网格张量保存为 `.pt` | `预处理6.ipynb` | 无正式 `.py` | 否 | 池化后的网格化 `.npy` | notebook 输出 `6.池化网格张量.pt` | 否 | 是 | 仓库中未形成 `node_flow_grid_tensor.pt` 正式产物。 |
+| 网格张量保存为 `.pt` | `预处理6.ipynb` | 无正式 `.py` | 否 | 池化后的网格化 `.npy` | notebook 临时输出 `6.池化网格张量.pt` | 否 | 是 | 当前工程化代码统一输出 `node_flow_grid_tensor.pt`，不再生成该历史命名文件。 |
 
 ## 3. 网格化 / 池化 / 张量化状态
 
@@ -101,9 +101,9 @@ data/processed/speed_data_chunks/speed_chunk_*.parquet
 - 提取每个字典中的 `pooled_grid_tensor`；
 - 组装为 `np.ndarray`，形状打印为 `(5856, 2, 30, 21)`；
 - 再 reshape 为 `torch.Size([2, 630, 5856])`；
-- 最终保存为 `6.池化网格张量.pt`。
+- 最终在 notebook 中保存为临时命名 `6.池化网格张量.pt`。
 
-这一步也没有被迁移成正式 `.py` 文件，因此 `6.池化网格张量.pt` 目前仍属于 notebook 生成的历史产物命名，而不是工程化产物。
+这一步在 notebook 阶段曾使用 `6.池化网格张量.pt` 作为临时命名；当前工程化代码不再生成该文件，正式输出统一为 `node_flow_grid_tensor.pt`。
 
 ### 4.3 `6.池化网格张量.pt` 与 `node_flow_grid_tensor.pt` 的关系
 
@@ -114,8 +114,9 @@ data/processed/speed_data_chunks/speed_chunk_*.parquet
 
 因此可以判断：
 
-- `6.池化网格张量.pt` 是 notebook 阶段的历史命名；
-- `node_flow_grid_tensor.pt` 应是工程化后的正式命名和正式训练入口文件。
+- `6.池化网格张量.pt` 是 notebook 阶段的历史临时命名；
+- 当前工程化代码不再生成该文件；
+- `node_flow_grid_tensor.pt` 是工程化后的正式命名和正式训练入口文件。
 
 ## 5. 当前训练入口判断
 
@@ -237,6 +238,22 @@ tensor-only 输入
 - `single_intersection_client` 和 `single_intersection_ablation` 仍然是 parquet-direct smoke test；
 - 后续仍需要切换为 tensor-only 输入。
 
+### 当前正式结论
+
+- 正式 `pool_mode = sum_mean`
+- 历史 notebook 复刻对照 = `max`
+- `avg` 不作为正式默认方案
+- 正式 `layout = standard`
+- `row = lat`
+- `col = lon`
+- 正式全量数据输出目录为 `data/processed/node_flow_grid/final_sum_mean_standard/`
+- 已生成正式全量数据，shape 为：
+  - `raw_shape = (5856, 2, 43, 60)`
+  - `pooled_shape = (5856, 2, 21, 30)`
+  - `tensor_shape = (2, 630, 5856)`
+- 当前工程化代码不再生成 `6.池化网格张量.pt`
+- 正式 tensor 输出统一为 `node_flow_grid_tensor.pt`
+
 ## 8. 关键问答结论
 
 ### Q1. 当前基础预处理步骤是否都已经从 ipynb 转为 py？
@@ -269,7 +286,7 @@ tensor-only 输入
 
 ### Q8. notebook 中的 `6.池化网格张量.pt` 与 `node_flow_grid_tensor.pt` 是否是同一类产物？
 
-答：是同一类训练输入产物，但不是当前仓库中的同一个文件。前者是 notebook 历史命名，后者应是工程化正式命名。
+答：是同一类训练输入产物，但不是当前仓库中的同一个文件。前者是 notebook 历史临时命名，后者是当前工程化正式命名；当前代码不再生成前者。
 
 ### Q9. 当前单路口实验直接读取 parquet 是否只是 fallback？
 
