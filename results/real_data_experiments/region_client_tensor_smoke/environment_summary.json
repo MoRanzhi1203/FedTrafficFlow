@@ -1,0 +1,13 @@
+{
+  "python_version": "3.12.3",
+  "platform": "Windows-10-10.0.19042-SP0",
+  "torch_version": "2.12.0+cpu",
+  "numpy_version": "1.26.4",
+  "cuda_available": false,
+  "device": "cpu",
+  "generated_at": "2026-06-24T09:52:03",
+  "seed": 42,
+  "start_time": "2026-06-24T09:51:57",
+  "end_time": "2026-06-24T09:52:03",
+  "data_mode": "tensor"
+}

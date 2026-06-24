@@ -1,0 +1,2 @@
+method,communication_round,train_loss,val_rmse,val_rmse_std,val_mae,test_rmse,test_rmse_std
+FedAvg,1,1217451003520.0,950396.6566852989,557492.4944582765,945374.460493227,949738.3360157193,557570.7683258229

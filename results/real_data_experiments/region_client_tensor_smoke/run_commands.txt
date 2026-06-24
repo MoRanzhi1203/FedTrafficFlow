@@ -1,0 +1,1 @@
+python -m real_data_experiments.region_client.rc_core --workflow all --data-mode tensor --partition-method spatial_block --num-clients 3 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --learning-rate 0.001 --device cpu --max-samples-per-client-split 1024 --output-dir results/real_data_experiments/region_client_tensor_smoke

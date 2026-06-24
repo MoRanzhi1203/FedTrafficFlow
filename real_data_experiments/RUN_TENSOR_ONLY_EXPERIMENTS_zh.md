@@ -4,6 +4,7 @@
 
 - 本文仅用于 tensor-only 单池化网格区域客户端实验的正式运行计划。
 - 当前 `client` 表示 `pooled-grid-region client`，不是原始路口节点客户端。
+- 当前若进入 `region_client` / `region_ablation`，则 `client` 表示一组 pooled grid regions。
 - 当前正式数据入口固定为：
   `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
 - 当前正式 `pool_mode = sum_mean`

@@ -33,6 +33,7 @@
 - 论文、报告和后续运行说明中，建议统一称为“单池化网格区域客户端”。
 - 英文建议统一称为 `single pooled-grid-region client`。
 - 代码目录名 `single_intersection_client` 与 `single_intersection_ablation` 暂不改动，但文档解释必须按上述语义修正。
+- `region_client` / `region_ablation` 统一解释为“区域网格客户端”，即每个 client = 一组 pooled grid regions。
 
 ## 4. 联邦主线冻结
 
@@ -114,6 +115,7 @@
 - 正式 `FedAvg = standard sample-size weighted FedAvg`
 - 正式 `selected_regions` 默认固定为 top-K active regions by `mean_total_flow`
 - 正式单池化网格区域客户端推荐命名为“单池化网格区域客户端” / `single pooled-grid-region client`
+- 区域网格客户端推荐定义为“每个 region client = 一组 pooled grid regions”
 
 ## 11. 作者仍需确认
 

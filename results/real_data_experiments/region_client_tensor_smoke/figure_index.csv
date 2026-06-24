@@ -1,0 +1,7 @@
+figure_name,title_en,title_zh
+region_client_distribution.png,Regional Client Distribution,区域客户端分布
+region_non_iid_summary.png,Regional Non-IID Summary,区域客户端 Non-IID 摘要
+region_main_metrics_comparison.png,Regional Main Metrics Comparison,区域主指标对比
+region_client_rmse.png,Regional Client RMSE Comparison,区域客户端 RMSE 对比
+region_convergence_curve.png,Regional Convergence Curve,区域实验收敛曲线
+region_prediction_vs_truth.png,Regional Prediction vs Truth,区域预测值与真实值对比

@@ -1,0 +1,4 @@
+figure_name,title_en,title_zh
+region_ablation_metrics_comparison.png,Regional Ablation Metrics Comparison,区域消融指标对比
+region_ablation_client_rmse.png,Regional Ablation Client RMSE,区域消融客户端 RMSE 对比
+region_ablation_convergence_curve.png,Regional Ablation Convergence Curve,区域消融收敛曲线
