@@ -9,24 +9,40 @@ pip install -r requirements.txt
 pip install torch matplotlib
 ```
 
-## 数据准备
+## 正式数据入口
 
-- 当前正式单路口实验默认读取：
-- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
+- 当前正式 tensor-only 输入：
+  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
 - 配套 sidecar：
-- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
-- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor_metadata.json`
-- `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_metadata.json`
-- 正式 tensor shape 为 `(2, 630, 5856)`。
-- `parquet-direct` 版本仅保留为历史 smoke test fallback。
+  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
+  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor_metadata.json`
+  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_metadata.json`
+- 正式 `tensor shape = (2, 630, 5856)`
+- 正式 `pool_mode = sum_mean`
+- 正式 `layout = standard`
+- 当前 `client = pooled-grid-region client`
+- `parquet-direct = legacy fallback only`
+
+## 命名说明
+
+- 历史名称“单路口客户端”在 tensor-only 阶段实际表示“单池化网格区域客户端”。
+- 论文、报告和图表中建议统一采用“单池化网格区域客户端”或 `single pooled-grid-region client`。
+- 代码目录 `single_intersection_client` 和 `single_intersection_ablation` 暂不修改。
 
 ## 当前可运行模块
 
-### 单路口客户端主实验
+### 单池化网格区域客户端主实验
 
 ```bash
 python -m real_data_experiments.single_intersection_client.sic_core --workflow all
 python -m real_data_experiments.single_intersection_client.sic_visualization --workflow all
+```
+
+### 单池化网格区域客户端消融实验
+
+```bash
+python -m real_data_experiments.single_intersection_ablation.sia_core --workflow all
+python -m real_data_experiments.single_intersection_ablation.sia_visualization --workflow all
 ```
 
 ### 快速 smoke test
@@ -38,12 +54,33 @@ python -m real_data_experiments.single_intersection_ablation.sia_core --workflow
 python -m real_data_experiments.single_intersection_ablation.sia_visualization --workflow all --input-dir results/real_data_experiments/single_intersection_ablation_tensor
 ```
 
+## 正式运行计划入口
+
+- 配置冻结方案见 `real_data_experiments/tensor_only_experiment_plan_zh.md`
+- 正式命令计划见 `real_data_experiments/RUN_TENSOR_ONLY_EXPERIMENTS_zh.md`
+- 固定 region 清单见 `real_data_experiments/selected_regions_fixed_plan.csv`
+
+## 固定 region 建议
+
+- 推荐正式 top-3 regions：
+  `290, 284, 318`
+- 推荐正式 top-5 regions：
+  `290, 284, 318, 288, 289`
+- 若需要固定客户端，可通过 `--selected-clients` 传入逗号分隔的 `region_id` 列表。
+
 ## 输出目录
 
-- 单路口客户端结果：
-- `results/real_data_experiments/single_intersection_client_tensor/`
-- 单路口消融结果：
-- `results/real_data_experiments/single_intersection_ablation_tensor/`
+- 当前 smoke test 默认结果目录：
+  `results/real_data_experiments/single_intersection_client_tensor/`
+  `results/real_data_experiments/single_intersection_ablation_tensor/`
+- 为避免覆盖 smoke test，正式运行建议额外指定 `--output-dir`。
+- 推荐正式目录：
+  `results/real_data_experiments/single_region_client_tensor_quick/`
+  `results/real_data_experiments/single_region_client_tensor_main/`
+  `results/real_data_experiments/single_region_client_tensor_seed15/`
+  `results/real_data_experiments/single_region_client_tensor_seed42/`
+  `results/real_data_experiments/single_region_client_tensor_seed48/`
+  `results/real_data_experiments/single_region_ablation_tensor_main/`
 
 ## 当前已生成的关键结果文件
 
@@ -61,20 +98,14 @@ python -m real_data_experiments.single_intersection_ablation.sia_visualization -
 - `figure_index.csv`
 - `figure_notes_zh.md`
 
-## 常见错误
+## 常见问题
 
 - 若提示找不到 `final_sum_mean_standard/node_flow_grid_tensor.pt`，请先确认正式 tensor-only 预处理链路已完成。
-- 若训练过慢，可通过 `--num-clients`、`--rounds`、`--device cpu` 进行 smoke test。
-- 若需要固定客户端，可通过 `--selected-clients` 指定 region ID。
+- 若训练过慢，可先执行 smoke test 或方案 A。
+- 正式实验不建议复用默认输出目录，以免与现有 smoke test 结果混写。
 
-## 如何复现当前图表
+## 当前范围控制
 
-1. 先运行 `sic_core.py` 导出 CSV/JSON 结果。
-2. 再运行 `sic_visualization.py` 生成图表。
-3. 图表与索引默认写回 `results/real_data_experiments/single_intersection_client_tensor/`。
-
-## 当前说明
-
-- 当前单路口实验中的 `client` 表示 `pooled-grid-region client`。
-- `FedAvg` 仍然是标准样本量加权 `FedAvg`。
+- 当前 `FedAvg` 仍然是标准样本量加权 `FedAvg`。
 - 区域实验仍待后续阶段迁移，本阶段未改动。
+- 本阶段只冻结 tensor-only 单池化网格区域客户端实验配置并生成运行计划，不直接运行正式长训练。
