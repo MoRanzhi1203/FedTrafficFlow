@@ -1,12 +1,13 @@
-# 单路口客户端消融实验说明
+# 网格单元级客户端设置消融实验说明
 
 ## 当前状态
 
-- 本目录用于迁移 `test/单路口客户端消融实验_2×2.ipynb`。
+- 本目录用于承载网格单元级客户端设置的消融实验实现。
 - 当前实现仅比较模型结构变体，不改变联邦聚合方式。
 - 默认联邦聚合仍为标准样本量加权 `FedAvg`。
 - 当前正式默认输入为 `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。
-- 当前 `client` 的含义为 `single pooled-grid-region client`，即每个客户端对应一个 active pooled region。
+- 当前正式名称为：网格单元级客户端联邦学习设置 / Grid-cell-level Client Federated Learning Setting。
+- 当前 `client` 的含义为：每个客户端对应一个 active pooled region，也即 one pooled grid cell / one pooled grid region。
 
 ## 变体对应关系
 

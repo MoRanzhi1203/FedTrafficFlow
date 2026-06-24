@@ -1,9 +1,26 @@
 # 区域消融实验 Notebook 迁移映射
 
+## 当前迁移状态
+
+本 notebook 已完成 tensor-only Python 化迁移。
+
+- 迁移后的默认输入为：
+  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
+- 默认客户端定义为：
+  簇级客户端联邦学习设置；每个 client = 一组 pooled grid regions。
+- 默认划分方法为：
+  `spatial_block`
+- 可选划分方法为：
+  `flow_kmeans`
+- 默认联邦聚合为：
+  标准样本量加权 FedAvg。
+- 当前 smoke test 已通过，但 smoke test 指标不作为论文正式结果。
+- smoke test 结果不作为论文正式结果。
+
 ## 审计对象
 
 - Notebook：`test/区域客户端消融实验_2×2_最终版.ipynb`
-- 目标目录：`real_data_experiments/region_ablation/`
+- 已迁移到：`real_data_experiments/region_ablation/`
 - 当前正式输入：tensor-only
 - 正式 `tensor_path`：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
 - 正式 `regions_path`：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
@@ -11,9 +28,9 @@
 
 ## 关键审计结论
 
-- 原 notebook 延续了区域客户端实验的“每个 client = 一组 region indices”的定义。
+- 原 notebook 延续了“每个 client = 一组 region indices”的定义，正式文档中统一解释为簇级客户端设置。
 - 原 notebook 同样使用 `kmeans_cluster + balance_clusters_by_size` 做客户端划分。
-- 原 notebook 的数据划分修复了主实验 notebook 的随机切分问题，改为对每个 region client 内部按连续时间切分。
+- 原 notebook 的数据划分修复了主实验 notebook 的随机切分问题，改为对每个簇级客户端内部按连续时间切分。
 - 原 notebook 的聚合是简单等权 `fedavg()`，正式迁移时需要改为标准样本量加权 `FedAvg`。
 - 原 notebook 的有效消融变体是四组：`Full`、`w/o Attn`、`w/o CNN`、`w/o LSTM`。
 
@@ -103,7 +120,7 @@
 ## 默认主流程冻结
 
 - `data_mode = tensor`
-- `client = region client = group of pooled grid regions`
+- `client = Cluster-level Client Setting = group of pooled grid regions`
 - `partition_method = spatial_block`
 - `split = temporal_contiguous_by_target_time`
 - `FedAvg = standard sample-size weighted FedAvg`

@@ -1,5 +1,11 @@
 # 真实数据训练入口审计
 
+## 当前状态更新
+
+- `single_intersection_client` / `single_intersection_ablation` 已完成 tensor-only Python 化。
+- `region_client` / `region_ablation` 已完成 tensor-only Python 化，并已通过 smoke test。
+- 当前 smoke test 结果仅用于验证代码链路、输出文件和可视化流程，不作为论文正式结果。
+
 ## 1. 当前正式入口结论
 
 - 当前 `single_intersection_client` 与 `single_intersection_ablation` 的正式默认训练入口都已切换为 tensor-only。
@@ -10,16 +16,16 @@
 - 当前正式 `tensor shape = (2, 630, 5856)`
 - 当前正式 `pool_mode = sum_mean`
 - 当前正式 `layout = standard`
-- 当前正式 `client = pooled-grid-region client`
+- 当前真实数据实验统一描述为两类客户端组织设置。
 - 当前正式 `FedAvg = standard sample-size weighted FedAvg`
 - `parquet-direct = legacy fallback only`
 
 ## 2. 命名修正结论
 
-- 历史名称“单路口客户端”在 tensor-only 阶段实际表示 pooled grid region client，而不是原始路口节点客户端。
-- 建议后续论文、报告和图表统一使用“单池化网格区域客户端”。
-- 英文建议统一使用 `single pooled-grid-region client`。
-- 代码目录名暂不调整，但文档解释必须按上述语义理解。
+- 历史名称“单路口客户端”在 tensor-only 阶段实际表示网格单元级客户端设置，而不是原始路口节点客户端。
+- `single_intersection_client` / `single_intersection_ablation` 在文档中统一解释为网格单元级客户端联邦学习设置。
+- `region_client` / `region_ablation` 在文档中统一解释为簇级客户端联邦学习设置。
+- 代码目录名暂不调整，但正式文档中的设置名称统一为 grid-cell-level / cluster-level。
 
 ## 3. 上游链路与正式入口的关系
 
@@ -27,7 +33,7 @@
 
 - `data/analysis/node_intersection_flow_parquet/` 仍然是有效的上游节点流量中间结果。
 - 它继续服务于节点流量审计、拟合、统计和必要的 legacy fallback。
-- 它不再是当前单池化网格区域客户端实验的正式默认训练入口。
+- 它不再是当前网格单元级客户端设置实验的正式默认训练入口。
 
 ### 3.2 正式网格化与张量化产物
 
@@ -81,7 +87,7 @@
 
 ### Q4. 当前正式客户端是否等于原始路口节点？
 
-答：不是。当前正式客户端是 pooled-grid-region client。
+答：不是。当前正式实验使用的是网格单元级客户端设置或簇级客户端设置，而不是原始路口节点客户端。
 
 ### Q5. 当前正式联邦主线是否改变？
 
@@ -89,9 +95,9 @@
 
 ## 7. 当前阶段范围控制
 
-- 本阶段只冻结 tensor-only 单池化网格区域客户端实验配置并生成运行计划。
-- 本阶段未直接运行正式长训练。
-- 本阶段未迁移区域实验。
+- 本文对应的是训练入口审计阶段文档，主要记录正式 tensor 数据入口与训练语义。
+- 当前项目状态已经扩展到：网格单元级客户端设置与簇级客户端设置实验均完成 tensor-only Python 化。
+- 当前已完成 smoke test 级别链路验证，尚未在本文中记录论文正式长训练结果。
 - 本阶段未修改 LaTeX。
 - 本阶段未修改 `simulation_experiments/`。
 - 本阶段未改变标准 `FedAvg` 主线。

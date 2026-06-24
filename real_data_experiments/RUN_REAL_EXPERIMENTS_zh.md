@@ -1,5 +1,12 @@
 # 真实实验运行说明
 
+## 当前状态更新
+
+- `single_intersection_client` / `single_intersection_ablation` 已完成 tensor-only Python 化。
+- `region_client` / `region_ablation` 已完成 tensor-only Python 化，并已通过 smoke test。
+- 当前 smoke test 结果仅用于验证代码链路、输出文件和可视化流程，不作为论文正式结果。
+- smoke test 结果不作为论文正式结果。
+
 ## 环境准备
 
 - 推荐先安装项目依赖：
@@ -20,40 +27,41 @@ pip install torch matplotlib
 - 正式 `tensor shape = (2, 630, 5856)`
 - 正式 `pool_mode = sum_mean`
 - 正式 `layout = standard`
-- 当前 `client = pooled-grid-region client`
+- 当前真实数据实验统一描述为两类客户端组织设置。
 - `parquet-direct = legacy fallback only`
 
 ## 命名说明
 
-- 历史名称“单路口客户端”在 tensor-only 阶段实际表示“单池化网格区域客户端”。
-- 论文、报告和图表中建议统一采用“单池化网格区域客户端”或 `single pooled-grid-region client`。
-- 代码目录 `single_intersection_client` 和 `single_intersection_ablation` 暂不修改。
-- `region_client` / `region_ablation` 表示“区域网格客户端”，每个 client = 一组 pooled grid regions。
+- `single_intersection_client` / `single_intersection_ablation` 在文档中统一解释为：
+  网格单元级客户端联邦学习设置 / Grid-cell-level Client Federated Learning Setting。
+- `region_client` / `region_ablation` 在文档中统一解释为：
+  簇级客户端联邦学习设置 / Cluster-level Client Federated Learning Setting。
+- 代码目录保持不变，但正式标题、图表和运行说明统一使用上述 setting 命名。
 
 ## 当前可运行模块
 
-### 单池化网格区域客户端主实验
+### 网格单元级客户端设置主实验
 
 ```bash
 python -m real_data_experiments.single_intersection_client.sic_core --workflow all
 python -m real_data_experiments.single_intersection_client.sic_visualization --workflow all
 ```
 
-### 单池化网格区域客户端消融实验
+### 网格单元级客户端设置消融实验
 
 ```bash
 python -m real_data_experiments.single_intersection_ablation.sia_core --workflow all
 python -m real_data_experiments.single_intersection_ablation.sia_visualization --workflow all
 ```
 
-### 区域网格客户端主实验
+### 簇级客户端设置主实验
 
 ```bash
 python -m real_data_experiments.region_client.rc_core --workflow all
 python -m real_data_experiments.region_client.rc_visualization --workflow all
 ```
 
-### 区域网格客户端消融实验
+### 簇级客户端设置消融实验
 
 ```bash
 python -m real_data_experiments.region_ablation.ra_core --workflow all
@@ -75,6 +83,7 @@ python -m real_data_experiments.region_ablation.ra_visualization --workflow all 
 
 - 若只做 agent / CI 级 smoke test，可在 `rc_core.py` 与 `ra_core.py` 命令后追加：
   `--max-samples-per-client-split 1024`
+- 上述 smoke 命令仅用于验证 tensor-only 数据入口、客户端构造、标准样本量加权 `FedAvg`、输出文件和可视化流程，不作为论文正式结果。
 
 ## 正式运行计划入口
 
@@ -131,5 +140,5 @@ python -m real_data_experiments.region_ablation.ra_visualization --workflow all 
 ## 当前范围控制
 
 - 当前 `FedAvg` 仍然是标准样本量加权 `FedAvg`。
-- 区域实验当前迁移主线为：tensor-only 输入、区域客户端多 region 划分、标准 `FedAvg`、不把 `FedProx` / personalization / server damping 放入默认流程。
+- 簇级客户端设置当前迁移主线为：tensor-only 输入、多网格单元客户端划分、标准 `FedAvg`、不把 `FedProx` / personalization / server damping 放入默认流程。
 - 本阶段不修改 LaTeX，不修改 `simulation_experiments/`，不改变标准 `FedAvg` 主线。

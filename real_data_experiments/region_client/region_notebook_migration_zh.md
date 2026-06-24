@@ -1,9 +1,26 @@
 # 区域主实验 Notebook 迁移映射
 
+## 当前迁移状态
+
+本 notebook 已完成 tensor-only Python 化迁移。
+
+- 迁移后的默认输入为：
+  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
+- 默认客户端定义为：
+  簇级客户端联邦学习设置；每个 client = 一组 pooled grid regions。
+- 默认划分方法为：
+  `spatial_block`
+- 可选划分方法为：
+  `flow_kmeans`
+- 默认联邦聚合为：
+  标准样本量加权 FedAvg。
+- 当前 smoke test 已通过，但 smoke test 指标不作为论文正式结果。
+- smoke test 结果不作为论文正式结果。
+
 ## 审计对象
 
 - Notebook：`test/区域客户端计算_3×2_最终版.ipynb`
-- 目标目录：`real_data_experiments/region_client/`
+- 已迁移到：`real_data_experiments/region_client/`
 - 当前正式输入：tensor-only
 - 正式 `tensor_path`：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
 - 正式 `regions_path`：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
@@ -11,7 +28,7 @@
 
 ## 关键审计结论
 
-- 原 notebook 的区域客户端定义是“每个 client = 一组 region indices”，这一点需要保留。
+- 原 notebook 的客户端定义是“每个 client = 一组 region indices”，这一点需要保留，并在正式文档中统一解释为簇级客户端设置。
 - 原 notebook 的默认划分方法是基于区域时序特征的 `kmeans_cluster + balance_clusters_by_size`。
 - 原 notebook 的默认训练主流程混入了 `FedProx`、`server damping`、`personalization` 和 mixed raw-scale loss，这些不应进入当前正式默认主流程。
 - 原 notebook 的 `split_indices()` 会先构造完整样本再随机打乱切分，不满足当前真实数据阶段必须按 target time 连续划分的要求。
@@ -107,7 +124,7 @@
 ## 默认主流程冻结
 
 - `data_mode = tensor`
-- `client = region client = group of pooled grid regions`
+- `client = Cluster-level Client Setting = group of pooled grid regions`
 - `partition_method = spatial_block`
 - `split = temporal_contiguous_by_target_time`
 - `FedAvg = standard sample-size weighted FedAvg`

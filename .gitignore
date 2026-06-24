@@ -250,3 +250,18 @@ paper_revision/*
 
 # Do not upload local experiment notebooks under test
 test/
+
+# Real data experiment local results
+results/real_data_experiments/*_smoke/
+results/real_data_experiments/single_intersection_client_tensor/
+results/real_data_experiments/single_intersection_ablation_tensor/
+results/real_data_experiments/single_region_client_tensor_*/
+results/real_data_experiments/single_region_ablation_tensor_*/
+results/real_data_experiments/region_client_tensor_*/
+results/real_data_experiments/region_ablation_tensor_*/
+
+# Large generated experiment artifacts
+results/real_data_experiments/**/*.png
+results/real_data_experiments/**/*.pdf
+results/real_data_experiments/**/prediction_samples.csv
+results/real_data_experiments/**/convergence_history.csv

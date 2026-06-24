@@ -1,4 +1,4 @@
-# 区域主实验历史探索记录
+# 簇级客户端设置主实验历史探索记录
 
 ## 来源说明
 
@@ -21,5 +21,5 @@
 ## 备注
 
 - 如后续确需保留历史代码，只能放入 `legacy` / `exploratory` 风格函数，并默认不调用。
-- 当前正式区域主实验只保留：
-  tensor-only 输入、区域客户端、多 region 数据集、时间顺序划分、标准 `FedAvg`、Independent baseline。
+- 当前正式簇级客户端设置主实验只保留：
+  tensor-only 输入、簇级客户端设置、多 grid-cell 数据集、时间顺序划分、标准 `FedAvg`、Independent baseline。

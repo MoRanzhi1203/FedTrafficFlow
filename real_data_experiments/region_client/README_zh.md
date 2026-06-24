@@ -1,8 +1,8 @@
-# 区域客户端主实验
+# 簇级客户端设置主实验
 
 ## 当前定义
 
-- 当前 `region_client` 表示区域网格客户端。
+- 当前 `region_client` 在文档中统一解释为：簇级客户端联邦学习设置 / Cluster-level Client Federated Learning Setting。
 - 每个 `client` = 一组 pooled grid regions。
 - 当前正式输入为 tensor-only：
   `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
