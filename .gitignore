@@ -229,6 +229,7 @@ data/analysis/speed_class_overall_stats.csv
 data/analysis/speed_class_daily_period_stats.csv
 
 # Generated experiment outputs that should stay local
+env_backup/
 results/real_data_global_missingness_setting/masks/
 results/real_data_global_missingness_setting/missing_datasets/
 results/real_data_global_missingness_setting/imputed_datasets/
@@ -252,7 +253,10 @@ paper_revision/*
 test/
 
 # Real data experiment local results
+results/real_data_experiments/compute_time_profile/
+results/real_data_experiments/profile_*/
 results/real_data_experiments/*_smoke/
+results/real_data_experiments/**/*_smoke/
 results/real_data_experiments/single_intersection_client_tensor/
 results/real_data_experiments/single_intersection_ablation_tensor/
 results/real_data_experiments/single_region_client_tensor_*/
