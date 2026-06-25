@@ -255,6 +255,7 @@ test/
 # Real data experiment local results
 results/real_data_experiments/compute_time_profile/
 results/real_data_experiments/profile_*/
+results/real_data_experiments/gpu_light_profile/
 results/real_data_experiments/*_smoke/
 results/real_data_experiments/**/*_smoke/
 results/real_data_experiments/single_intersection_client_tensor/
