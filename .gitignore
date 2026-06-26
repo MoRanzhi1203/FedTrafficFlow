@@ -258,6 +258,9 @@ results/real_data_experiments/profile_*/
 results/real_data_experiments/gpu_light_profile/
 results/real_data_experiments/*_smoke/
 results/real_data_experiments/**/*_smoke/
+#
+# Real-data formal experiment outputs
+results/real_data_experiments/formal/
 results/real_data_experiments/single_intersection_client_tensor/
 results/real_data_experiments/single_intersection_ablation_tensor/
 results/real_data_experiments/single_region_client_tensor_*/
