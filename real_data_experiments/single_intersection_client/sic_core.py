@@ -102,6 +102,41 @@ class ClientData:
     entity_metadata: dict[str, object] = field(default_factory=dict)
 
 
+@dataclass
+class TargetScaler:
+    """Train-split target normalization stats shared across experiment 1 clients."""
+
+    mean: float
+    std: float
+
+    def normalize_tensor(self, values: torch.Tensor) -> torch.Tensor:
+        return (values - self.mean) / self.std
+
+    def denormalize_tensor(self, values: torch.Tensor) -> torch.Tensor:
+        return values * self.std + self.mean
+
+    def denormalize_numpy(self, values: np.ndarray) -> np.ndarray:
+        return values * self.std + self.mean
+
+    def to_dict(self) -> dict[str, float]:
+        return {"mean": float(self.mean), "std": float(self.std)}
+
+
+class TargetNormalizedDataset(Dataset):
+    """Wrap a dataset so that only the regression target is z-score normalized."""
+
+    def __init__(self, base_dataset: Dataset, scaler: TargetScaler) -> None:
+        self.base_dataset = base_dataset
+        self.scaler = scaler
+
+    def __len__(self) -> int:
+        return len(self.base_dataset)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+        features, target = self.base_dataset[index]
+        return features, self.scaler.normalize_tensor(target.to(dtype=torch.float32))
+
+
 def resolve_input_channels(config: ExperimentConfig) -> int:
     """Resolve the effective model input channel count for the chosen data mode."""
     return len(config.use_channels) if config.data_mode == "tensor" else 1
@@ -313,6 +348,28 @@ def build_client_data(config: ExperimentConfig) -> tuple[list[ClientData], dict[
     raise ValueError(f"Unsupported data_mode: {config.data_mode}")
 
 
+def _collect_target_array(dataset: Dataset) -> np.ndarray:
+    """Materialize one dataset's scalar targets into a contiguous NumPy array."""
+    targets = [float(dataset[index][1].reshape(-1)[0].item()) for index in range(len(dataset))]
+    return np.asarray(targets, dtype=np.float64)
+
+
+def fit_target_scaler(clients: list[ClientData], eps: float = 1e-6) -> TargetScaler:
+    """Fit one global train-target scaler so FedAvg and Independent share the same output scale."""
+    if not clients:
+        raise ValueError("clients must not be empty when fitting target normalization.")
+    train_targets = np.concatenate([_collect_target_array(client.train_loader.dataset) for client in clients])
+    std = float(np.std(train_targets, ddof=0))
+    return TargetScaler(mean=float(np.mean(train_targets)), std=max(std, float(eps)))
+
+
+def apply_target_normalization(clients: list[ClientData], scaler: TargetScaler) -> None:
+    """Replace train loaders with target-normalized variants while keeping eval loaders raw."""
+    for client in clients:
+        train_dataset = TargetNormalizedDataset(client.train_loader.dataset, scaler)
+        client.train_loader = DataLoader(train_dataset, batch_size=client.train_loader.batch_size, shuffle=False)
+
+
 def train_local_model(
     model: nn.Module,
     train_loader: DataLoader,
@@ -340,7 +397,12 @@ def train_local_model(
     return copy.deepcopy(model.state_dict()), float(np.mean(epoch_losses)) if epoch_losses else 0.0
 
 
-def collect_predictions(model: nn.Module, loader: DataLoader, device: str) -> tuple[np.ndarray, np.ndarray]:
+def collect_predictions(
+    model: nn.Module,
+    loader: DataLoader,
+    device: str,
+    target_scaler: TargetScaler | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """Collect predictions and targets from a data loader."""
     model.eval()
     preds: list[np.ndarray] = []
@@ -348,7 +410,10 @@ def collect_predictions(model: nn.Module, loader: DataLoader, device: str) -> tu
     with torch.no_grad():
         for features, targets in loader:
             features = features.to(device)
-            outputs = model(features).cpu().numpy().reshape(-1)
+            outputs = model(features)
+            if target_scaler is not None:
+                outputs = target_scaler.denormalize_tensor(outputs)
+            outputs = outputs.cpu().numpy().reshape(-1)
             preds.append(outputs)
             truths.append(targets.numpy().reshape(-1))
     if not preds:
@@ -356,9 +421,14 @@ def collect_predictions(model: nn.Module, loader: DataLoader, device: str) -> tu
     return np.concatenate(truths).astype(np.float64), np.concatenate(preds).astype(np.float64)
 
 
-def evaluate_client_model(model: nn.Module, client: ClientData, device: str) -> tuple[dict[str, Any], pd.DataFrame]:
+def evaluate_client_model(
+    model: nn.Module,
+    client: ClientData,
+    device: str,
+    target_scaler: TargetScaler | None = None,
+) -> tuple[dict[str, Any], pd.DataFrame]:
     """Evaluate a model on one client's test split and return metrics plus prediction samples."""
-    y_true, y_pred = collect_predictions(model, client.test_loader, device)
+    y_true, y_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
     metrics: dict[str, Any] = compute_regression_metrics(y_true, y_pred)
     metrics.update(_make_entity_record(client))
     prediction_df = pd.DataFrame(
@@ -372,14 +442,19 @@ def evaluate_client_model(model: nn.Module, client: ClientData, device: str) -> 
     return metrics, prediction_df
 
 
-def evaluate_round(global_model: nn.Module, clients: list[ClientData], device: str) -> dict[str, float]:
+def evaluate_round(
+    global_model: nn.Module,
+    clients: list[ClientData],
+    device: str,
+    target_scaler: TargetScaler | None = None,
+) -> dict[str, float]:
     """Evaluate the current global model on validation and test splits across clients."""
     val_rmses: list[float] = []
     val_maes: list[float] = []
     test_rmses: list[float] = []
     for client in clients:
-        val_true, val_pred = collect_predictions(global_model, client.val_loader, device)
-        test_true, test_pred = collect_predictions(global_model, client.test_loader, device)
+        val_true, val_pred = collect_predictions(global_model, client.val_loader, device, target_scaler=target_scaler)
+        test_true, test_pred = collect_predictions(global_model, client.test_loader, device, target_scaler=target_scaler)
         val_metrics = compute_regression_metrics(val_true, val_pred)
         test_metrics = compute_regression_metrics(test_true, test_pred)
         val_rmses.append(val_metrics["rmse"])
@@ -398,6 +473,7 @@ def run_fedavg_experiment(
     config: ExperimentConfig,
     clients: list[ClientData],
     device: str,
+    target_scaler: TargetScaler | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Run standard FedAvg across single-intersection clients."""
     input_channels = resolve_input_channels(config)
@@ -429,19 +505,24 @@ def run_fedavg_experiment(
 
         global_model.load_state_dict(fedavg_aggregate(local_state_dicts, sample_counts))
         history_record = {"method": "FedAvg", "communication_round": round_idx, "train_loss": float(np.mean(train_losses))}
-        history_record.update(evaluate_round(global_model, clients, device))
+        history_record.update(evaluate_round(global_model, clients, device, target_scaler=target_scaler))
         round_history.append(history_record)
 
     client_rows: list[dict[str, Any]] = []
     prediction_frames: list[pd.DataFrame] = []
     for client in clients:
-        metrics, prediction_df = evaluate_client_model(global_model, client, device)
+        metrics, prediction_df = evaluate_client_model(global_model, client, device, target_scaler=target_scaler)
         client_rows.append({"method": "FedAvg", **metrics})
         prediction_frames.append(prediction_df.assign(method="FedAvg"))
     return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True)
 
 
-def run_independent_experiment(config: ExperimentConfig, clients: list[ClientData], device: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+def run_independent_experiment(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+    device: str,
+    target_scaler: TargetScaler | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the independent baseline with the same data splits."""
     total_epochs = config.independent_total_epochs or (config.communication_rounds * config.local_epochs)
     input_channels = resolve_input_channels(config)
@@ -459,10 +540,24 @@ def run_independent_experiment(config: ExperimentConfig, clients: list[ClientDat
             learning_rate=config.learning_rate,
             local_epochs=total_epochs,
         )
-        metrics, prediction_df = evaluate_client_model(model, client, device)
+        metrics, prediction_df = evaluate_client_model(model, client, device, target_scaler=target_scaler)
         client_rows.append({"method": "Independent", **metrics})
         prediction_frames.append(prediction_df.assign(method="Independent"))
     return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
+
+
+def limit_prediction_samples(prediction_df: pd.DataFrame, total_limit: int) -> pd.DataFrame:
+    """Keep a balanced prediction sample subset so both methods remain visible in exports."""
+    if total_limit <= 0 or prediction_df.empty or "method" not in prediction_df.columns:
+        return prediction_df.copy()
+    method_groups = list(prediction_df.groupby("method", sort=False))
+    base_quota = max(total_limit // len(method_groups), 1)
+    remainder = max(total_limit - base_quota * len(method_groups), 0)
+    sampled_frames: list[pd.DataFrame] = []
+    for index, (_, group_df) in enumerate(method_groups):
+        quota = base_quota + (1 if index < remainder else 0)
+        sampled_frames.append(group_df.head(quota))
+    return pd.concat(sampled_frames, ignore_index=True)
 
 
 def export_results(
@@ -475,6 +570,7 @@ def export_results(
     ind_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
     prediction_df: pd.DataFrame,
+    target_scaler: TargetScaler | None = None,
 ) -> None:
     """Write experiment artifacts to disk."""
     client_metrics_df = pd.concat([fed_client_df, ind_client_df], ignore_index=True)
@@ -503,8 +599,11 @@ def export_results(
     write_json(client_metrics_df.to_dict(orient="records"), output_dir / "client_metrics.json")
     write_csv(convergence_df, output_dir / "convergence_history.csv")
     write_json(convergence_df.to_dict(orient="records"), output_dir / "convergence_history.json")
-    write_csv(prediction_df.head(config.prediction_sample_limit), output_dir / "prediction_samples.csv")
-    write_json(prediction_df.head(config.prediction_sample_limit).to_dict(orient="records"), output_dir / "prediction_samples.json")
+    sampled_prediction_df = limit_prediction_samples(prediction_df, config.prediction_sample_limit)
+    write_csv(sampled_prediction_df, output_dir / "prediction_samples.csv")
+    write_json(sampled_prediction_df.to_dict(orient="records"), output_dir / "prediction_samples.json")
+    if target_scaler is not None:
+        write_json(target_scaler.to_dict(), output_dir / "target_scaler.json")
     note_lines = [
         "# 单路口客户端实验说明",
         "",
@@ -512,6 +611,7 @@ def export_results(
         "- 当前正式默认输入为 tensor-only：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。",
         "- 当前客户端表示 pooled-grid-region client，每个客户端对应一个 active pooled region。",
         "- 数据划分按 target time 的时间顺序执行，不使用随机切分。",
+        "- 训练阶段对目标值使用 train-split 统计量做 z-score normalization，评估与导出预测时反归一化回原始尺度。",
         "- `parquet-direct` 仅保留为 legacy fallback，不作为正式默认结果入口。",
     ]
     if config.data_mode == "parquet":
@@ -527,8 +627,29 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     start_time = datetime.now().isoformat(timespec="seconds")
 
     clients, split_summary, selected_regions_df = build_client_data(config)
-    fed_client_df, convergence_df, fed_prediction_df = run_fedavg_experiment(config, clients, device)
-    ind_client_df, ind_prediction_df = run_independent_experiment(config, clients, device)
+    target_scaler: TargetScaler | None = None
+    if config.target_normalization:
+        target_scaler = fit_target_scaler(clients, eps=config.target_normalization_eps)
+        apply_target_normalization(clients, target_scaler)
+        split_summary["target_normalization"] = {
+            "enabled": True,
+            "mean": target_scaler.mean,
+            "std": target_scaler.std,
+        }
+    else:
+        split_summary["target_normalization"] = {"enabled": False}
+    fed_client_df, convergence_df, fed_prediction_df = run_fedavg_experiment(
+        config,
+        clients,
+        device,
+        target_scaler=target_scaler,
+    )
+    ind_client_df, ind_prediction_df = run_independent_experiment(
+        config,
+        clients,
+        device,
+        target_scaler=target_scaler,
+    )
     prediction_df = pd.concat([fed_prediction_df, ind_prediction_df], ignore_index=True)
 
     environment_summary = build_environment_summary(device)
@@ -547,6 +668,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         ind_client_df=ind_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
+        target_scaler=target_scaler,
     )
     selected_ids = []
     if selected_regions_df is not None:
