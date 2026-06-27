@@ -14,6 +14,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
+try:
+    from tqdm.auto import tqdm
+except Exception:  # pragma: no cover - tqdm fallback is exercised at runtime
+    tqdm = None
 
 from real_data_experiments.common.data_splits import temporal_split_indices
 from real_data_experiments.common.fedavg import fedavg_aggregate
@@ -122,10 +126,50 @@ class TargetScaler:
         return {"mean": float(self.mean), "std": float(self.std)}
 
 
-class TargetNormalizedDataset(Dataset):
-    """Wrap a dataset so that only the regression target is z-score normalized."""
+@dataclass
+class InputScaler:
+    """Per-channel train-split input normalization stats shared across experiment 1 clients."""
+
+    mean: torch.Tensor
+    std: torch.Tensor
+
+    def normalize_tensor(self, values: torch.Tensor) -> torch.Tensor:
+        return (values - self.mean.to(device=values.device, dtype=values.dtype)) / self.std.to(device=values.device, dtype=values.dtype)
+
+    def to_dict(self) -> dict[str, list[float]]:
+        return {
+            "mean": [float(value) for value in self.mean.view(-1).tolist()],
+            "std": [float(value) for value in self.std.view(-1).tolist()],
+        }
+
+
+class NormalizedDataset(Dataset):
+    """Wrap a dataset so input and target normalization can be applied independently."""
 
     def __init__(self, base_dataset: Dataset, scaler: TargetScaler) -> None:
+        self.base_dataset = base_dataset
+        self.target_scaler = scaler
+        self.input_scaler: InputScaler | None = None
+
+    def with_input_scaler(self, scaler: InputScaler | None) -> "NormalizedDataset":
+        self.input_scaler = scaler
+        return self
+
+    def __len__(self) -> int:
+        return len(self.base_dataset)
+
+    def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
+        features, target = self.base_dataset[index]
+        features = features.to(dtype=torch.float32)
+        if self.input_scaler is not None:
+            features = self.input_scaler.normalize_tensor(features)
+        return features, self.target_scaler.normalize_tensor(target.to(dtype=torch.float32))
+
+
+class InputNormalizedDataset(Dataset):
+    """Wrap a dataset so that only the model inputs are z-score normalized."""
+
+    def __init__(self, base_dataset: Dataset, scaler: InputScaler) -> None:
         self.base_dataset = base_dataset
         self.scaler = scaler
 
@@ -134,7 +178,7 @@ class TargetNormalizedDataset(Dataset):
 
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         features, target = self.base_dataset[index]
-        return features, self.scaler.normalize_tensor(target.to(dtype=torch.float32))
+        return self.scaler.normalize_tensor(features.to(dtype=torch.float32)), target.to(dtype=torch.float32)
 
 
 def resolve_input_channels(config: ExperimentConfig) -> int:
@@ -354,6 +398,43 @@ def _collect_target_array(dataset: Dataset) -> np.ndarray:
     return np.asarray(targets, dtype=np.float64)
 
 
+def _accumulate_input_stats(dataset: Dataset) -> tuple[torch.Tensor, torch.Tensor, int]:
+    input_sum: torch.Tensor | None = None
+    input_sq_sum: torch.Tensor | None = None
+    element_count = 0
+    for index in range(len(dataset)):
+        features, _ = dataset[index]
+        channel_view = features.to(dtype=torch.float64)
+        channel_sum = channel_view.sum(dim=1)
+        channel_sq_sum = torch.square(channel_view).sum(dim=1)
+        input_sum = channel_sum if input_sum is None else input_sum + channel_sum
+        input_sq_sum = channel_sq_sum if input_sq_sum is None else input_sq_sum + channel_sq_sum
+        element_count += int(channel_view.shape[1])
+    if input_sum is None or input_sq_sum is None or element_count <= 0:
+        raise ValueError("Cannot fit input normalization on an empty dataset.")
+    return input_sum, input_sq_sum, element_count
+
+
+def fit_input_scaler(clients: list[ClientData], eps: float = 1e-6) -> InputScaler:
+    """Fit one global per-channel input scaler from all train splits used by experiment 1."""
+    if not clients:
+        raise ValueError("clients must not be empty when fitting input normalization.")
+    global_sum: torch.Tensor | None = None
+    global_sq_sum: torch.Tensor | None = None
+    total_count = 0
+    for client in clients:
+        input_sum, input_sq_sum, element_count = _accumulate_input_stats(client.train_loader.dataset)
+        global_sum = input_sum if global_sum is None else global_sum + input_sum
+        global_sq_sum = input_sq_sum if global_sq_sum is None else global_sq_sum + input_sq_sum
+        total_count += element_count
+    if global_sum is None or global_sq_sum is None or total_count <= 0:
+        raise ValueError("No train data available for input normalization.")
+    mean = (global_sum / float(total_count)).to(dtype=torch.float32).view(-1, 1)
+    variance = (global_sq_sum / float(total_count)) - torch.square(global_sum / float(total_count))
+    std = torch.sqrt(torch.clamp(variance, min=float(eps))).to(dtype=torch.float32).view(-1, 1)
+    return InputScaler(mean=mean, std=std)
+
+
 def fit_target_scaler(clients: list[ClientData], eps: float = 1e-6) -> TargetScaler:
     """Fit one global train-target scaler so FedAvg and Independent share the same output scale."""
     if not clients:
@@ -363,11 +444,44 @@ def fit_target_scaler(clients: list[ClientData], eps: float = 1e-6) -> TargetSca
     return TargetScaler(mean=float(np.mean(train_targets)), std=max(std, float(eps)))
 
 
-def apply_target_normalization(clients: list[ClientData], scaler: TargetScaler) -> None:
-    """Replace train loaders with target-normalized variants while keeping eval loaders raw."""
+def apply_dataset_normalization(
+    clients: list[ClientData],
+    input_scaler: InputScaler | None = None,
+    target_scaler: TargetScaler | None = None,
+) -> None:
+    """Replace loaders with normalized variants while preserving split membership and order."""
     for client in clients:
-        train_dataset = TargetNormalizedDataset(client.train_loader.dataset, scaler)
+        train_dataset: Dataset = client.train_loader.dataset
+        val_dataset: Dataset = client.val_loader.dataset
+        test_dataset: Dataset = client.test_loader.dataset
+        if target_scaler is not None:
+            train_dataset = NormalizedDataset(train_dataset, target_scaler).with_input_scaler(input_scaler)
+        elif input_scaler is not None:
+            train_dataset = InputNormalizedDataset(train_dataset, input_scaler)
+        if input_scaler is not None:
+            val_dataset = InputNormalizedDataset(val_dataset, input_scaler)
+            test_dataset = InputNormalizedDataset(test_dataset, input_scaler)
         client.train_loader = DataLoader(train_dataset, batch_size=client.train_loader.batch_size, shuffle=False)
+        client.val_loader = DataLoader(val_dataset, batch_size=client.val_loader.batch_size, shuffle=False)
+        client.test_loader = DataLoader(test_dataset, batch_size=client.test_loader.batch_size, shuffle=False)
+
+
+def log_info(message: str) -> None:
+    """Emit a flushed runtime log so long runs do not appear stalled."""
+    print(f"[INFO] {message}", flush=True)
+
+
+def maybe_tqdm(
+    iterable,
+    *,
+    enabled: bool,
+    desc: str,
+    unit: str,
+    leave: bool = True,
+):
+    if enabled and tqdm is not None:
+        return tqdm(iterable, desc=desc, unit=unit, leave=leave)
+    return iterable
 
 
 def train_local_model(
@@ -376,15 +490,32 @@ def train_local_model(
     device: str,
     learning_rate: float,
     local_epochs: int,
+    show_progress: bool = False,
+    progress_interval: int = 20,
+    progress_prefix: str = "",
 ) -> tuple[dict[str, torch.Tensor], float]:
     """Train a local model from its current parameters."""
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.MSELoss()
     model.train()
     epoch_losses: list[float] = []
-    for _ in range(local_epochs):
+    epoch_iter = maybe_tqdm(
+        range(local_epochs),
+        enabled=show_progress,
+        desc=f"{progress_prefix} epochs".strip(),
+        unit="epoch",
+        leave=False,
+    )
+    for epoch_index in epoch_iter:
         batch_losses: list[float] = []
-        for features, targets in train_loader:
+        batch_iter = maybe_tqdm(
+            train_loader,
+            enabled=show_progress,
+            desc=f"{progress_prefix} epoch {epoch_index + 1}".strip(),
+            unit="batch",
+            leave=False,
+        )
+        for batch_index, (features, targets) in enumerate(batch_iter, start=1):
             features = features.to(device)
             targets = targets.to(device)
             optimizer.zero_grad()
@@ -393,7 +524,13 @@ def train_local_model(
             loss.backward()
             optimizer.step()
             batch_losses.append(float(loss.item()))
+            if show_progress and tqdm is not None:
+                batch_iter.set_postfix(loss=f"{loss.item():.4f}")
+            elif show_progress and batch_index % max(progress_interval, 1) == 0:
+                log_info(f"{progress_prefix} epoch {epoch_index + 1} batch {batch_index}: loss={loss.item():.4f}")
         epoch_losses.append(float(np.mean(batch_losses)) if batch_losses else 0.0)
+        if show_progress and tqdm is not None:
+            epoch_iter.set_postfix(loss=f"{epoch_losses[-1]:.4f}")
     return copy.deepcopy(model.state_dict()), float(np.mean(epoch_losses)) if epoch_losses else 0.0
 
 
@@ -481,12 +618,26 @@ def run_fedavg_experiment(
         input_channels=input_channels,
         prediction_horizon=config.prediction_horizon,
     ).to(device)
+    log_info("FedAvg training started")
     round_history: list[dict[str, float]] = []
-    for round_idx in range(1, config.communication_rounds + 1):
+    round_iter = maybe_tqdm(
+        range(1, config.communication_rounds + 1),
+        enabled=config.show_progress,
+        desc="FedAvg rounds",
+        unit="round",
+    )
+    for round_idx in round_iter:
         local_state_dicts: list[dict[str, torch.Tensor]] = []
         sample_counts: list[int] = []
         train_losses: list[float] = []
-        for client in clients:
+        client_iter = maybe_tqdm(
+            clients,
+            enabled=config.show_progress,
+            desc=f"Round {round_idx} clients",
+            unit="client",
+            leave=False,
+        )
+        for client in client_iter:
             local_model = CNNLSTMAttentionRegressor(
                 input_channels=input_channels,
                 prediction_horizon=config.prediction_horizon,
@@ -498,15 +649,30 @@ def run_fedavg_experiment(
                 device=device,
                 learning_rate=config.learning_rate,
                 local_epochs=config.local_epochs,
+                show_progress=config.show_progress,
+                progress_interval=config.progress_interval,
+                progress_prefix=f"FedAvg r{round_idx} c{client.entity_id}",
             )
             local_state_dicts.append(state_dict)
             sample_counts.append(len(client.train_loader.dataset))
             train_losses.append(train_loss)
+            if config.show_progress and tqdm is not None:
+                client_iter.set_postfix(client=client.entity_id, loss=f"{train_loss:.4f}")
 
         global_model.load_state_dict(fedavg_aggregate(local_state_dicts, sample_counts))
         history_record = {"method": "FedAvg", "communication_round": round_idx, "train_loss": float(np.mean(train_losses))}
         history_record.update(evaluate_round(global_model, clients, device, target_scaler=target_scaler))
         round_history.append(history_record)
+        if config.show_progress and tqdm is not None:
+            round_iter.set_postfix(
+                round_loss=f"{history_record['train_loss']:.4f}",
+                val_rmse=f"{history_record['val_rmse']:.2f}",
+            )
+        elif config.show_progress:
+            log_info(
+                f"FedAvg round {round_idx}/{config.communication_rounds}: "
+                f"train_loss={history_record['train_loss']:.4f}, val_rmse={history_record['val_rmse']:.2f}"
+            )
 
     client_rows: list[dict[str, Any]] = []
     prediction_frames: list[pd.DataFrame] = []
@@ -514,6 +680,7 @@ def run_fedavg_experiment(
         metrics, prediction_df = evaluate_client_model(global_model, client, device, target_scaler=target_scaler)
         client_rows.append({"method": "FedAvg", **metrics})
         prediction_frames.append(prediction_df.assign(method="FedAvg"))
+    log_info("FedAvg training finished")
     return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True)
 
 
@@ -528,7 +695,14 @@ def run_independent_experiment(
     input_channels = resolve_input_channels(config)
     client_rows: list[dict[str, Any]] = []
     prediction_frames: list[pd.DataFrame] = []
-    for client in clients:
+    log_info("Independent training started")
+    client_iter = maybe_tqdm(
+        clients,
+        enabled=config.show_progress,
+        desc="Independent clients",
+        unit="client",
+    )
+    for client in client_iter:
         model = CNNLSTMAttentionRegressor(
             input_channels=input_channels,
             prediction_horizon=config.prediction_horizon,
@@ -539,10 +713,18 @@ def run_independent_experiment(
             device=device,
             learning_rate=config.learning_rate,
             local_epochs=total_epochs,
+            show_progress=config.show_progress,
+            progress_interval=config.progress_interval,
+            progress_prefix=f"Independent c{client.entity_id}",
         )
         metrics, prediction_df = evaluate_client_model(model, client, device, target_scaler=target_scaler)
         client_rows.append({"method": "Independent", **metrics})
         prediction_frames.append(prediction_df.assign(method="Independent"))
+        if config.show_progress and tqdm is not None:
+            client_iter.set_postfix(client=client.entity_id, rmse=f"{metrics['rmse']:.2f}")
+        elif config.show_progress:
+            log_info(f"Independent client {client.entity_id}: rmse={metrics['rmse']:.2f}, mae={metrics['mae']:.2f}")
+    log_info("Independent training finished")
     return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
 
 
@@ -570,6 +752,7 @@ def export_results(
     ind_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
     prediction_df: pd.DataFrame,
+    input_scaler: InputScaler | None = None,
     target_scaler: TargetScaler | None = None,
 ) -> None:
     """Write experiment artifacts to disk."""
@@ -602,6 +785,8 @@ def export_results(
     sampled_prediction_df = limit_prediction_samples(prediction_df, config.prediction_sample_limit)
     write_csv(sampled_prediction_df, output_dir / "prediction_samples.csv")
     write_json(sampled_prediction_df.to_dict(orient="records"), output_dir / "prediction_samples.json")
+    if input_scaler is not None:
+        write_json(input_scaler.to_dict(), output_dir / "input_scaler.json")
     if target_scaler is not None:
         write_json(target_scaler.to_dict(), output_dir / "target_scaler.json")
     note_lines = [
@@ -611,6 +796,7 @@ def export_results(
         "- 当前正式默认输入为 tensor-only：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。",
         "- 当前客户端表示 pooled-grid-region client，每个客户端对应一个 active pooled region。",
         "- 数据划分按 target time 的时间顺序执行，不使用随机切分。",
+        "- 训练与评估阶段对输入特征使用 train-split 统计量做 z-score normalization。",
         "- 训练阶段对目标值使用 train-split 统计量做 z-score normalization，评估与导出预测时反归一化回原始尺度。",
         "- `parquet-direct` 仅保留为 legacy fallback，不作为正式默认结果入口。",
     ]
@@ -627,10 +813,26 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     start_time = datetime.now().isoformat(timespec="seconds")
 
     clients, split_summary, selected_regions_df = build_client_data(config)
+    log_info(f"Experiment started with device={device}")
+    log_info(f"tensor_path={config.tensor_path}")
+    log_info(f"selected_clients={config.selected_clients if config.selected_clients else 'auto-top-k'}")
+    log_info(
+        f"rounds={config.communication_rounds}, local_epochs={config.local_epochs}, "
+        f"batch_size={config.batch_size}, sequence_length={config.sequence_length}"
+    )
+    log_info(f"input_normalization={config.input_normalization}, target_normalization={config.target_normalization}")
+    input_scaler: InputScaler | None = None
     target_scaler: TargetScaler | None = None
+    if config.input_normalization:
+        input_scaler = fit_input_scaler(clients, eps=config.input_normalization_eps)
+        split_summary["input_normalization"] = {
+            "enabled": True,
+            **input_scaler.to_dict(),
+        }
+    else:
+        split_summary["input_normalization"] = {"enabled": False}
     if config.target_normalization:
         target_scaler = fit_target_scaler(clients, eps=config.target_normalization_eps)
-        apply_target_normalization(clients, target_scaler)
         split_summary["target_normalization"] = {
             "enabled": True,
             "mean": target_scaler.mean,
@@ -638,6 +840,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         }
     else:
         split_summary["target_normalization"] = {"enabled": False}
+    apply_dataset_normalization(clients, input_scaler=input_scaler, target_scaler=target_scaler)
     fed_client_df, convergence_df, fed_prediction_df = run_fedavg_experiment(
         config,
         clients,
@@ -668,8 +871,10 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         ind_client_df=ind_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
+        input_scaler=input_scaler,
         target_scaler=target_scaler,
     )
+    log_info(f"Results written to {output_dir}")
     selected_ids = []
     if selected_regions_df is not None:
         selected_ids = selected_regions_df["region_id"].tolist() if "region_id" in selected_regions_df.columns else []
