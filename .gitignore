@@ -261,6 +261,9 @@ results/real_data_experiments/**/*_smoke/
 #
 # Real-data formal experiment outputs
 results/real_data_experiments/formal/
+#
+# Real-data diagnostic smoke outputs
+results/real_data_experiments/diagnostics/
 results/real_data_experiments/single_intersection_client_tensor/
 results/real_data_experiments/single_intersection_ablation_tensor/
 results/real_data_experiments/single_region_client_tensor_*/
