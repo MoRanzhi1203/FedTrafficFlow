@@ -37,7 +37,7 @@ FedAvg 弱于 Independent 和 NaiveLastValue。前一阶段已排除客户端相
 
 ### 评估对齐说明
 
-本次修复后，DailySeasonalNaive、WeeklySeasonalNaive 和 CalendarProfileNaive 均使用与 FedAvg/Independent/NaiveLastValue 完全一致的 test_loader target time 进行评估。各方法的 test_samples 总数相等（4395）。周期 profile 仅使用 train split 构建，不使用 val/test，避免数据泄漏。lag-based lookback 使用完整 tensor 序列（含 train/val/test），仅取 t-96 或 t-672 历史值，不访问未来。
+本次修复后，DailySeasonalNaive、WeeklySeasonalNaive 和 CalendarProfileNaive 均使用与 FedAvg/Independent/NaiveLastValue 完全一致的 test_loader target time 进行评估。各方法的 test_samples 总数相等（4395）。周期 profile 仅使用 train split 构建，不使用 val/test，避免数据泄漏。lag-based lookback 使用完整 tensor 序列（含 train/val/test），仅取 t-96 或 t-672 历史值，不访问未来。DailySeasonalNaive 和 WeeklySeasonalNaive 的 fallback 均使用 train split 均值，不使用 full sequence 均值，避免在极端边界情况下引入 val/test 信息。
 
 ## 4. 日历特征输入
 
@@ -69,7 +69,7 @@ FedAvg 弱于 Independent 和 NaiveLastValue。前一阶段已排除客户端相
 2. CalendarProfileNaive 强于 FedAvg 但弱于 Independent 和 NaiveLastValue — client-specific weekday/weekend profile 提供了比 FedAvg 更好的 baseline，但仍不如本地独立训练和简单的 persistence。
 3. CalendarFeature-FedAvg 和 SeasonalResidual-FedAvg 尚未运行，需后续补充 CLI 配置。
 4. 当前结果只能说明，在严格 test split 对齐的条件下，三类周期性 naive baseline 可作为解释交通流短期周期性的补充基线。它们是否能够改善 FedAvg，还需要进一步实现 CalendarFeature-FedAvg 和 SeasonalResidual-FedAvg 后再验证。当前不能把周期性 baseline 的表现直接等同于周期感知 FedAvg 的表现。
-5. **不建议**在当前 baseline 模型上继续投入大量 formal 实验，因 FedAvg 在所有条件下都弱于简单 baseline。
+5. **不建议**在当前 baseline 模型上继续投入大量 formal 实验，因 FedAvg 仍明显弱于 NaiveLastValue、Independent 和 CalendarProfileNaive；但 DailySeasonalNaive 和 WeeklySeasonalNaive 并未优于 FedAvg，不能笼统表述为所有简单 baseline 均强于 FedAvg。
 6. **建议**进入 FedProx 或调整训练策略（rounds/lr/local_epochs），或考虑更强的时序模型（CNN-GRU、Transformer）。
 
 ## 7. 对一审意见的回应价值
@@ -94,15 +94,15 @@ FedAvg 弱于 Independent 和 NaiveLastValue。前一阶段已排除客户端相
 
 英文：
 
-> The real-world dataset covers 61 days from April 1 to May 31, 2017. Since this period is insufficient for modeling annual seasonality, we construct short-term calendar-periodicity features instead, including time-of-day, day-of-week, public holidays, adjusted working days, and effective working-day indicators. A client-specific seasonal profile is estimated from the training split and used as a local periodic baseline. The federated model is then trained to predict the residual component relative to this baseline, allowing the framework to preserve local calendar patterns while learning shared residual dynamics across clients.
+> The real-world dataset covers 61 days from April 1 to May 31, 2017. Since this period is insufficient for modeling annual seasonality, we construct short-term calendar-periodicity features, including time-of-day, day-of-week, public holidays, adjusted working days, and effective working-day indicators. In the current diagnostic experiment, a client-specific seasonal profile is estimated from the training split and evaluated as a local periodic baseline. This design provides a basis for a subsequent residual federated model, where the federated learner can be extended to model the residual dynamics relative to local calendar profiles.
 
 中文：
 
-> 真实数据覆盖 2017 年 4 月 1 日至 5 月 31 日共 61 天。由于该时间范围不足以支持年度季节性建模，本文构造短期日历周期性特征，包括日内时间片、星期、法定节假日、调休上班日和有效工作日等。同时，本文基于训练集为每个客户端估计私有周期基线，并使联邦模型学习相对于该基线的残差部分，从而在保留本地日历周期差异的同时学习跨客户端共享的残差动态。
+> 真实数据覆盖 2017 年 4 月 1 日至 5 月 31 日共 61 天。由于该时间范围不足以支持年度季节性建模，本文构造短期日历周期性特征，包括日内时间片、星期、法定节假日、调休上班日和有效工作日等。在当前诊断实验中，本文基于训练集为每个客户端估计私有周期基线，并将其作为本地周期性基线进行评估。该设计为后续残差式联邦建模提供基础，即进一步使联邦模型学习相对于本地日历周期基线的残差动态。
 
 ## 10. 下一步建议
 
-1. **暂不继续 baseline model formal**: 当前 baseline 模型 FedAvg 在所有条件下弱于简单 baseline。
+1. **暂不继续 baseline model formal**: 当前 baseline FedAvg 仍明显弱于 NaiveLastValue、Independent 和 CalendarProfileNaive，说明仅靠现有 FedAvg 训练策略难以充分利用强时间惯性和本地周期模式；但 DailySeasonalNaive 和 WeeklySeasonalNaive 并未优于 FedAvg，不能笼统表述为所有简单 baseline 均强于 FedAvg。
 2. **优先尝试 FedProx**: μ=1e-4/1e-3/1e-2，可能在局部训练漂移问题上有改善。
 3. **调整训练策略**: rounds 增至 20/40, lr 调低至 5e-4/3e-4。
 4. **补充 CalendarFeature-FedAvg 和 SeasonalResidual-FedAvg 的 CLI 实现**。

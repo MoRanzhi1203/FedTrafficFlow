@@ -113,36 +113,38 @@ def calendar_profile_naive_predict(
 def daily_seasonal_naive_from_full_sequence(
     full_seq: np.ndarray,
     test_time_indices: np.ndarray,
+    fallback_mean: float,
 ) -> np.ndarray:
     """DailySeasonalNaive: predict y[t] = full_seq[t - 96] for each test target time.
 
     Uses the complete time series (including train/val/test) for lag-based lookback.
+    fallback_mean is computed from the train split only.
     No future data leakage: only t-96 is accessed (which may be in train, val, or earlier test).
     """
     preds = np.empty(len(test_time_indices), dtype=np.float64)
-    train_mean = float(np.mean(full_seq))
     for i, t in enumerate(test_time_indices):
         ref = int(t) - 96
         if 0 <= ref < len(full_seq):
             preds[i] = full_seq[ref]
         elif t - 1 >= 0:
-            preds[i] = full_seq[int(t) - 1] if int(t) - 1 < len(full_seq) else train_mean
+            preds[i] = full_seq[int(t) - 1] if int(t) - 1 < len(full_seq) else fallback_mean
         else:
-            preds[i] = train_mean
+            preds[i] = fallback_mean
     return preds
 
 
 def weekly_seasonal_naive_from_full_sequence(
     full_seq: np.ndarray,
     test_time_indices: np.ndarray,
+    fallback_mean: float,
 ) -> np.ndarray:
     """WeeklySeasonalNaive: predict y[t] = full_seq[t - 672] for each test target time.
 
-    Fallback chain: t-672 -> t-96 -> t-1 -> train_mean.
+    Fallback chain: t-672 -> t-96 -> t-1 -> fallback_mean.
+    fallback_mean is computed from the train split only.
     Uses the complete time series for lag-based lookback.
     """
     preds = np.empty(len(test_time_indices), dtype=np.float64)
-    train_mean = float(np.mean(full_seq))
     for i, t in enumerate(test_time_indices):
         ti = int(t)
         ref_weekly = ti - 672
@@ -155,5 +157,5 @@ def weekly_seasonal_naive_from_full_sequence(
         elif 0 <= ref_last < len(full_seq):
             preds[i] = full_seq[ref_last]
         else:
-            preds[i] = train_mean
+            preds[i] = fallback_mean
     return preds

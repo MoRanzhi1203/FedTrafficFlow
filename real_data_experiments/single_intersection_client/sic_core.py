@@ -874,7 +874,8 @@ def evaluate_daily_seasonal_naive(
         if result[0] is None:
             continue
         y_train_profile, train_time_indices, y_test, test_time_indices, full_seq = result
-        preds = _dsn(full_seq, test_time_indices)
+        fallback_mean = float(np.mean(y_train_profile))
+        preds = _dsn(full_seq, test_time_indices, fallback_mean=fallback_mean)
         metrics = compute_regression_metrics(y_test, preds)
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": "DailySeasonalNaive", **metrics})
@@ -896,7 +897,8 @@ def evaluate_weekly_seasonal_naive(
         if result[0] is None:
             continue
         y_train_profile, train_time_indices, y_test, test_time_indices, full_seq = result
-        preds = _wsn(full_seq, test_time_indices)
+        fallback_mean = float(np.mean(y_train_profile))
+        preds = _wsn(full_seq, test_time_indices, fallback_mean=fallback_mean)
         metrics = compute_regression_metrics(y_test, preds)
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": "WeeklySeasonalNaive", **metrics})
