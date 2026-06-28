@@ -28,7 +28,7 @@ class ExperimentConfig:
     sequence_length: int = 12
     prediction_horizon: int = 1
     model_name: str = "cnn_lstm_attention"
-    device: str = "auto"
+    device: str = "cuda"
     target_column: str = "路口车流量"
     max_chunks: int | None = 7
     prediction_sample_limit: int = 200
@@ -66,7 +66,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-epochs", type=int, default=2)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
-    parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        choices=["cuda", "gpu", "cpu", "auto"],
+        help="Runtime device. Default: cuda. Falls back to CPU if CUDA is unavailable.",
+    )
     parser.add_argument("--input-path", type=str, default="data/analysis/node_intersection_flow_parquet")
     parser.add_argument("--tensor-path", type=str, default="data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt")
     parser.add_argument("--regions-path", type=str, default="data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv")

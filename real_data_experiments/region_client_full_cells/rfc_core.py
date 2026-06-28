@@ -17,9 +17,10 @@ import torch
 import torch.nn as nn
 
 from real_data_experiments.common.client import FedClient
+from real_data_experiments.common.device_utils import DeviceResolution, resolve_device
 from real_data_experiments.common.metrics import METRIC_COLUMNS, compute_regression_metrics, summarize_metric_frame
 from real_data_experiments.common.result_writer import prepare_output_dir, write_csv, write_json, write_text
-from real_data_experiments.common.seed import build_environment_summary, resolve_default_device, set_global_seed
+from real_data_experiments.common.seed import build_environment_summary, set_global_seed
 from real_data_experiments.common.trainer import run_federated_rounds
 from real_data_experiments.region_client_full_cells.rfc_config import ExperimentConfig, build_arg_parser, config_from_args
 from real_data_experiments.region_client_full_cells.rfc_dataset import RFCClientData, build_full_cells_client_data
@@ -71,6 +72,22 @@ def _debug_emit(hypothesis_id: str, location: str, msg: str, data: dict[str, Any
 
 
 # #endregion
+
+
+def build_run_config_payload(config: ExperimentConfig, device_info: DeviceResolution) -> dict[str, object]:
+    """Build a run_config payload that records requested and actual device metadata."""
+    payload = config.to_dict()
+    payload.update(
+        {
+            "device": device_info.actual_device,
+            "requested_device": device_info.requested_device,
+            "actual_device": device_info.actual_device,
+            "cuda_available": device_info.cuda_available,
+            "cuda_device_name": device_info.cuda_device_name,
+            "device_fallback_reason": device_info.fallback_reason,
+        }
+    )
+    return payload
 
 
 def _make_client_record(client: RFCClientData) -> dict[str, object]:
@@ -318,6 +335,7 @@ def limit_prediction_samples(prediction_df: pd.DataFrame, total_limit: int) -> p
 def export_results(
     config: ExperimentConfig,
     output_dir: Path,
+    run_config_payload: dict[str, object],
     environment_summary: dict[str, object],
     split_summary: dict[str, object],
     client_membership: dict[str, object],
@@ -339,7 +357,7 @@ def export_results(
     )
     main_summary_df = summarize_metric_frame(client_metrics_df, group_cols=["method"])
 
-    write_json(config.to_dict(), output_dir / "run_config.json")
+    write_json(run_config_payload, output_dir / "run_config.json")
     write_text("python -m real_data_experiments.region_client_full_cells.rfc_core " + " ".join(sys.argv[1:]), output_dir / "run_commands.txt")
     write_json(environment_summary, output_dir / "environment_summary.json")
     write_json(split_summary, output_dir / "split_summary.json")
@@ -372,7 +390,15 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     )
     # #endregion
     output_dir = prepare_output_dir(config.output_dir)
-    device = resolve_default_device(config.device)
+    device_info = resolve_device(config.device)
+    device = device_info.actual_device
+    print(
+        "[device] "
+        f"requested={device_info.requested_device}, actual={device_info.actual_device}, "
+        f"cuda_available={device_info.cuda_available}, cuda_device_name={device_info.cuda_device_name}, "
+        f"fallback_reason={device_info.fallback_reason}",
+        flush=True,
+    )
     set_global_seed(config.seed)
     start_time = datetime.now().isoformat(timespec="seconds")
 
@@ -460,10 +486,15 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     # #endregion
     prediction_df = pd.concat([fed_prediction_df, ind_prediction_df, naive_prediction_df], ignore_index=True)
 
+    run_config_payload = build_run_config_payload(config, device_info)
     environment_summary = build_environment_summary(device)
     environment_summary["seed"] = config.seed
     environment_summary["start_time"] = start_time
     environment_summary["end_time"] = datetime.now().isoformat(timespec="seconds")
+    environment_summary["requested_device"] = device_info.requested_device
+    environment_summary["actual_device"] = device_info.actual_device
+    environment_summary["cuda_device_name"] = device_info.cuda_device_name
+    environment_summary["device_fallback_reason"] = device_info.fallback_reason
 
     # #region debug-point G:export-start
     _debug_emit("G", "rfc_core.run_experiment:before_export", "exporting results", {"prediction_rows": int(len(prediction_df))})
@@ -471,6 +502,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     export_results(
         config=config,
         output_dir=output_dir,
+        run_config_payload=run_config_payload,
         environment_summary=environment_summary,
         split_summary=split_summary,
         client_membership=client_membership,

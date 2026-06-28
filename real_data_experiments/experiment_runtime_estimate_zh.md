@@ -142,6 +142,18 @@ pseudo_gpu_cluster_time = cpu_cluster_profile_time / 2.2798
 | 实验 5 | CPU | `region_client_tensor_smoke` 当前 smoke 偏 CPU | CUDA / GPU | CPU 只适合连通性 smoke，formal 建议 CUDA |
 | 实验 6 | CPU | `region_ablation_tensor_smoke` 当前 smoke 偏 CPU | CUDA / GPU | CPU 只适合连通性 smoke，formal 消融建议 CUDA |
 
+## 代码默认设备修正说明
+
+本轮之后，实验 1-6 的代码默认运行设备统一改为 `cuda` 优先。若当前环境中 `torch.cuda.is_available()` 为 `False`，代码会自动 fallback 到 CPU，并在 `run_config.json` 中记录：
+
+- `requested_device`
+- `actual_device`
+- `cuda_available`
+- `cuda_device_name`
+- `device_fallback_reason`
+
+注意：历史结果目录中的设备记录不会被重写。因此“当前已有结果设备”仍然保持原样：实验 1/3 为 CUDA，实验 2/5/6 为 CPU，实验 4 未确认；但“后续 formal 默认设备”已经统一改为 CUDA 优先。
+
 ## 6. 分实验说明
 
 ### 实验 1：单个网格作为单个客户端的对比实验

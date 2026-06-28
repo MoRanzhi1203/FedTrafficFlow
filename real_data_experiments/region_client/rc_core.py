@@ -15,11 +15,12 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
 
 from real_data_experiments.common.client import FedClient
+from real_data_experiments.common.device_utils import DeviceResolution, resolve_device
 from real_data_experiments.common.metrics import METRIC_COLUMNS, compute_regression_metrics, summarize_metric_frame
 from real_data_experiments.common.region_partition import RegionPartitionResult, assign_region_clients
 from real_data_experiments.common.region_tensor_dataset import RegionClientWindowDataset
 from real_data_experiments.common.result_writer import prepare_output_dir, write_csv, write_json, write_text
-from real_data_experiments.common.seed import build_environment_summary, resolve_default_device, set_global_seed
+from real_data_experiments.common.seed import build_environment_summary, set_global_seed
 from real_data_experiments.common.tensor_dataset import (
     build_time_split_bounds,
     get_region_usage_summary,
@@ -41,6 +42,22 @@ class RegionClientData:
     test_loader: DataLoader
     split_metadata: dict[str, object]
     client_metadata: dict[str, object] = field(default_factory=dict)
+
+
+def build_run_config_payload(config: ExperimentConfig, device_info: DeviceResolution) -> dict[str, object]:
+    """Build a run_config payload that records requested and actual device metadata."""
+    payload = config.to_dict()
+    payload.update(
+        {
+            "device": device_info.actual_device,
+            "requested_device": device_info.requested_device,
+            "actual_device": device_info.actual_device,
+            "cuda_available": device_info.cuda_available,
+            "cuda_device_name": device_info.cuda_device_name,
+            "device_fallback_reason": device_info.fallback_reason,
+        }
+    )
+    return payload
 
 
 def _resolve_input_channels(config: ExperimentConfig) -> int:
@@ -359,6 +376,7 @@ def run_independent_experiment(
 def export_results(
     config: ExperimentConfig,
     output_dir: Path,
+    run_config_payload: dict[str, object],
     environment_summary: dict[str, object],
     split_summary: dict[str, object],
     partition_result: RegionPartitionResult,
@@ -378,7 +396,7 @@ def export_results(
     )
     main_summary_df = summarize_metric_frame(client_metrics_df, group_cols=["method"])
 
-    write_json(config.to_dict(), output_dir / "run_config.json")
+    write_json(run_config_payload, output_dir / "run_config.json")
     write_text("python -m real_data_experiments.region_client.rc_core " + " ".join(sys.argv[1:]), output_dir / "run_commands.txt")
     write_json(environment_summary, output_dir / "environment_summary.json")
     write_json(split_summary, output_dir / "split_summary.json")
@@ -411,7 +429,15 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     """Run the regional-client experiment."""
 
     output_dir = prepare_output_dir(config.output_dir)
-    device = resolve_default_device(config.device)
+    device_info = resolve_device(config.device)
+    device = device_info.actual_device
+    print(
+        "[device] "
+        f"requested={device_info.requested_device}, actual={device_info.actual_device}, "
+        f"cuda_available={device_info.cuda_available}, cuda_device_name={device_info.cuda_device_name}, "
+        f"fallback_reason={device_info.fallback_reason}",
+        flush=True,
+    )
     set_global_seed(config.seed)
     start_time = datetime.now().isoformat(timespec="seconds")
 
@@ -420,15 +446,21 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     ind_client_df, ind_prediction_df = run_independent_experiment(config, clients, device)
     prediction_df = pd.concat([fed_prediction_df, ind_prediction_df], ignore_index=True)
 
+    run_config_payload = build_run_config_payload(config, device_info)
     environment_summary = build_environment_summary(device)
     environment_summary["seed"] = config.seed
     environment_summary["start_time"] = start_time
     environment_summary["end_time"] = datetime.now().isoformat(timespec="seconds")
     environment_summary["data_mode"] = config.data_mode
+    environment_summary["requested_device"] = device_info.requested_device
+    environment_summary["actual_device"] = device_info.actual_device
+    environment_summary["cuda_device_name"] = device_info.cuda_device_name
+    environment_summary["device_fallback_reason"] = device_info.fallback_reason
 
     export_results(
         config=config,
         output_dir=output_dir,
+        run_config_payload=run_config_payload,
         environment_summary=environment_summary,
         split_summary=split_summary,
         partition_result=partition_result,

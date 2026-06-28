@@ -1,4 +1,4 @@
-﻿# 新实验 1：单个网格作为单个客户端的对比实验
+# 新实验 1：单个网格作为单个客户端的对比实验
 
 ## 当前定位
 
@@ -42,7 +42,18 @@
 ## 运行示例
 
 ```bash
-python -m real_data_experiments.single_intersection_client.sic_core --workflow all
+# CUDA formal / recommended
+python -m real_data_experiments.single_intersection_client.sic_core --workflow all --device cuda
+
+# CPU smoke / connectivity only
+python -m real_data_experiments.single_intersection_client.sic_core --workflow all --device cpu --rounds 1 --local-epochs 1
+
 python -m real_data_experiments.single_intersection_client.sic_visualization --workflow all
 ```
+
+## 设备默认值
+
+- 当前代码默认设备已统一改为 `cuda` 优先。
+- 若当前环境中 `torch.cuda.is_available()` 为 `False`，代码会自动 fallback 到 `cpu`。
+- 如果需要强制使用 CPU，可显式传入 `--device cpu`。
 

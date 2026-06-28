@@ -26,7 +26,7 @@ class ExperimentConfig:
     communication_rounds: int = 1
     sequence_length: int = 12
     prediction_horizon: int = 1
-    device: str = "cpu"
+    device: str = "cuda"
     workflow: str = "all"
     prediction_sample_limit: int = 400
     independent_total_epochs: int | None = None
@@ -55,7 +55,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--sequence-length", type=int, default=12)
     parser.add_argument("--learning-rate", type=float, default=1e-3)
-    parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        choices=["cuda", "gpu", "cpu", "auto"],
+        help="Runtime device. Default: cuda. Falls back to CPU if CUDA is unavailable.",
+    )
     parser.add_argument("--output-dir", type=str, default="results/real_data_experiments/region_client_tensor")
     parser.add_argument("--max-samples-per-client-split", type=int, default=0)
     return parser

@@ -1,4 +1,4 @@
-﻿# 新实验 3 / 4：多个相似网格合并为一个客户端的实验线
+# 新实验 3 / 4：多个相似网格合并为一个客户端的实验线
 
 ## 当前定位
 
@@ -44,3 +44,19 @@
 - 不修改数据划分原则。
 - 不删除 `NaiveLastValue`，不删除或替换 `289`。
 - 不改动已有 `results/` 结果文件。
+
+## 运行示例
+
+```bash
+# CUDA formal / recommended
+python -m real_data_experiments.region_client_full_cells.rfc_core --workflow all --device cuda --tensor-path data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt --partition-file real_data_experiments/region_client_full_cells/partitions/similarity_k5.json --output-dir results/real_data_experiments/region_client_full_cells_formal_cuda
+
+# CPU smoke / connectivity only
+python -m real_data_experiments.region_client_full_cells.rfc_core --workflow all --device cpu --rounds 1 --local-epochs 1 --tensor-path data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt --partition-file real_data_experiments/region_client_full_cells/partitions/similarity_k5.json --output-dir results/real_data_experiments/region_client_full_cells_smoke_cpu
+```
+
+## 设备默认值
+
+- 当前代码默认设备已统一改为 `cuda` 优先。
+- 若当前环境中 `torch.cuda.is_available()` 为 `False`，代码会自动 fallback 到 `cpu`。
+- 新实验 4 当前与新实验 3 共用 `rfc_core.py` 的设备解析逻辑。

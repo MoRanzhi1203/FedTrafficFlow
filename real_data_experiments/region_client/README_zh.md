@@ -29,9 +29,20 @@
 - `results/real_data_experiments/region_client_tensor_smoke/` 归入新实验 5 的 smoke 结果。
 - 旧结果路径不移动，只在文档和 inventory 中新增新编号对应关系。
 
-## smoke test
+## 运行示例
 
 ```bash
+# CUDA formal / recommended
+python -m real_data_experiments.region_client.rc_core --workflow all --data-mode tensor --partition-method flow_kmeans --num-clients 3 --rounds 20 --local-epochs 3 --batch-size 32 --sequence-length 12 --learning-rate 0.001 --device cuda --output-dir results/real_data_experiments/region_client_tensor_formal_cuda
+
+# CPU smoke / connectivity only
 python -m real_data_experiments.region_client.rc_core --workflow all --data-mode tensor --partition-method spatial_block --num-clients 3 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --learning-rate 0.001 --device cpu --output-dir results/real_data_experiments/region_client_tensor_smoke
+
 python -m real_data_experiments.region_client.rc_visualization --workflow all --input-dir results/real_data_experiments/region_client_tensor_smoke --dpi 150
 ```
+
+## 设备默认值
+
+- 当前代码默认设备已统一改为 `cuda` 优先。
+- 若当前环境中 `torch.cuda.is_available()` 为 `False`，代码会自动 fallback 到 `cpu`。
+- CPU 保留为 smoke 或轻量连通性检查入口；formal 建议使用 CUDA。

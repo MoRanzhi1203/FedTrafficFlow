@@ -58,7 +58,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--local-epochs", type=int, default=2)
     parser.add_argument("--learning-rate", type=float, default=5e-4)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="cuda",
+        choices=["cuda", "gpu", "cpu", "auto"],
+        help="Runtime device. Default: cuda. Falls back to CPU if CUDA is unavailable.",
+    )
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--sequence-length", type=int, default=12)
     parser.add_argument("--prediction-horizon", type=int, default=1)
@@ -91,4 +97,3 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         prediction_sample_limit=args.prediction_sample_limit,
         show_progress=bool(args.show_progress),
     )
-
