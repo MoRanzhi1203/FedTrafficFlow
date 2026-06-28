@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 CNN Federated Base Visualization Module.
 Only responsible for reading exported CSV files and generating plots.

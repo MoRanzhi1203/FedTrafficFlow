@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 GCN 基础联邦仿真实验核心逻辑。
 负责基础数据导出、GCN 联邦训练、Independent 基线、预测结果与收敛过程导出。
@@ -560,7 +561,7 @@ def export_base_dataset_artifacts(output_dir: Path) -> None:
     )
 
 
-def run_federated_training(seed: int, record_convergence: bool = False):
+def run_federated_training(seed: int, record_convergence: bool = False, ctx=None):
     set_global_seed(seed)
     client_splits, _, _, _ = build_client_splits(seed)
     adj_norm, _, _ = generate_adjacency_matrix(seed=seed)
@@ -581,8 +582,22 @@ def run_federated_training(seed: int, record_convergence: bool = False):
         GCNBaseModel(BASE_NUM_NODES, BASE_SEQ_LEN, FED_HIDDEN_DIM, adj_norm),
         [len(client["x_train"]) for client in client_splits],
     )
+
+    # 如果 resume，恢复模型状态
+    start_round = 0
+    if ctx and ctx.was_resumed and ctx.loaded_checkpoint:
+        ckpt = ctx.loaded_checkpoint
+        server.global_model.load_state_dict(ckpt.get("model_state_dict", {}))
+        start_round = ctx.start_round
+        saved_metrics = ckpt.get("metrics_history", [])
+        for metric_row in saved_metrics:
+            if "avg_train_loss" in metric_row:
+                server.round_losses.append(metric_row["avg_train_loss"])
+        print(f"[resume] GCN FedAvg resuming from round {start_round + 1}")
+    checkpoint_every = ctx.config.get("checkpoint_every", 1) if ctx else 1
+
     convergence_rows = []
-    for round_idx in range(FED_ROUNDS):
+    for round_idx in range(start_round, FED_ROUNDS):
         client_weights = []
         client_losses = []
         val_losses = []
@@ -607,6 +622,22 @@ def run_federated_training(seed: int, record_convergence: bool = False):
                 "avg_val_mae": float(np.mean([row["mae"] for row in val_metric_rows])),
                 "avg_val_mape": float(np.mean([row["mape"] for row in val_metric_rows])),
             })
+
+        # 保存 checkpoint
+        if ctx and ((round_idx + 1) % checkpoint_every == 0 or round_idx == FED_ROUNDS - 1):
+            metrics_snapshot = [
+                {
+                    "round": i + 1,
+                    "avg_train_loss": float(server.round_losses[i]) if i < len(server.round_losses) else None,
+                }
+                for i in range(len(server.round_losses))
+            ]
+            ctx.save_checkpoint(
+                round_idx=round_idx + 1,
+                total_rounds=FED_ROUNDS,
+                model_state_dict=copy.deepcopy(server.global_model.state_dict()),
+                metrics_history=metrics_snapshot,
+            )
     metric_rows = []
     pred_rows = []
     for client, split in zip(clients, client_splits):
@@ -686,8 +717,8 @@ def run_independent_training(seed: int):
     return pd.DataFrame(metric_rows), pd.DataFrame(pred_rows)
 
 
-def run_single_seed_main_experiment(seed: int):
-    fed_metrics, fed_preds, fed_conv = run_federated_training(seed, record_convergence=False)
+def run_single_seed_main_experiment(seed: int, ctx=None):
+    fed_metrics, fed_preds, fed_conv = run_federated_training(seed, record_convergence=False, ctx=ctx)
     independent_metrics, independent_preds = run_independent_training(seed)
     metrics_df = pd.concat([independent_metrics, fed_metrics], ignore_index=True)
     preds_df = pd.concat([independent_preds, fed_preds], ignore_index=True)
@@ -711,16 +742,38 @@ def run_single_seed_main_experiment(seed: int):
     return metrics_df, preds_df, pd.DataFrame(raw_rows)
 
 
-def run_main_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+def run_main_experiment(
+    output_dir: Path,
+    seeds: list[int],
+    multi_seed: bool = True,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+) -> None:
+    from simulation_experiments.common.resume_utils import TaskContext
+
     target_seeds = list(seeds if multi_seed else seeds[:1])
+    tasks_dir = output_dir / "tasks"
     metrics_frames = []
     pred_frames = []
     raw_frames = []
     for seed in target_seeds:
-        metrics_df, preds_df, raw_df = run_single_seed_main_experiment(seed)
+        task_dir = tasks_dir / f"seed_{seed}"
+        ctx = TaskContext(
+            task_dir=task_dir,
+            task_id=f"exp2_main/seed_{seed}",
+            config={"seed": seed, "workflow": "main", "checkpoint_every": checkpoint_every},
+            resume=resume, skip_completed=skip_completed, force=force,
+        )
+        ctx.prepare()
+        if ctx.was_skipped:
+            continue
+        metrics_df, preds_df, raw_df = run_single_seed_main_experiment(seed, ctx=ctx)
         metrics_frames.append(metrics_df)
         pred_frames.append(preds_df)
         raw_frames.append(raw_df)
+        ctx.mark_completed(extra={"rounds": FED_ROUNDS, "method": "FedAvg+Independent"})
     metrics_df = pd.concat(metrics_frames, ignore_index=True)
     preds_df = pd.concat(pred_frames, ignore_index=True)
     raw_df = pd.concat(raw_frames, ignore_index=True)
@@ -753,12 +806,34 @@ def run_main_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = T
     )
 
 
-def run_convergence_experiment(output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+def run_convergence_experiment(
+    output_dir: Path,
+    seeds: list[int],
+    multi_seed: bool = True,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+) -> None:
+    from simulation_experiments.common.resume_utils import TaskContext
+
     target_seeds = list(seeds if multi_seed else seeds[:1])
+    tasks_dir = output_dir / "tasks"
     frames = []
     for seed in target_seeds:
-        _, _, convergence_df = run_federated_training(seed, record_convergence=True)
+        task_dir = tasks_dir / f"seed_{seed}"
+        ctx = TaskContext(
+            task_dir=task_dir,
+            task_id=f"exp2_convergence/seed_{seed}",
+            config={"seed": seed, "workflow": "convergence", "checkpoint_every": checkpoint_every},
+            resume=resume, skip_completed=skip_completed, force=force,
+        )
+        ctx.prepare()
+        if ctx.was_skipped:
+            continue
+        _, _, convergence_df = run_federated_training(seed, record_convergence=True, ctx=ctx)
         frames.append(convergence_df.assign(seed=seed))
+        ctx.mark_completed(extra={"rounds": FED_ROUNDS, "method": "FedAvg"})
     convergence_df = pd.concat(frames, ignore_index=True)
     save_dataframe(convergence_df, output_dir, "convergence_history.csv")
     save_dataframe(convergence_df, output_dir, "multi_seed_convergence_raw.csv")
@@ -773,14 +848,31 @@ def run_convergence_experiment(output_dir: Path, seeds: list[int], multi_seed: b
     )
 
 
-def run_project(workflow: str, output_dir: Path, seeds: list[int], multi_seed: bool = True) -> None:
+def run_project(
+    workflow: str,
+    output_dir: Path,
+    seeds: list[int],
+    multi_seed: bool = True,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+) -> None:
     ensure_output_dir(output_dir)
     if workflow in ("all", "data_viz"):
         export_base_dataset_artifacts(output_dir)
     if workflow in ("all", "main"):
-        run_main_experiment(output_dir, seeds=seeds, multi_seed=multi_seed)
+        run_main_experiment(
+            output_dir, seeds=seeds, multi_seed=multi_seed,
+            resume=resume, skip_completed=skip_completed,
+            force=force, checkpoint_every=checkpoint_every,
+        )
     if workflow in ("all", "convergence"):
-        run_convergence_experiment(output_dir, seeds=seeds, multi_seed=multi_seed)
+        run_convergence_experiment(
+            output_dir, seeds=seeds, multi_seed=multi_seed,
+            resume=resume, skip_completed=skip_completed,
+            force=force, checkpoint_every=checkpoint_every,
+        )
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
@@ -790,15 +882,24 @@ def parse_args(argv: Optional[Sequence[str]] = None):
     parser.add_argument("--multi_seed", type=str, default="True", help="Whether to run multiple seeds.")
     parser.add_argument("--seeds", type=str, default="42,2024,3407,1234,5678", help="Comma-separated random seeds.")
     parser.add_argument("--single_seed", type=int, default=42, help="Single seed used when --multi_seed False.")
+    # 断点续跑参数
+    from simulation_experiments.common.resume_utils import add_resume_args
+    add_resume_args(parser)
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None):
+    from simulation_experiments.common.resume_utils import validate_resume_force_conflict
     args = parse_args(argv)
+    validate_resume_force_conflict(args)
     output_dir = Path(args.output_dir) if args.output_dir else SIMULATION_RESULTS_ROOT / "gcn_fed_base"
     multi_seed = parse_bool_flag(args.multi_seed)
     seeds = parse_seed_list(args.seeds) if multi_seed else [int(args.single_seed)]
-    run_project(args.workflow, output_dir, seeds=seeds, multi_seed=multi_seed)
+    run_project(
+        args.workflow, output_dir, seeds=seeds, multi_seed=multi_seed,
+        resume=args.resume, skip_completed=args.skip_completed,
+        force=args.force, checkpoint_every=args.checkpoint_every,
+    )
 
 
 if __name__ == "__main__":

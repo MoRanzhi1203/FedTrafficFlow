@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 CNN 增强实验可视化模块。
 只读取 `cfe_core.py` 导出的 CSV 文件并生成图像。
