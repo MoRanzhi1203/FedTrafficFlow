@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 GCN 基础实验可视化模块。
 只读取 `gfb_core.py` 导出的 CSV 文件并生成图像。

@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from __future__ import annotations
 """
 CNN/CCN 增强仿真实验组核心逻辑。
 负责：数据生成、模型训练、聚合策略实验、指标计算、数据导出。
@@ -490,6 +491,54 @@ def _build_summary(df: pd.DataFrame, group_cols):
     return agg_df
 
 
+def _safe_sweep_metrics_and_summary(
+    rows: list,
+    output_dir: Path,
+    metrics_filename: str,
+    summary_filename: str,
+    group_cols: list[str],
+):
+    """安全生成 metrics 和 summary，处理全部 task 被 skip 的空结果场景。
+
+    情况 A：rows 非空 → 正常生成 metrics 和 summary；
+    情况 B：rows 为空且 summary 文件已存在 → 不写 metrics，不覆盖已有 summary；
+    情况 C：rows 为空且 summary 不存在 → 生成空 metrics 和 skip-only summary。
+    """
+    metrics_path = output_dir / metrics_filename
+    summary_path = output_dir / summary_filename
+
+    if rows:
+        # 情况 A：正常写入
+        df = pd.DataFrame(rows)
+        save_dataframe(df, output_dir, metrics_filename)
+        save_dataframe(_build_summary(df, group_cols), output_dir, summary_filename)
+        return
+
+    # 情况 B/C：rows 为空
+    if summary_path.exists():
+        print(f"[skip] All tasks skipped; using existing summary: {summary_path}")
+        return
+
+    # 情况 C：生成 skip-only summary
+    print("[skip] All tasks skipped; no existing summary found, writing skip-only summary.")
+    skip_row = {"status": "skipped", "reason": "all_tasks_completed"}
+    for col in group_cols:
+        skip_row.setdefault(col, "N/A")
+    df_skip = pd.DataFrame([skip_row])
+    save_dataframe(df_skip, output_dir, metrics_filename)
+    # 生成 summary 需要 metrics 列用于 _build_summary
+    skip_summary = pd.DataFrame([skip_row])
+    skip_summary["mse"] = None
+    skip_summary["rmse"] = None
+    skip_summary["mae"] = None
+    skip_summary["mape"] = None
+    save_dataframe(
+        _build_summary(skip_summary, group_cols),
+        output_dir,
+        summary_filename,
+    )
+
+
 def _pred_rows_from_results(results, workflow: str, method: str, seed: int):
     rows = []
     for item in results:
@@ -665,6 +714,7 @@ def run_federated_training(
     lr=LR,
     seed=42,
     rec=False,
+    ctx=None,
 ):
     set_global_seed(seed)
     nc = len(client_data)
@@ -685,8 +735,21 @@ def run_federated_training(
     server = AggregationServer(CNNEnhancedModel(feature_dim, SEQ_LEN), nc, am, lam)
     server.ds = [d["train_size"] for d in client_data]
 
+    # 如果 resume，恢复模型状态
+    start_round = 0
+    if ctx and ctx.was_resumed and ctx.loaded_checkpoint:
+        ckpt = ctx.loaded_checkpoint
+        server.gm.load_state_dict(ckpt.get("model_state_dict", {}))
+        start_round = ctx.start_round
+        saved_metrics = ckpt.get("metrics_history", [])
+        for metric_row in saved_metrics:
+            if "avg_train_loss" in metric_row:
+                server.rl.append(metric_row["avg_train_loss"])
+        print(f"[resume] {am} resuming from round {start_round + 1}")
+    checkpoint_every = ctx.config.get("checkpoint_every", 1) if ctx else 1
+
     convergence_rows = []
-    for round_idx in range(cr):
+    for round_idx in range(start_round, cr):
         client_weights, client_losses = [], []
         for client in clients:
             loss, weights, _ = client.train_local(le, server.gm)
@@ -710,6 +773,22 @@ def run_federated_training(
                 "avg_val_mae": float(np.mean([m[2] for m in val_metrics])),
                 "avg_val_mape": float(np.mean([m[3] for m in val_metrics])),
             })
+
+        # 保存 checkpoint
+        if ctx and ((round_idx + 1) % checkpoint_every == 0 or round_idx == cr - 1):
+            metrics_snapshot = [
+                {
+                    "round": i + 1,
+                    "avg_train_loss": float(server.rl[i]) if i < len(server.rl) else None,
+                }
+                for i in range(len(server.rl))
+            ]
+            ctx.save_checkpoint(
+                round_idx=round_idx + 1,
+                total_rounds=cr,
+                model_state_dict=copy.deepcopy(server.gm.state_dict()),
+                metrics_history=metrics_snapshot,
+            )
 
     results = []
     for idx, (client, data) in enumerate(zip(clients, client_data)):
@@ -879,12 +958,12 @@ def export_enhanced_dataset_artifacts(output_dir: Path):
     save_dataframe(pd.DataFrame(summary_rows), output_dir, "enhanced_dataset_summary.csv")
 
 
-def run_single_seed_main_experiment(seed: int):
+def run_single_seed_main_experiment(seed: int, ctx=None):
     metric_rows = []
     pred_rows = []
     client_data = build_client_data(CLIENT_CONFIGS_BASE, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
     for method_key in ["fedavg", "proposed"]:
-        results, _ = run_federated_training(client_data, am=method_key, seed=seed)
+        results, _ = run_federated_training(client_data, am=method_key, seed=seed, ctx=ctx)
         method_name = _method_label(method_key)
         metric_rows.extend({
             "seed": seed,
@@ -930,16 +1009,36 @@ def run_single_seed_main_experiment(seed: int):
     return metrics_df, pd.DataFrame(pred_rows), pd.DataFrame(raw_rows)
 
 
-def run_main_experiment(output_dir: Path):
+def run_main_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
+    from simulation_experiments.common.resume_utils import TaskContext
+
     ensure_output_dir(output_dir)
+    tasks_dir = output_dir / "tasks"
     metric_frames = []
     pred_frames = []
     raw_frames = []
     for seed in SEEDS:
-        metrics_df, pred_df, raw_df = run_single_seed_main_experiment(seed)
+        task_dir = tasks_dir / f"seed_{seed}"
+        ctx = TaskContext(
+            task_dir=task_dir,
+            task_id=f"exp3_main/seed_{seed}",
+            config={"seed": seed, "workflow": "main", "checkpoint_every": checkpoint_every},
+            resume=resume, skip_completed=skip_completed, force=force,
+        )
+        ctx.prepare()
+        if ctx.was_skipped:
+            continue
+        metrics_df, pred_df, raw_df = run_single_seed_main_experiment(seed, ctx=ctx)
         metric_frames.append(metrics_df)
         pred_frames.append(pred_df)
         raw_frames.append(raw_df)
+        ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "method": "Independent+FedAvg+Proposed"})
     metrics_df = pd.concat(metric_frames, ignore_index=True)
     save_dataframe(metrics_df, output_dir, "cnn_enhanced_main_metrics.csv")
     save_dataframe(_build_summary(metrics_df, ["method"]), output_dir, "cnn_enhanced_main_summary.csv")
@@ -971,13 +1070,33 @@ def run_main_experiment(output_dir: Path):
     )
 
 
-def run_aggregation_experiment(output_dir: Path):
+def run_aggregation_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
+    from simulation_experiments.common.resume_utils import TaskContext
+
     ensure_output_dir(output_dir)
+    tasks_dir = output_dir / "tasks"
     rows = []
     for seed in SEEDS:
         client_data = build_client_data(CLIENT_CONFIGS_BASE, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
         for method_key in ["fedavg", "loss_weighted", "data_loss_weighted", "proposed"]:
-            results, _ = run_federated_training(client_data, am=method_key, seed=seed)
+            task_dir = tasks_dir / f"{method_key}_seed_{seed}"
+            ctx = TaskContext(
+                task_dir=task_dir,
+                task_id=f"exp4_aggregation/{method_key}/seed_{seed}",
+                config={"seed": seed, "method": method_key, "workflow": "aggregation",
+                        "checkpoint_every": checkpoint_every},
+                resume=resume, skip_completed=skip_completed, force=force,
+            )
+            ctx.prepare()
+            if ctx.was_skipped:
+                continue
+            results, _ = run_federated_training(client_data, am=method_key, seed=seed, ctx=ctx)
             rows.extend({
                 "seed": seed,
                 "method": _method_label(method_key),
@@ -987,18 +1106,42 @@ def run_aggregation_experiment(output_dir: Path):
                 "mae": result["mae"],
                 "mape": result["mape"],
             } for result in results)
-    df = pd.DataFrame(rows)
-    save_dataframe(df, output_dir, "cnn_enhanced_aggregation_metrics.csv")
-    save_dataframe(_build_summary(df, ["method"]), output_dir, "cnn_enhanced_aggregation_summary.csv")
+            ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "method": _method_label(method_key)})
+    _safe_sweep_metrics_and_summary(
+        rows, output_dir,
+        "cnn_enhanced_aggregation_metrics.csv",
+        "cnn_enhanced_aggregation_summary.csv",
+        ["method"],
+    )
 
 
-def run_lambda_experiment(output_dir: Path):
+def run_lambda_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
+    from simulation_experiments.common.resume_utils import TaskContext
+
     ensure_output_dir(output_dir)
+    tasks_dir = output_dir / "tasks"
     rows = []
     for seed in SEEDS:
         client_data = build_client_data(CLIENT_CONFIGS_BASE, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
         for lambda_value in [0.0, 0.25, 0.5, 0.75, 1.0]:
-            results, _ = run_federated_training(client_data, am="data_loss_weighted", lam=lambda_value, seed=seed)
+            task_dir = tasks_dir / f"lambda_{lambda_value}_seed_{seed}"
+            ctx = TaskContext(
+                task_dir=task_dir,
+                task_id=f"exp5_lambda/{lambda_value}/seed_{seed}",
+                config={"seed": seed, "lambda": lambda_value, "workflow": "lambda",
+                        "checkpoint_every": checkpoint_every},
+                resume=resume, skip_completed=skip_completed, force=force,
+            )
+            ctx.prepare()
+            if ctx.was_skipped:
+                continue
+            results, _ = run_federated_training(client_data, am="data_loss_weighted", lam=lambda_value, seed=seed, ctx=ctx)
             rows.extend({
                 "seed": seed,
                 "method": "Data-loss weighted",
@@ -1009,12 +1152,22 @@ def run_lambda_experiment(output_dir: Path):
                 "mae": result["mae"],
                 "mape": result["mape"],
             } for result in results)
-    df = pd.DataFrame(rows)
-    save_dataframe(df, output_dir, "cnn_enhanced_lambda_metrics.csv")
-    save_dataframe(_build_summary(df, ["lambda_value", "method"]), output_dir, "cnn_enhanced_lambda_summary.csv")
+            ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "lambda": lambda_value})
+    _safe_sweep_metrics_and_summary(
+        rows, output_dir,
+        "cnn_enhanced_lambda_metrics.csv",
+        "cnn_enhanced_lambda_summary.csv",
+        ["lambda_value", "method"],
+    )
 
 
-def run_convergence_experiment(output_dir: Path):
+def run_convergence_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
     ensure_output_dir(output_dir)
     conv_frames = []
     for seed in SEEDS:
@@ -1033,14 +1186,34 @@ def run_convergence_experiment(output_dir: Path):
     save_dataframe(summary_df, output_dir, "multi_seed_convergence_summary.csv")
 
 
-def run_client_scale_experiment(output_dir: Path):
+def run_client_scale_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
+    from simulation_experiments.common.resume_utils import TaskContext
+
     ensure_output_dir(output_dir)
+    tasks_dir = output_dir / "tasks"
     rows = []
     for seed in SEEDS:
         for num_clients in [3, 5, 8]:
+            task_dir = tasks_dir / f"clients_{num_clients}_seed_{seed}"
+            ctx = TaskContext(
+                task_dir=task_dir,
+                task_id=f"exp6_client_scale/clients_{num_clients}/seed_{seed}",
+                config={"seed": seed, "num_clients": num_clients, "workflow": "client_scale",
+                        "checkpoint_every": checkpoint_every},
+                resume=resume, skip_completed=skip_completed, force=force,
+            )
+            ctx.prepare()
+            if ctx.was_skipped:
+                continue
             client_configs = build_noniid_client_configs(num_clients)
             client_data = build_client_data(client_configs, NUM_NODES, SEQ_LEN, PRED_LEN, seed)
-            results, _ = run_federated_training(client_data, am="proposed", seed=seed)
+            results, _ = run_federated_training(client_data, am="proposed", seed=seed, ctx=ctx)
             rows.extend({
                 "seed": seed,
                 "method": "Proposed",
@@ -1051,12 +1224,22 @@ def run_client_scale_experiment(output_dir: Path):
                 "mae": result["mae"],
                 "mape": result["mape"],
             } for result in results)
-    df = pd.DataFrame(rows)
-    save_dataframe(df, output_dir, "cnn_enhanced_client_scale_metrics.csv")
-    save_dataframe(_build_summary(df, ["num_clients", "method"]), output_dir, "cnn_enhanced_client_scale_summary.csv")
+            ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "num_clients": num_clients})
+    _safe_sweep_metrics_and_summary(
+        rows, output_dir,
+        "cnn_enhanced_client_scale_metrics.csv",
+        "cnn_enhanced_client_scale_summary.csv",
+        ["num_clients", "method"],
+    )
 
 
-def run_noniid_experiment(output_dir: Path):
+def run_noniid_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
     ensure_output_dir(output_dir)
     rows = []
     for seed in SEEDS:
@@ -1079,7 +1262,13 @@ def run_noniid_experiment(output_dir: Path):
     save_dataframe(_build_summary(df, ["noniid_level", "method"]), output_dir, "cnn_enhanced_noniid_summary.csv")
 
 
-def run_client_metrics_experiment(output_dir: Path):
+def run_client_metrics_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
     ensure_output_dir(output_dir)
     rows = []
     for seed in SEEDS:
@@ -1104,7 +1293,13 @@ def run_client_metrics_experiment(output_dir: Path):
     save_dataframe(pd.DataFrame(rows), output_dir, "cnn_enhanced_client_metrics.csv")
 
 
-def run_peak_experiment(output_dir: Path):
+def run_peak_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
     ensure_output_dir(output_dir)
     rows = []
     for seed in SEEDS:
@@ -1119,7 +1314,13 @@ def run_peak_experiment(output_dir: Path):
     save_dataframe(_build_summary(df, ["period", "method"]), output_dir, "cnn_enhanced_peak_summary.csv")
 
 
-def run_feature_ablation_experiment(output_dir: Path):
+def run_feature_ablation_experiment(
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
     ensure_output_dir(output_dir)
     rows = []
     for seed in SEEDS:
@@ -1141,7 +1342,14 @@ def run_feature_ablation_experiment(output_dir: Path):
     save_dataframe(_build_summary(df, ["feature_set", "method"]), output_dir, "cnn_enhanced_feature_ablation_summary.csv")
 
 
-def run_project(workflow: str, output_dir: Path):
+def run_project(
+    workflow: str,
+    output_dir: Path,
+    resume: bool = False,
+    skip_completed: bool = False,
+    force: bool = False,
+    checkpoint_every: int = 1,
+):
     ensure_output_dir(output_dir)
     workflow_map = {
         "data_viz": export_enhanced_dataset_artifacts,
@@ -1157,7 +1365,8 @@ def run_project(workflow: str, output_dir: Path):
     }
     selected = list(workflow_map) if workflow == "all" else [workflow]
     for item in selected:
-        workflow_map[item](output_dir)
+        workflow_map[item](output_dir, resume=resume, skip_completed=skip_completed,
+                           force=force, checkpoint_every=checkpoint_every)
 
 
 def parse_args(argv: Optional[Sequence[str]] = None):
@@ -1184,19 +1393,26 @@ def parse_args(argv: Optional[Sequence[str]] = None):
     parser.add_argument("--multi_seed", type=str, default="True", help="Whether to run multiple seeds.")
     parser.add_argument("--seeds", type=str, default="42,2024,2025,2026,3407", help="Comma-separated random seeds.")
     parser.add_argument("--single_seed", type=int, default=42, help="Single seed used when --multi_seed False.")
+    # 断点续跑参数
+    from simulation_experiments.common.resume_utils import add_resume_args
+    add_resume_args(parser)
     return parser.parse_args(argv)
 
 
 def main(argv: Optional[Sequence[str]] = None):
     global SEEDS
+    from simulation_experiments.common.resume_utils import validate_resume_force_conflict
     args = parse_args(argv)
+    validate_resume_force_conflict(args)
     output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_ENHANCED_RESULTS_DIR
     multi_seed = parse_bool_flag(args.multi_seed)
     SEEDS = parse_seed_list(args.seeds) if multi_seed else [int(args.single_seed)]
     if args.run_fedavg_missing:
         run_missing_fedavg_workflows(output_dir=output_dir, paper_ready_dir=output_dir / "paper_ready")
         return
-    run_project(args.workflow, output_dir)
+    run_project(args.workflow, output_dir, resume=args.resume,
+                skip_completed=args.skip_completed, force=args.force,
+                checkpoint_every=args.checkpoint_every)
 
 
 if __name__ == "__main__":
