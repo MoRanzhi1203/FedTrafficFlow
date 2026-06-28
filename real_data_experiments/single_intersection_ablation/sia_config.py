@@ -43,6 +43,10 @@ class ExperimentConfig:
     use_active_regions_only: bool = True
     use_channels: list[int] = field(default_factory=lambda: [0, 1])
     target_channel: int = 0
+    input_normalization: bool = True
+    input_normalization_eps: float = 1e-6
+    target_normalization: bool = True
+    target_normalization_eps: float = 1e-6
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-friendly config dict."""
@@ -94,6 +98,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target-column", type=str, default="路口车流量")
     parser.add_argument("--max-chunks", type=int, default=7)
     parser.add_argument("--variants", type=str, default="")
+    parser.add_argument("--disable-input-normalization", action="store_true")
+    parser.add_argument("--input-normalization-eps", type=float, default=1e-6)
+    parser.add_argument("--disable-target-normalization", action="store_true")
+    parser.add_argument("--target-normalization-eps", type=float, default=1e-6)
     return parser
 
 
@@ -120,4 +128,8 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         max_chunks=args.max_chunks,
         variants=parse_variants(args.variants),
         use_channels=[0, 1],
+        input_normalization=not args.disable_input_normalization,
+        input_normalization_eps=args.input_normalization_eps,
+        target_normalization=not args.disable_target_normalization,
+        target_normalization_eps=args.target_normalization_eps,
     )

@@ -745,6 +745,59 @@ def run_independent_experiment(
     return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
 
 
+def evaluate_naive_last_value(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Compute NaiveLastValue baseline: predict y_t = x_{t-1} (last value persistence)."""
+    target_channel_index = config.target_channel
+    client_rows: list[dict[str, Any]] = []
+    prediction_frames: list[pd.DataFrame] = []
+    for client in clients:
+        test_dataset = client.test_loader.dataset
+        if hasattr(test_dataset, "base_dataset"):
+            base_dataset = test_dataset.base_dataset
+        else:
+            base_dataset = test_dataset
+
+        # Validate channel index on first sample
+        if len(base_dataset) > 0:
+            sample_features, _ = base_dataset[0]
+            num_channels = int(sample_features.shape[0])
+            if target_channel_index < 0 or target_channel_index >= num_channels:
+                raise IndexError(
+                    f"target_channel={target_channel_index} is out of range "
+                    f"for features with {num_channels} channel(s). "
+                    f"Client {client.entity_id} ({client.entity_kind}), "
+                    f"data_mode tensor requires target_channel in [0, {num_channels - 1}]."
+                )
+
+        y_true: list[float] = []
+        y_pred: list[float] = []
+        for index in range(len(base_dataset)):
+            features, target = base_dataset[index]
+            y_true.append(float(target.view(-1)[0].item()))
+            y_pred.append(float(features[target_channel_index, -1].item()))
+
+        y_true_array = np.asarray(y_true, dtype=np.float64)
+        y_pred_array = np.asarray(y_pred, dtype=np.float64)
+        metrics: dict[str, Any] = compute_regression_metrics(y_true_array, y_pred_array)
+        metrics.update(_make_entity_record(client))
+        client_rows.append({"method": "NaiveLastValue", **metrics})
+        prediction_frames.append(
+            pd.DataFrame(
+                {
+                    **{key: value for key, value in _make_entity_record(client).items() if key not in {"train_samples", "val_samples", "test_samples"}},
+                    "method": "NaiveLastValue",
+                    "sample_index": np.arange(len(y_true_array), dtype=int),
+                    "y_true": y_true_array,
+                    "y_pred": y_pred_array,
+                }
+            )
+        )
+    return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
+
+
 def limit_prediction_samples(prediction_df: pd.DataFrame, total_limit: int) -> pd.DataFrame:
     """Keep a balanced prediction sample subset so both methods remain visible in exports."""
     if total_limit <= 0 or prediction_df.empty or "method" not in prediction_df.columns:
@@ -768,13 +821,14 @@ def export_results(
     selected_regions_df: pd.DataFrame | None,
     fed_client_df: pd.DataFrame,
     ind_client_df: pd.DataFrame,
+    naive_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
     prediction_df: pd.DataFrame,
     input_scaler: InputScaler | None = None,
     target_scaler: TargetScaler | None = None,
 ) -> None:
     """Write experiment artifacts to disk."""
-    client_metrics_df = pd.concat([fed_client_df, ind_client_df], ignore_index=True)
+    client_metrics_df = pd.concat([fed_client_df, ind_client_df, naive_client_df], ignore_index=True)
     main_metrics_df = (
         client_metrics_df.groupby("method", as_index=False)[METRIC_COLUMNS]
         .mean()
@@ -816,6 +870,7 @@ def export_results(
         "- 数据划分按 target time 的时间顺序执行，不使用随机切分。",
         "- 训练与评估阶段对输入特征使用 train-split 统计量做 z-score normalization。",
         "- 训练阶段对目标值使用 train-split 统计量做 z-score normalization，评估与导出预测时反归一化回原始尺度。",
+        "- `NaiveLastValue` 为 last-value persistence baseline，预测 y_t = x_{t-1}（目标通道最后时间步的观测值）。",
         "- `parquet-direct` 仅保留为 legacy fallback，不作为正式默认结果入口。",
     ]
     if config.data_mode == "parquet":
@@ -878,7 +933,10 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         device,
         target_scaler=target_scaler,
     )
-    prediction_df = pd.concat([fed_prediction_df, ind_prediction_df], ignore_index=True)
+    log_info("NaiveLastValue baseline started")
+    naive_client_df, naive_prediction_df = evaluate_naive_last_value(config, clients)
+    log_info("NaiveLastValue baseline finished")
+    prediction_df = pd.concat([fed_prediction_df, ind_prediction_df, naive_prediction_df], ignore_index=True)
 
     run_config_payload = build_run_config_payload(config, device_info)
     environment_summary = build_environment_summary(device)
@@ -900,6 +958,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         selected_regions_df=selected_regions_df,
         fed_client_df=fed_client_df,
         ind_client_df=ind_client_df,
+        naive_client_df=naive_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
         input_scaler=input_scaler,
@@ -914,7 +973,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     return {
         "output_dir": str(output_dir),
         "selected_ids": selected_ids,
-        "client_metrics_rows": int(len(fed_client_df) + len(ind_client_df)),
+        "client_metrics_rows": int(len(fed_client_df) + len(ind_client_df) + len(naive_client_df)),
     }
 
 

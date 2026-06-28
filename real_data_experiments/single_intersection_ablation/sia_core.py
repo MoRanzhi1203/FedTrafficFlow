@@ -27,8 +27,13 @@ from real_data_experiments.single_intersection_ablation.sia_config import (
 from real_data_experiments.single_intersection_client.sic_core import (
     Attention,
     ClientData,
+    InputScaler,
+    TargetScaler,
+    apply_dataset_normalization,
     build_client_data,
     collect_predictions,
+    fit_input_scaler,
+    fit_target_scaler,
 )
 
 
@@ -125,14 +130,14 @@ def resolve_input_channels(config: ExperimentConfig) -> int:
     return len(config.use_channels) if config.data_mode == "tensor" else 1
 
 
-def evaluate_round(model: nn.Module, clients: list[ClientData], device: str) -> dict[str, float]:
+def evaluate_round(model: nn.Module, clients: list[ClientData], device: str, target_scaler: TargetScaler | None = None) -> dict[str, float]:
     """Evaluate validation/test metrics for one federated round."""
     val_rmses: list[float] = []
     val_maes: list[float] = []
     test_rmses: list[float] = []
     for client in clients:
-        val_true, val_pred = collect_predictions(model, client.val_loader, device)
-        test_true, test_pred = collect_predictions(model, client.test_loader, device)
+        val_true, val_pred = collect_predictions(model, client.val_loader, device, target_scaler=target_scaler)
+        test_true, test_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
         val_metrics = compute_regression_metrics(val_true, val_pred)
         test_metrics = compute_regression_metrics(test_true, test_pred)
         val_rmses.append(val_metrics["rmse"])
@@ -152,12 +157,13 @@ def evaluate_variant(
     clients: list[ClientData],
     device: str,
     variant: str,
+    target_scaler: TargetScaler | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Evaluate one ablation variant on all client test splits."""
     client_rows: list[dict[str, float | int | str]] = []
     prediction_rows: list[pd.DataFrame] = []
     for client in clients:
-        y_true, y_pred = collect_predictions(model, client.test_loader, device)
+        y_true, y_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
         metrics = compute_regression_metrics(y_true, y_pred)
         entity_columns = {
             "client_id": client.client_id,
@@ -201,7 +207,7 @@ def evaluate_variant(
     return pd.DataFrame(client_rows), pd.concat(prediction_rows, ignore_index=True)
 
 
-def run_variant(config: ExperimentConfig, clients: list[ClientData], device: str, variant: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def run_variant(config: ExperimentConfig, clients: list[ClientData], device: str, variant: str, target_scaler: TargetScaler | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Run one ablation variant using standard FedAvg only."""
     model_fn = build_model_fn(variant, resolve_input_channels(config), config.prediction_horizon)
     global_model = model_fn().to(device)
@@ -222,14 +228,28 @@ def run_variant(config: ExperimentConfig, clients: list[ClientData], device: str
         global_model=global_model,
         clients=fed_clients,
         communication_rounds=config.communication_rounds,
-        evaluate_fn=lambda model: evaluate_round(model, clients, device),
+        evaluate_fn=lambda model: evaluate_round(model, clients, device, target_scaler=target_scaler),
     )
     history_df = pd.DataFrame(history)
     if not history_df.empty:
         history_df.insert(0, "variant", variant)
         history_df.insert(1, "variant_label", VARIANT_LABELS[variant])
-    client_metrics_df, prediction_df = evaluate_variant(trained_model, clients, device, variant)
+    client_metrics_df, prediction_df = evaluate_variant(trained_model, clients, device, variant, target_scaler=target_scaler)
     return client_metrics_df, history_df, prediction_df
+
+
+def limit_prediction_samples_by_variant(prediction_df: pd.DataFrame, total_limit: int = 400) -> pd.DataFrame:
+    """Keep a balanced prediction sample subset so every variant is represented."""
+    if total_limit <= 0 or prediction_df.empty or "variant" not in prediction_df.columns:
+        return prediction_df.copy()
+    variant_groups = list(prediction_df.groupby("variant", sort=False))
+    base_quota = max(total_limit // len(variant_groups), 1)
+    remainder = max(total_limit - base_quota * len(variant_groups), 0)
+    sampled_frames: list[pd.DataFrame] = []
+    for index, (_, group_df) in enumerate(variant_groups):
+        quota = base_quota + (1 if index < remainder else 0)
+        sampled_frames.append(group_df.head(quota))
+    return pd.concat(sampled_frames, ignore_index=True)
 
 
 def export_results(
@@ -242,6 +262,8 @@ def export_results(
     ablation_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
     prediction_df: pd.DataFrame,
+    input_scaler: InputScaler | None = None,
+    target_scaler: TargetScaler | None = None,
 ) -> None:
     """Write ablation experiment artifacts."""
     ablation_metrics_df = (
@@ -262,7 +284,11 @@ def export_results(
     write_csv(ablation_summary_df, output_dir / "ablation_summary.csv")
     write_csv(ablation_client_df, output_dir / "ablation_client_metrics.csv")
     write_csv(convergence_df, output_dir / "convergence_history.csv")
-    write_csv(prediction_df.head(400), output_dir / "prediction_samples.csv")
+    write_csv(limit_prediction_samples_by_variant(prediction_df), output_dir / "prediction_samples.csv")
+    if input_scaler is not None:
+        write_json(input_scaler.to_dict(), output_dir / "input_scaler.json")
+    if target_scaler is not None:
+        write_json(target_scaler.to_dict(), output_dir / "target_scaler.json")
     write_text(
         "\n".join(
             [
@@ -272,6 +298,8 @@ def export_results(
                 "- 当前正式默认输入为 tensor-only：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。",
                 "- 当前客户端表示 pooled-grid-region client，并默认仅使用 active regions。",
                 "- 数据划分为按 target time 的时间顺序 train/val/test，不复用训练集、验证集与测试集。",
+                "- 输入与目标归一化使用与实验 1 一致的 train-split 统计量 z-score normalization。",
+                "- 评估时对预测值执行反归一化回原始尺度。",
             ]
         ),
         output_dir / "experiment_notes_zh.md",
@@ -296,12 +324,34 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     clients, split_summary, selected_regions_df = build_client_data(config)
     split_summary["variants"] = [VARIANT_LABELS[name] for name in (config.variants or DEFAULT_VARIANTS)]
 
+    # --- normalization: reuse experiment 1 scaler pipeline ---
+    input_scaler: InputScaler | None = None
+    target_scaler: TargetScaler | None = None
+    if config.input_normalization:
+        input_scaler = fit_input_scaler(clients, eps=config.input_normalization_eps)
+        split_summary["input_normalization"] = {
+            "enabled": True,
+            **input_scaler.to_dict(),
+        }
+    else:
+        split_summary["input_normalization"] = {"enabled": False}
+    if config.target_normalization:
+        target_scaler = fit_target_scaler(clients, eps=config.target_normalization_eps)
+        split_summary["target_normalization"] = {
+            "enabled": True,
+            "mean": target_scaler.mean,
+            "std": target_scaler.std,
+        }
+    else:
+        split_summary["target_normalization"] = {"enabled": False}
+    apply_dataset_normalization(clients, input_scaler=input_scaler, target_scaler=target_scaler)
+
     variant_names = config.variants or DEFAULT_VARIANTS
     all_client_rows: list[pd.DataFrame] = []
     all_history_rows: list[pd.DataFrame] = []
     all_prediction_rows: list[pd.DataFrame] = []
     for variant in variant_names:
-        client_df, history_df, prediction_df = run_variant(config, clients, device, variant)
+        client_df, history_df, prediction_df = run_variant(config, clients, device, variant, target_scaler=target_scaler)
         all_client_rows.append(client_df)
         all_history_rows.append(history_df)
         all_prediction_rows.append(prediction_df)
@@ -331,6 +381,8 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         ablation_client_df=ablation_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
+        input_scaler=input_scaler,
+        target_scaler=target_scaler,
     )
     return {
         "output_dir": str(output_dir),
