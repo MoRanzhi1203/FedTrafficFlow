@@ -129,6 +129,19 @@ pseudo_gpu_cluster_time = cpu_cluster_profile_time / 2.2798
 | 新实验 5 | 全局所有网格按相似度划分为客户端的对比实验 | CPU | CUDA | smoke 用 `region_client_tensor_smoke`；formal 用 `cluster_main_full_without_cap` | CUDA: `1.2-1.4` 秒；CPU: `3.2-4.4` 秒 | `6.1-7.1` 小时 | `15.7-21.7` 小时 | 中 |
 | 新实验 6 | 全局所有网格按相似度划分为客户端的消融实验 | CPU | CUDA | smoke 用 `region_ablation_tensor_smoke`；formal 用新实验 5 formal 同设置乘 `3.0-4.0` | CUDA: `3.7-5.8` 秒；CPU: `9.5-17.6` 秒 | `18.2-28.6` 小时 | `47.0-86.8` 小时 | 中 |
 
+该表中的“当前结果设备”指已有结果目录实际使用或体现出的设备；不代表 formal 建议设备。formal 建议设备以“当前已有结果设备与 formal 建议设备”表为准。
+
+## 当前已有结果设备与 formal 建议设备
+
+| 实验 | 当前已有结果设备 | 当前设备依据 | 后续 formal 建议设备 | 说明 |
+|---|---|---|---|---|
+| 实验 1 | CUDA / GPU | `grid_cell_main_full_cuda_v4` 与 diagnostics 目录均为 CUDA 结果 | CUDA / GPU | 当前 formal/diagnostics 已经走 CUDA，后续继续用 CUDA 保持一致 |
+| 实验 2 | CPU | `single_intersection_ablation` / `single_intersection_ablation_tensor` 现有结果偏 CPU | CUDA / GPU | CPU 可用于 smoke 或轻量验证，但 formal 消融建议 CUDA |
+| 实验 3 | CUDA / GPU | `full_cells_similarity_k5_smoke_r1_e1_lr5e4_cuda` 与 `full_cells_spatial_k5_smoke_r1_e1_lr5e4_cuda` 为 CUDA smoke | CUDA / GPU | grouped-client formal 数据量大，CPU formal 不建议 |
+| 实验 4 | 未确认 | 当前没有独立 ablation formal 结果目录 | CUDA / GPU | 建议沿用实验 3 的 CUDA 优先；当前设备不能硬判 |
+| 实验 5 | CPU | `region_client_tensor_smoke` 当前 smoke 偏 CPU | CUDA / GPU | CPU 只适合连通性 smoke，formal 建议 CUDA |
+| 实验 6 | CPU | `region_ablation_tensor_smoke` 当前 smoke 偏 CPU | CUDA / GPU | CPU 只适合连通性 smoke，formal 消融建议 CUDA |
+
 ## 6. 分实验说明
 
 ### 实验 1：单个网格作为单个客户端的对比实验
@@ -314,13 +327,36 @@ Measure-Command {
 
 - 已发现真实 elapsed 字段，但它们是部分覆盖而不是全覆盖。
 - 因此当前文件不是纯猜测，但也不是全实验线完整实测 benchmark；它属于“部分实测 + 参数化外推”的可排期估算。
-- 建议必须使用 CUDA 的实验：
-  - 新实验 3 formal
-  - 新实验 4 formal
-  - 新实验 5 formal
-  - 新实验 6 formal
-- CPU 只适合 smoke 或非常轻量验证的实验：
-  - 新实验 2 smoke
-  - 新实验 5 smoke
-  - 新实验 6 smoke
-- 即使新实验 1 CPU formal 估算仍在几十分钟内，主线正式运行仍建议继续沿用 CUDA，以保持与现有 formal/diagnostics 结果一致。
+
+### 设备判断结论
+
+当前已有结果设备：
+
+- 实验 1：CUDA / GPU。
+- 实验 2：CPU。
+- 实验 3：CUDA / GPU。
+- 实验 4：未确认，因为没有独立结果目录。
+- 实验 5：CPU。
+- 实验 6：CPU。
+
+后续 formal 正式运行建议：
+
+- 实验 1：建议 CUDA / GPU。
+- 实验 2：建议 CUDA / GPU。
+- 实验 3：必须优先 CUDA / GPU。
+- 实验 4：必须优先 CUDA / GPU。
+- 实验 5：必须优先 CUDA / GPU。
+- 实验 6：必须优先 CUDA / GPU。
+
+说明：
+
+- “当前已有结果设备”不等于“后续 formal 应使用设备”。
+- 实验 2、5、6 当前已有结果偏 CPU，主要是 smoke 或轻量结果；这不代表 formal 也建议 CPU。
+- 实验 4 没有独立结果目录，因此当前设备不能硬判，只能按 grouped-client 消融的规模建议 CUDA。
+- 实验 3-6 的 CPU formal 时间过长，因此 formal 不建议使用 CPU。
+
+CPU 适合 smoke 或轻量验证的实验：
+
+- 新实验 2：当前已有结果偏 CPU，但 formal 消融建议 CUDA。
+- 新实验 5：当前 smoke 偏 CPU，但 formal 建议 CUDA。
+- 新实验 6：当前 smoke 偏 CPU，但 formal 消融建议 CUDA。
