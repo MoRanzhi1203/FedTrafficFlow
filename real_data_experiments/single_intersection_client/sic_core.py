@@ -866,14 +866,15 @@ def evaluate_daily_seasonal_naive(
     calendar_features: Optional[pd.DataFrame] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """DailySeasonalNaive: predict y[t] = y[t-96] (yesterday same slot)."""
-    from real_data_experiments.common.calendar_baselines import daily_seasonal_naive as _dsn
+    from real_data_experiments.common.calendar_baselines import daily_seasonal_naive_from_full_sequence as _dsn
     client_rows = []
     prediction_frames = []
     for client in clients:
-        y_train_all, test_indices, y_test = _extract_full_client_sequence(config, client)
-        if y_train_all is None:
+        result = _extract_client_split_sequences(config, client)
+        if result[0] is None:
             continue
-        preds = _dsn(y_train_all, y_test, test_indices)
+        y_train_profile, train_time_indices, y_test, test_time_indices, full_seq = result
+        preds = _dsn(full_seq, test_time_indices)
         metrics = compute_regression_metrics(y_test, preds)
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": "DailySeasonalNaive", **metrics})
@@ -887,14 +888,15 @@ def evaluate_weekly_seasonal_naive(
     calendar_features: Optional[pd.DataFrame] = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """WeeklySeasonalNaive: predict y[t] = y[t-672] (last week same day+slot)."""
-    from real_data_experiments.common.calendar_baselines import weekly_seasonal_naive as _wsn
+    from real_data_experiments.common.calendar_baselines import weekly_seasonal_naive_from_full_sequence as _wsn
     client_rows = []
     prediction_frames = []
     for client in clients:
-        y_train_all, test_indices, y_test = _extract_full_client_sequence(config, client)
-        if y_train_all is None:
+        result = _extract_client_split_sequences(config, client)
+        if result[0] is None:
             continue
-        preds = _wsn(y_train_all, y_test, test_indices)
+        y_train_profile, train_time_indices, y_test, test_time_indices, full_seq = result
+        preds = _wsn(full_seq, test_time_indices)
         metrics = compute_regression_metrics(y_test, preds)
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": "WeeklySeasonalNaive", **metrics})
@@ -914,19 +916,18 @@ def evaluate_calendar_profile_naive(
     client_rows = []
     prediction_frames = []
     for ci, client in enumerate(clients):
-        y_train_all, test_indices, y_test = _extract_full_client_sequence(config, client)
-        if y_train_all is None:
+        result = _extract_client_split_sequences(config, client)
+        if result[0] is None:
             continue
-        n_train = len(y_train_all)
+        y_train_profile, train_time_indices, y_test, test_time_indices, full_seq = result
         if calendar_features is not None:
-            cal_train = calendar_features.iloc[:n_train]
-            test_end = n_train + len(y_test)
-            cal_test = calendar_features.iloc[n_train:test_end].reset_index(drop=True)
+            cal_train = calendar_features.iloc[train_time_indices].reset_index(drop=True)
+            cal_test = calendar_features.iloc[test_time_indices].reset_index(drop=True)
         else:
-            cal_train = pd.DataFrame({"slot_of_day": np.tile(np.arange(96), n_train // 96 + 1)[:n_train]})
+            cal_train = pd.DataFrame({"slot_of_day": np.tile(np.arange(96), len(y_train_profile) // 96 + 1)[:len(y_train_profile)]})
             cal_test = pd.DataFrame({"slot_of_day": np.tile(np.arange(96), len(y_test) // 96 + 1)[:len(y_test)]})
-        profile = build_client_seasonal_profile(y_train_all, cal_train, "weekday_weekend")
-        preds = _cpn_predict(y_train_all, y_test, test_indices, cal_test, profile)
+        profile = build_client_seasonal_profile(y_train_profile, cal_train, "weekday_weekend")
+        preds = _cpn_predict(y_train_profile, y_test, test_time_indices, cal_test, profile)
         metrics = compute_regression_metrics(y_test, preds)
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": "CalendarProfileNaive", **metrics})
@@ -934,61 +935,84 @@ def evaluate_calendar_profile_naive(
     return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
 
 
-def _extract_full_client_sequence(
+def _extract_client_split_sequences(
     config: ExperimentConfig, client
-) -> tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
-    """Extract full time series for a client from the tensor, using train/test split.
+) -> tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
+    """Extract train-profile and test-aligned sequences from the full tensor.
 
-    Returns (y_train_all, test_time_indices, y_test) or (None, None, None) on failure.
+    Returns (y_train_profile, train_time_indices, y_test, test_time_indices, full_seq)
+    or all-None on failure.
+
+    - y_train_profile: target-channel values for the official train split only
+    - train_time_indices: global time indices for y_train_profile
+    - y_test: target values read from client.test_loader.dataset (identical to FedAvg targets)
+    - test_time_indices: global target time indices for each test sample
+    - full_seq: the complete target-channel time series for lag-based lookback
     """
     try:
         bundle = load_grid_tensor_bundle(config.tensor_path, config.regions_path)
     except Exception:
-        return None, None, None
+        return None, None, None, None, None
 
     target_ch = config.target_channel
     entity_id = getattr(client, 'entity_id', getattr(client, 'node_id', None))
     if entity_id is None:
-        return None, None, None
+        return None, None, None, None, None
 
-    # Find the grid index for this entity_id
-    grid_idx = None
     regions_df = bundle.regions_df
-    if 'region_id' in regions_df.columns:
-        match = regions_df[regions_df['region_id'] == int(entity_id)]
-        if len(match) > 0:
-            grid_idx = regions_df.index.get_loc(match.index[0])
-
-    if grid_idx is None:
-        return None, None, None
+    if 'region_id' not in regions_df.columns:
+        return None, None, None, None, None
+    match = regions_df[regions_df['region_id'] == int(entity_id)]
+    if len(match) == 0:
+        return None, None, None, None, None
+    grid_idx = regions_df.index.get_loc(match.index[0])
 
     full_seq = bundle.tensor[target_ch, grid_idx, :].numpy().astype(np.float64)
-    total = len(full_seq)
-    train_len = int(config.train_ratio * total)
-    y_train_all = full_seq[:train_len]
-    y_test = full_seq[train_len:]
-    test_indices = np.arange(train_len, total, dtype=int)
-    return y_train_all, test_indices, y_test
 
+    time_bounds = build_time_split_bounds(
+        time_count=int(bundle.tensor.shape[2]),
+        train_ratio=config.train_ratio,
+        val_ratio=config.val_ratio,
+    )
+    train_start = int(time_bounds["train_start"])
+    train_end = int(time_bounds["train_end"])
+    y_train_profile = full_seq[train_start:train_end]
+    train_time_indices = np.arange(train_start, train_end, dtype=int)
 
-def _extract_client_data(base_dataset, client):
-    """Extract y_train_all, test_indices, y_test from client data."""
-    y_all = []
-    for idx in range(len(base_dataset)):
-        _, target = base_dataset[idx]
-        y_all.append(float(target.view(-1)[0].item()))
-    y_all = np.array(y_all, dtype=np.float64)
-    total = len(y_all)
-    test_size = len(client.test_loader.dataset) if hasattr(client.test_loader, 'dataset') else total
-    train_len = total - test_size
-    y_train_all = y_all[:train_len]
-    y_test = y_all[train_len:]
-    test_indices = np.arange(train_len, total, dtype=int)
-    return y_train_all, test_indices, y_test
+    # Get test targets directly from test_loader.dataset (guarantees alignment with FedAvg/Independent/NaiveLastValue)
+    test_dataset = client.test_loader.dataset
+    if hasattr(test_dataset, "base_dataset"):
+        test_dataset = test_dataset.base_dataset
+    y_test_list = []
+    for idx in range(len(test_dataset)):
+        _, target = test_dataset[idx]
+        y_test_list.append(float(target.view(-1)[0].item()))
+    y_test = np.asarray(y_test_list, dtype=np.float64)
+
+    # Compute target time indices: window_starts[i] + input_length + horizon - 1
+    offset = config.sequence_length + config.prediction_horizon - 1
+    window_starts = getattr(test_dataset, "window_starts", None)
+    if window_starts is not None:
+        test_time_indices = np.asarray([int(ws) + offset for ws in window_starts], dtype=int)
+    else:
+        test_start = int(time_bounds["test_start"])
+        test_time_indices = np.arange(test_start + offset, test_start + offset + len(y_test), dtype=int)
+
+    if len(y_test) != len(test_time_indices):
+        raise ValueError(
+            f"Mismatched lengths for client {entity_id}: y_test={len(y_test)}, "
+            f"test_time_indices={len(test_time_indices)}"
+        )
+    max_diff = np.max(np.abs(y_test - full_seq[test_time_indices])) if len(y_test) > 0 else 0.0
+    if max_diff > 1e-3:
+        raise ValueError(
+            f"Seasonal baseline target alignment failed for client {entity_id}: max_diff={max_diff:.6f}. "
+            f"Ensure test_dataset targets match full_seq at computed target time indices."
+        )
+    return y_train_profile, train_time_indices, y_test, test_time_indices, full_seq
 
 
 def _make_pred_df(client, method, y_test, preds):
-    import pandas as pd
     record = _make_entity_record(client)
     skip_keys = {"train_samples", "val_samples", "test_samples"}
     return pd.DataFrame({
@@ -998,11 +1022,6 @@ def _make_pred_df(client, method, y_test, preds):
         "y_true": y_test,
         "y_pred": preds,
     })
-    sampled_frames: list[pd.DataFrame] = []
-    for index, (_, group_df) in enumerate(method_groups):
-        quota = base_quota + (1 if index < remainder else 0)
-        sampled_frames.append(group_df.head(quota))
-    return pd.concat(sampled_frames, ignore_index=True)
 
 
 def export_results(

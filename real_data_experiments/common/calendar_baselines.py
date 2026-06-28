@@ -108,3 +108,52 @@ def calendar_profile_naive_predict(
         prof = profile["daily_fallback"] if "daily_fallback" in profile else profile["profile"]
         preds = np.array([prof.get(s, profile["train_mean"]) for s in slot_of_day])
     return preds
+
+
+def daily_seasonal_naive_from_full_sequence(
+    full_seq: np.ndarray,
+    test_time_indices: np.ndarray,
+) -> np.ndarray:
+    """DailySeasonalNaive: predict y[t] = full_seq[t - 96] for each test target time.
+
+    Uses the complete time series (including train/val/test) for lag-based lookback.
+    No future data leakage: only t-96 is accessed (which may be in train, val, or earlier test).
+    """
+    preds = np.empty(len(test_time_indices), dtype=np.float64)
+    train_mean = float(np.mean(full_seq))
+    for i, t in enumerate(test_time_indices):
+        ref = int(t) - 96
+        if 0 <= ref < len(full_seq):
+            preds[i] = full_seq[ref]
+        elif t - 1 >= 0:
+            preds[i] = full_seq[int(t) - 1] if int(t) - 1 < len(full_seq) else train_mean
+        else:
+            preds[i] = train_mean
+    return preds
+
+
+def weekly_seasonal_naive_from_full_sequence(
+    full_seq: np.ndarray,
+    test_time_indices: np.ndarray,
+) -> np.ndarray:
+    """WeeklySeasonalNaive: predict y[t] = full_seq[t - 672] for each test target time.
+
+    Fallback chain: t-672 -> t-96 -> t-1 -> train_mean.
+    Uses the complete time series for lag-based lookback.
+    """
+    preds = np.empty(len(test_time_indices), dtype=np.float64)
+    train_mean = float(np.mean(full_seq))
+    for i, t in enumerate(test_time_indices):
+        ti = int(t)
+        ref_weekly = ti - 672
+        ref_daily = ti - 96
+        ref_last = ti - 1
+        if 0 <= ref_weekly < len(full_seq):
+            preds[i] = full_seq[ref_weekly]
+        elif 0 <= ref_daily < len(full_seq):
+            preds[i] = full_seq[ref_daily]
+        elif 0 <= ref_last < len(full_seq):
+            preds[i] = full_seq[ref_last]
+        else:
+            preds[i] = train_mean
+    return preds
