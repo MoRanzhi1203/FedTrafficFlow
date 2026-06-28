@@ -2,21 +2,26 @@
 
 ## 1. 目的
 
-本文件用于估算新实验 1-6 的代码运行时间，并核查每个实验当前主要使用 CPU 还是 GPU/CUDA。
+本文件用于给出新实验 1-6 的可排期运行时间估算，并核查每条实验线当前主要使用 CPU 还是 GPU/CUDA。
 
 ## 2. 估算边界
 
 - 本文件不运行完整训练。
-- 本文件基于配置、README、`run_config.json`、`split_summary.json`、已有结果目录和环境检查估算。
-- 估算结果用于排期和资源规划，不等同于正式 benchmark。
-- 当前 shell 环境中的 `python` 无法直接 `import torch`，因此环境节中的 `torch` 字段以当前 shell 检查结果为准；设备判断主要依赖 `nvidia-smi`、README 命令和已有 `run_config.json`。
-- `nvidia-smi` 可用只能说明机器层面支持 GPU，不能直接说明每条实验线都实际使用了 GPU；每个实验的设备判断以 `run_config.json`、结果路径和 README 命令为主。
-- 估算依据优先级从高到低如下：
-  - 已有结果目录中的 `run_config.json`
-  - 已有结果目录中的 `split_summary.json`、`main_metrics.csv`、`ablation_metrics.csv`
-  - README 或 migration 文档中的 smoke / formal 命令
-  - `config.py` 中的默认参数，例如 `rounds`、`local_epochs`、`batch_size`、`num_clients`、`partition_method`、`device`
-  - 若无真实 elapsed 字段，则只给区间估算，不写精确秒数
+- 本文件基于已有 `run_config.json`、`split_summary.json`、`profiling_summary.json`、`compute_time_estimation_summary.csv`、`profile_*.csv`、README 和 config 默认参数做静态估算。
+- 本文件用于排期和资源规划，不等同于正式 benchmark。
+- 当前 `results` 中已经存在部分真实 elapsed 字段，不是完全凭目录名猜测。
+- 但 grouped-client / global-partition 的 GPU direct profile 仍然缺失，因此实验 3-6 的 GPU 数字属于“部分实测 + 参数化换算”，置信度低于实验 1-2 的 grid-cell GPU 估算。
+- `nvidia-smi` 可用只说明机器层面支持 GPU，不能直接说明每条实验线实际用了 GPU；具体设备判断仍以 `run_config.json`、结果路径和已有 profile 为主。
+
+### 已找到的真实 elapsed 证据
+
+- `results/real_data_experiments/compute_time_profile/profiling_summary.json`
+- `results/real_data_experiments/compute_time_profile/profile_grid_cell_main_cpu.csv`
+- `results/real_data_experiments/compute_time_profile/profile_grid_cell_ablation_cpu.csv`
+- `results/real_data_experiments/compute_time_profile/profile_cluster_main_cpu.csv`
+- `results/real_data_experiments/compute_time_profile/profile_cluster_ablation_cpu.csv`
+- `results/real_data_experiments/gpu_light_profile/grid_cell_main_r3e1/profiling_summary.json`
+- `results/real_data_experiments/gpu_light_profile/grid_cell_ablation_r2e1/profiling_summary.json`
 
 ## 3. 当前运行环境
 
@@ -28,190 +33,294 @@
 | cuda_device_name | `N/A`，当前 shell 中 `import torch` 失败 |
 | nvidia-smi | 可用，检测到 `NVIDIA GeForce RTX 3060 Laptop GPU`，Driver `560.70`，CUDA `12.6` |
 
-## 4. 新实验 1-6 总览
+## 4. 估算公式与依据
 
-| 新编号 | 实验含义 | 目录 | 入口脚本 | 当前已有结果 | 当前设备判断 | smoke 估算 | formal 估算 | 置信度 |
+### 4.1 主实验公式
+
+对比实验采用如下公式：
+
+```text
+estimated_time =
+base_profile_time
+* (target_rounds / profile_rounds)
+* (target_local_epochs / profile_local_epochs)
+* (target_selected_clients_per_round / profile_selected_clients_per_round)
+* data_scale_factor
+* safety_factor
+```
+
+本文件将 `data_scale_factor` 做成 batch-adjusted 形式，以避免 profile 与目标配置的 `batch_size` 不同导致失真：
+
+```text
+data_scale_factor =
+(target_avg_train_samples_per_selected_client / target_batch_size)
+/
+(profile_avg_train_samples_per_selected_client / profile_batch_size)
+```
+
+### 4.2 消融实验公式
+
+消融实验统一按完整模型同设置时间做放大：
+
+```text
+estimated_ablation_time =
+estimated_full_model_time
+* variant_count
+* variant_complexity_factor
+```
+
+本轮固定采用：
+
+```text
+variant_count = 4
+variant_complexity_factor = 0.75-1.0
+```
+
+因此：
+
+```text
+estimated_ablation_time ~= estimated_full_model_time * 3.0-4.0
+```
+
+### 4.3 GPU 转换因子
+
+- 直接实测 GPU wall-clock 只覆盖 grid-cell 主实验与 grid-cell 消融实验。
+- grouped-client / global-partition 的 GPU direct profile 缺失，因此实验 3-6 的 GPU 估算采用“CPU cluster profile + 实测 grid-cell CPU/GPU throughput transfer factor”。
+- transfer factor 来自以下两条真实 profile：
+  - CPU：`profile_cpu_grid_cell_main_r1e1`，`wall_time_sec = 7.573047`，`rounds = 1`，`batch_size = 32`
+  - GPU：`profile_gpu_grid_cell_main_r3e1`，`wall_time_sec = 19.939549`，`rounds = 3`，`batch_size = 16`
+- 归一化到相同 `r1e1 + batch_size=32` 后：
+
+```text
+GPU equivalent r1e1 b32 time = 19.939549 / 3 * (16 / 32) = 3.323258 sec
+CPU/GPU transfer factor = 7.573047 / 3.323258 = 2.2798
+```
+
+- 因此实验 3-6 的 GPU cluster 基线时间采用：
+
+```text
+pseudo_gpu_cluster_time = cpu_cluster_profile_time / 2.2798
+```
+
+### 4.4 Safety Factor
+
+- CUDA：`1.15-1.35`
+- CPU：`1.30-1.80`
+
+### 4.5 参考 profile 基线
+
+| profile | 实测 wall_time_sec | rounds | local_epochs | clients | batch_size | total_train_samples | 备注 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `profile_cpu_grid_cell_main_r1e1` | 7.573047 | 1 | 1 | 3 | 32 | 12261 | 真实 CPU elapsed |
+| `profile_cpu_grid_cell_ablation_r1e1` | 10.678193 | 1 | 1 | 3 | 32 | 12261 | 真实 CPU elapsed，整次运行已包含 4 个变体 |
+| `profile_cpu_cluster_main_r1e1` | 4.874957 | 1 | 1 | 3 | 32 | 6144 | 真实 CPU elapsed，`max_samples_per_client_split=2048` |
+| `profile_cpu_cluster_ablation_r1e1` | 9.392968 | 1 | 1 | 3 | 32 | 6144 | 真实 CPU elapsed，整次运行已包含 4 个变体 |
+| `profile_gpu_grid_cell_main_r3e1` | 19.939549 | 3 | 1 | 3 | 16 | 12261 | 真实 GPU elapsed |
+| `profile_gpu_grid_cell_ablation_r2e1` | 49.222596 | 2 | 1 | 3 | 16 | 12261 | 真实 GPU elapsed，整次运行已包含 4 个变体 |
+
+## 5. 新实验 1-6 总览
+
+| 新编号 | 实验含义 | 当前结果设备 | 建议正式设备 | 当前配置依据 | smoke 估算时间 | formal 估算时间 CUDA | formal 估算时间 CPU | 置信度 |
 |---|---|---|---|---|---|---|---|---|
-| 新实验 1 | 单个网格作为单个客户端的对比实验 | `real_data_experiments/single_intersection_client/` | `python -m real_data_experiments.single_intersection_client.sic_core` | `grid_cell_main_full_cuda_v4`、`experiment1_fedavg_rounds_smoke_r40_cuda`、`experiment1_fedavg_rounds_smoke_r60_cuda`、`experiment1_metric_opt_k5_r80_e2_lr5e4_cuda` | GPU/CUDA | 数分钟级 | `30` 分钟到数小时 | 高 |
-| 新实验 2 | 单个网格作为单个客户端的消融实验 | `real_data_experiments/single_intersection_ablation/` | `python -m real_data_experiments.single_intersection_ablation.sia_core` | `single_intersection_ablation`、`single_intersection_ablation_tensor` | CPU | `5-20` 分钟 | `2-6` 小时 | 中 |
-| 新实验 3 | 多个相似网格合并为一个客户端的对比实验 | `real_data_experiments/region_client_full_cells/` | `python -m real_data_experiments.region_client_full_cells.rfc_core` | `full_cells_similarity_k5_smoke_r1_e1_lr5e4_cuda`、`full_cells_spatial_k5_smoke_r1_e1_lr5e4_cuda` | GPU/CUDA | 数分钟到十几分钟 | 数小时级，重设置时可能接近过夜 | 中 |
-| 新实验 4 | 多个相似网格合并为一个客户端的消融实验 | `real_data_experiments/region_client_full_cells/` | 当前尚无独立 ablation 入口冻结为单独正式线 | 暂无独立 formal ablation 结果目录 | 未确认，按当前代码推定 GPU 优先 | `30-90` 分钟 | `1-2` 天级 | 低 |
-| 新实验 5 | 全局所有网格按相似度划分为客户端的对比实验 | `real_data_experiments/region_client/` | `python -m real_data_experiments.region_client.rc_core` | `region_client_tensor_smoke` | CPU | CPU 连通性检查可在 `1-10` 分钟内完成 | 数小时级，正式跑建议改 CUDA | 中 |
-| 新实验 6 | 全局所有网格按相似度划分为客户端的消融实验 | `real_data_experiments/region_ablation/` | `python -m real_data_experiments.region_ablation.ra_core` | `region_ablation_tensor_smoke` | CPU | CPU 连通性检查可在 `5-20` 分钟内完成 | 约为实验 5 同设置的 `3-4` 倍，正式跑建议改 CUDA | 中 |
+| 新实验 1 | 单个网格作为单个客户端的对比实验 | CUDA | CUDA | formal v4 + `r40/r60/r80_e2` diagnostics | CUDA: `8.5-22.4` 分钟；CPU: `21.9-68.2` 分钟 | `6.4-7.5` 分钟 | `16.4-22.7` 分钟 | 中-高 |
+| 新实验 2 | 单个网格作为单个客户端的消融实验 | CPU | CUDA | smoke 用 `single_intersection_ablation_tensor/run_config.json`；formal 用新实验 1 formal 同设置乘 `3.0-4.0` | CUDA: `7.7-12.0` 秒；CPU: `19.7-36.4` 秒 | `19.1-29.9` 分钟 | `49.2-90.9` 分钟 | 中 |
+| 新实验 3 | 多个相似网格合并为一个客户端的对比实验 | CUDA | CUDA | smoke 用 `full_cells_similarity_k5_smoke_r1_e1_lr5e4_cuda`；formal 用 `rfc_config.py` 默认 `80x2` | CUDA: `6.1-7.1` 分钟；CPU: `15.7-21.7` 分钟 | `16.2-19.0` 小时 | `41.8-57.9` 小时 | 中 |
+| 新实验 4 | 多个相似网格合并为一个客户端的消融实验 | 未确认 | CUDA | 无独立 formal 结果目录；按新实验 3 同设置乘 `3.0-4.0` | CUDA: `18.2-28.6` 分钟；CPU: `47.0-86.8` 分钟 | `48.7-76.2` 小时 | `125.3-231.4` 小时 | 低 |
+| 新实验 5 | 全局所有网格按相似度划分为客户端的对比实验 | CPU | CUDA | smoke 用 `region_client_tensor_smoke`；formal 用 `cluster_main_full_without_cap` | CUDA: `1.2-1.4` 秒；CPU: `3.2-4.4` 秒 | `6.1-7.1` 小时 | `15.7-21.7` 小时 | 中 |
+| 新实验 6 | 全局所有网格按相似度划分为客户端的消融实验 | CPU | CUDA | smoke 用 `region_ablation_tensor_smoke`；formal 用新实验 5 formal 同设置乘 `3.0-4.0` | CUDA: `3.7-5.8` 秒；CPU: `9.5-17.6` 秒 | `18.2-28.6` 小时 | `47.0-86.8` 小时 | 中 |
 
-## 5. 分实验说明
+## 6. 分实验说明
 
 ### 实验 1：单个网格作为单个客户端的对比实验
 
 - 目录：`real_data_experiments/single_intersection_client/`
 - 入口：`python -m real_data_experiments.single_intersection_client.sic_core`
-- 已有结果：
-  - `results/real_data_experiments/formal/grid_cell_main_full_cuda_v4/`
-  - `results/real_data_experiments/diagnostics/experiment1_fedavg_rounds_smoke_r40_cuda/`
-  - `results/real_data_experiments/diagnostics/experiment1_fedavg_rounds_smoke_r60_cuda/`
-  - `results/real_data_experiments/diagnostics/experiment1_metric_opt_k5_r80_e2_lr5e4_cuda/`
-- CPU/GPU 判断：
-  - `sic_config.py` 默认 `device = "auto"`。
-  - 现有 formal 与 diagnostics 的 `run_config.json` 都明确写 `device = "cuda"`。
-  - 结果目录名也包含 `_cuda`。
-  - 结论：当前已有主结果链是 GPU/CUDA。
-- 运行时间估算：
-  - smoke：数分钟级。
-  - formal：`30` 分钟到数小时。
-- 估算依据：
-  - `grid_cell_main_full_cuda_v4/run_config.json`：`num_clients=5`、`batch_size=32`、`local_epochs=3`、`communication_rounds=20`、`device=cuda`。
-  - `grid_cell_main_full_cuda_v4/split_summary.json`：5 个 client 每个训练集约 `4087` 个样本，合计约 `20435` 个 train windows。
-  - 按 `batch_size=32` 估算，每轮约 `5 * ceil(4087/32) ≈ 640` 个 client-local batches；formal 约 `20 * 3 * 640 ≈ 38400` 个 local batches。
-  - diagnostics 中还存在 `r40`、`r60`、`r80/e2/lr5e-4` 的 CUDA 结果，说明该实验线确实以 CUDA 反复运行过。
-- 风险点：
-  - 如果改用 CPU 跑 formal，耗时会明显拉长到数小时甚至过夜，不建议。
-  - 当前 shell 无法 `import torch`，因此本次环境核验不能直接复现实验时的 `torch.cuda.is_available()`。
+- 目标配置：
+  - formal 来源：`results/real_data_experiments/formal/grid_cell_main_full_cuda_v4/run_config.json`
+  - rounds：`20`
+  - local_epochs：`3`
+  - batch_size：`32`
+  - num_clients：`5`
+  - selected_clients_per_round：`5`
+  - device：`cuda`
+  - train_total：`20435`
+- 参考 profile：
+  - CPU：`profile_cpu_grid_cell_main_r1e1/profile_grid_cell_main_cpu.csv`
+  - GPU：`gpu_light_profile/grid_cell_main_r3e1/profiling_summary.json`
+- 放大系数：
+  - formal 相对 CPU profile：`rounds_factor=20.0`，`local_epoch_factor=3.0`，`client_factor=1.6667`，`data_scale_factor=1.0`，`safety_factor=1.30-1.80`
+  - formal 相对 GPU profile：`rounds_factor=6.6667`，`local_epoch_factor=3.0`，`client_factor=1.6667`，`data_scale_factor=0.5`，`safety_factor=1.15-1.35`
+- 现有 smoke 配置：
+  - `r40/e3/b32`：CUDA `12.7-15.0` 分钟，CPU `32.8-45.4` 分钟
+  - `r60/e3/b32`：CUDA `19.1-22.4` 分钟，CPU `49.2-68.2` 分钟
+  - `r80/e2/b64`：CUDA `8.5-10.0` 分钟，CPU `21.9-30.4` 分钟
+- 估算结果：
+  - CUDA smoke：`8.5-22.4` 分钟
+  - CUDA formal：`6.4-7.5` 分钟
+  - CPU smoke：`21.9-68.2` 分钟
+  - CPU formal：`16.4-22.7` 分钟
 
 ### 实验 2：单个网格作为单个客户端的消融实验
 
 - 目录：`real_data_experiments/single_intersection_ablation/`
 - 入口：`python -m real_data_experiments.single_intersection_ablation.sia_core`
-- 已有结果：
-  - `results/real_data_experiments/single_intersection_ablation/`
-  - `results/real_data_experiments/single_intersection_ablation_tensor/`
-- CPU/GPU 判断：
-  - `sia_config.py` 默认 `device = "auto"`。
-  - 两个已有结果目录的 `run_config.json` 都写 `device = "cpu"`。
-  - 现有结果没有 `_cuda` 命名。
-  - 结论：当前已有结果以 CPU 为主。
-- 运行时间估算：
-  - smoke：`5-20` 分钟。
-  - formal：`2-6` 小时。
-- 估算依据：
-  - `single_intersection_ablation_tensor/run_config.json`：`num_clients=2`、`batch_size=32`、`local_epochs=1`、`communication_rounds=1`、`device=cpu`、4 个变体。
-  - `single_intersection_ablation_tensor/split_summary.json`：2 个 client，每个 train 约 `4087` 样本，4 个消融变体。
-  - 单轮单变体约 `2 * ceil(4087/32) ≈ 256` 个 local batches；4 个变体约 `1024` 个 local batches，适合作为 CPU smoke。
-  - 辅助 profile 证据：
-    - `compute_time_profile/profile_cpu_grid_cell_ablation_r1e1/run_config.json` 为 CPU。
-    - `gpu_light_profile/grid_cell_ablation_r2e1/.../run_config.json` 为 CUDA。
-  - 因此 formal 如果扩展到更多 rounds / 更大 client 集并保持 4 个变体，总耗时通常约为对应对比实验的 `3-4` 倍，建议改 CUDA。
-- 风险点：
-  - 现有结果是 CPU 小规模结果，不能直接等同于正式大规模正式跑时长。
-  - 消融实验的总耗时会被 4 个变体线性放大。
+- 目标配置：
+  - smoke 来源：`results/real_data_experiments/single_intersection_ablation_tensor/run_config.json`
+  - smoke rounds：`1`
+  - smoke local_epochs：`1`
+  - smoke batch_size：`32`
+  - smoke num_clients：`2`
+  - smoke train_total：`8174`
+  - formal 来源：新实验 1 formal 同设置，再乘 `3.0-4.0`
+- 参考 profile：
+  - 完整模型基线：沿用实验 1 的 main profile
+  - 交叉验证：`profile_cpu_grid_cell_ablation_r1e1` 与 `profile_gpu_grid_cell_ablation_r2e1`
+- 放大系数：
+  - smoke 同设置完整模型：`rounds_factor=1.0`，`local_epoch_factor=1.0`，`client_factor=0.6667`，`data_scale_factor=1.0`
+  - ablation：`variant_count=4`，`variant_complexity_factor=0.75-1.0`
+- 估算结果：
+  - CUDA smoke：`7.7-12.0` 秒
+  - CUDA formal：`19.1-29.9` 分钟
+  - CPU smoke：`19.7-36.4` 秒
+  - CPU formal：`49.2-90.9` 分钟
 
 ### 实验 3：多个相似网格合并为一个客户端的对比实验
 
 - 目录：`real_data_experiments/region_client_full_cells/`
 - 入口：`python -m real_data_experiments.region_client_full_cells.rfc_core`
-- 已有结果：
-  - `results/real_data_experiments/diagnostics/full_cells_similarity_k5_smoke_r1_e1_lr5e4_cuda/`
-  - `results/real_data_experiments/diagnostics/full_cells_spatial_k5_smoke_r1_e1_lr5e4_cuda/`
-- CPU/GPU 判断：
-  - `rfc_config.py` 默认 `device = "cuda"`，CLI 默认也是 `--device cuda`。
-  - 两个现有 smoke 结果 `run_config.json` 都写 `device = "cuda"`。
-  - 结论：当前 smoke 明确是 GPU/CUDA。
-- 运行时间估算：
-  - smoke：数分钟到十几分钟。
-  - formal：数小时级；在更重设置下可能接近过夜。
-- 估算依据：
-  - `full_cells_similarity_k5_smoke_r1_e1_lr5e4_cuda/run_config.json`：`num_clients=5`、`batch_size=32`、`local_epochs=1`、`communication_rounds=1`、`device=cuda`。
-  - `split_summary.json`：`used_region_count=223`，5 个 grouped clients 的 train sample 总量约 `911401`。
-  - 以 `batch_size=32` 估算，单轮单 epoch 约 `911401 / 32 ≈ 28482` 个 local batches，远大于新实验 1。
-  - `rfc_config.py` 默认 formal 倾向是 `rounds=80`、`local_epochs=2`、`device=cuda`，若直接按默认正式规模扩展，理论训练步数约是 smoke 的 `160` 倍。
-- 风险点：
-  - 这是当前 6 条线里数据量最重的一类之一。
-  - 即便使用 CUDA，formal 也很容易进入过夜级。
+- 目标配置：
+  - smoke 来源：`results/real_data_experiments/diagnostics/full_cells_similarity_k5_smoke_r1_e1_lr5e4_cuda/run_config.json`
+  - smoke rounds：`1`
+  - smoke local_epochs：`1`
+  - smoke batch_size：`32`
+  - smoke num_clients：`5`
+  - smoke selected_clients_per_round：`5`
+  - smoke train_total：`911401`
+  - formal 来源：`real_data_experiments/region_client_full_cells/rfc_config.py`
+  - formal rounds：`80`
+  - formal local_epochs：`2`
+  - formal batch_size：`32`
+  - formal num_clients：`5`
+  - formal train_total：`911401`
+- 参考 profile：
+  - CPU：`profile_cpu_cluster_main_r1e1/profile_cluster_main_cpu.csv`
+  - GPU：无 direct cluster GPU profile，采用 `CPU/GPU transfer factor = 2.2798`
+- 放大系数：
+  - smoke：`rounds_factor=1.0`，`local_epoch_factor=1.0`，`client_factor=1.6667`，`data_scale_factor=89.0040`
+  - formal：`rounds_factor=80.0`，`local_epoch_factor=2.0`，`client_factor=1.6667`，`data_scale_factor=89.0040`
+- 估算结果：
+  - CUDA smoke：`6.1-7.1` 分钟
+  - CUDA formal：`16.2-19.0` 小时
+  - CPU smoke：`15.7-21.7` 分钟
+  - CPU formal：`41.8-57.9` 小时
 
 ### 实验 4：多个相似网格合并为一个客户端的消融实验
 
 - 目录：`real_data_experiments/region_client_full_cells/`
-- 入口：当前尚无独立的正式 ablation 入口冻结为单独主线；现阶段只能参照 `rfc_core` 与实验 2 的变体数推估。
-- 已有结果：
-  - 当前没有独立的 formal ablation 结果目录。
-  - 当前只有新实验 3 的 grouped-client 对比 smoke 结果和目录级实现。
-- CPU/GPU 判断：
-  - 现有目录的默认配置来自 `rfc_config.py`，其默认设备是 `cuda`。
-  - 但由于新实验 4 还没有独立结果目录，不能把新实验 3 的 `device=cuda` 直接等同为新实验 4 的已验证事实。
-  - 结论：当前设备判断写为未确认，但按现有代码结构推定 GPU/CUDA 优先。
-- 运行时间估算：
-  - smoke：`30-90` 分钟。
-  - formal：`1-2` 天级。
-- 估算依据：
-  - 新实验 4 的训练规模至少接近新实验 3。
-  - 若沿用实验 2 的 4 个变体，则总耗时大致是新实验 3 同等设置的 `3-4` 倍。
-  - 因新实验 3 的 full-cells grouped-client 线本身已接近过夜级，叠加 4 个消融变体后，formal 很容易达到过夜到多日级。
-- 风险点：
-  - 当前没有独立 ablation 训练入口和正式结果目录。
-  - 因此本实验的运行时间估算置信度低于实验 1/2/3/5/6。
+- 当前状态：文档与 inventory 层已补位，但独立 ablation 训练入口/正式结果目录尚不完整。
+- 目标配置：
+  - smoke：按新实验 3 当前 smoke 同设置，再乘 `3.0-4.0`
+  - formal：按新实验 3 formal 同设置，再乘 `3.0-4.0`
+- 参考 profile：
+  - 完整模型基线：沿用实验 3 的 cluster main CPU profile 与 cluster GPU transfer factor
+  - 变体放大：`variant_count=4`，`variant_complexity_factor=0.75-1.0`
+- 估算结果：
+  - CUDA smoke：`18.2-28.6` 分钟
+  - CUDA formal：`48.7-76.2` 小时
+  - CPU smoke：`47.0-86.8` 分钟
+  - CPU formal：`125.3-231.4` 小时
+- 置信度说明：
+  - 当前没有独立 formal ablation 结果目录。
+  - 当前没有 direct grouped-client GPU ablation profile。
 
 ### 实验 5：全局所有网格按相似度划分为客户端的对比实验
 
 - 目录：`real_data_experiments/region_client/`
 - 入口：`python -m real_data_experiments.region_client.rc_core`
-- 已有结果：
-  - `results/real_data_experiments/region_client_tensor_smoke/`
-- CPU/GPU 判断：
-  - `rc_config.py` 默认 `device = "cpu"`。
-  - README smoke 命令明确写 `--device cpu`。
-  - `region_client_tensor_smoke/run_config.json` 也写 `device = "cpu"`。
-  - 结论：当前 smoke 是 CPU。
-- 运行时间估算：
-  - smoke：`1-10` 分钟。
-  - formal：数小时级，正式跑建议改 CUDA。
-- 估算依据：
-  - `run_config.json`：`num_clients=3`、`batch_size=32`、`local_epochs=1`、`communication_rounds=1`、`device=cpu`。
-  - `split_summary.json`：每个 client 的 `client_sample_counts` 当前都被 cap 到 `1024`，3 个 client 总 train sample 仅 `3072`，对应总 batches 约 `96`。
-  - `compute_time_profile/profile_cpu_cluster_main_r1e1/run_config.json` 也显示当前 profile 线是 CPU。
-  - 但如果 future formal 去掉 `max_samples_per_client_split` 限制、改用更高 rounds 或 `flow_kmeans` 正式划分，总量会明显增大，因此正式跑更适合 CUDA。
-- 风险点：
-  - 当前 smoke 是轻量 capped-subset 结果，不代表 full-data 正式训练时长。
-  - README 与当前 run_config 的 `partition_method` 都是 `spatial_block` smoke，不是 full formal 的最终形态。
+- 目标配置：
+  - smoke 来源：`results/real_data_experiments/region_client_tensor_smoke/run_config.json`
+  - smoke rounds：`1`
+  - smoke local_epochs：`1`
+  - smoke batch_size：`32`
+  - smoke num_clients：`3`
+  - smoke selected_clients_per_round：`3`
+  - smoke train_total：`3072`
+  - formal 来源：`results/real_data_experiments/compute_time_profile/compute_time_estimation_summary.csv` 中 `cluster_main_full_without_cap`
+  - formal rounds：`20`
+  - formal local_epochs：`3`
+  - formal num_clients：`3`
+  - formal full_train_total：`911401`
+- 参考 profile：
+  - CPU：`profile_cpu_cluster_main_r1e1/profile_cluster_main_cpu.csv`
+  - GPU：无 direct cluster GPU profile，采用 `CPU/GPU transfer factor = 2.2798`
+- 放大系数：
+  - smoke：`rounds_factor=1.0`，`local_epoch_factor=1.0`，`client_factor=1.0`，`data_scale_factor=0.5`
+  - formal：`rounds_factor=20.0`，`local_epoch_factor=3.0`，`client_factor=1.0`，`data_scale_factor=148.3400`
+- 估算结果：
+  - CUDA smoke：`1.2-1.4` 秒
+  - CUDA formal：`6.1-7.1` 小时
+  - CPU smoke：`3.2-4.4` 秒
+  - CPU formal：`15.7-21.7` 小时
 
 ### 实验 6：全局所有网格按相似度划分为客户端的消融实验
 
 - 目录：`real_data_experiments/region_ablation/`
 - 入口：`python -m real_data_experiments.region_ablation.ra_core`
-- 已有结果：
-  - `results/real_data_experiments/region_ablation_tensor_smoke/`
-- CPU/GPU 判断：
-  - `ra_config.py` 默认 `device = "cpu"`。
-  - README smoke 命令明确写 `--device cpu`。
-  - `region_ablation_tensor_smoke/run_config.json` 也写 `device = "cpu"`。
-  - 结论：当前 smoke 是 CPU。
-- 运行时间估算：
-  - smoke：`5-20` 分钟。
-  - formal：约为实验 5 同设置的 `3-4` 倍，正式跑建议改 CUDA。
-- 估算依据：
-  - `run_config.json`：`num_clients=3`、`batch_size=32`、`local_epochs=1`、`communication_rounds=1`、`device=cpu`、4 个变体。
-  - `split_summary.json`：当前同样使用 `1024` cap 的轻量 smoke 数据规模。
-  - `compute_time_profile/profile_cpu_cluster_ablation_r1e1/run_config.json` 也说明当前 profile 线是 CPU。
-  - 与实验 5 相比，本实验再乘 4 个结构变体，因此 smoke 比 experiment 5 更长，formal 也会被放大到数小时甚至过夜边缘。
-- 风险点：
-  - 当前结果是 CPU smoke，不能直接当成 full-data、full-rounds 正式时长。
-  - 一旦放开 sample cap 并保持 4 个变体，耗时会快速上升。
+- 目标配置：
+  - smoke 来源：`results/real_data_experiments/region_ablation_tensor_smoke/run_config.json`
+  - smoke rounds：`1`
+  - smoke local_epochs：`1`
+  - smoke batch_size：`32`
+  - smoke num_clients：`3`
+  - smoke selected_clients_per_round：`3`
+  - smoke train_total：`3072`
+  - formal 来源：按新实验 5 formal 同设置，再乘 `3.0-4.0`
+- 参考 profile：
+  - 完整模型基线：沿用实验 5 的 cluster main CPU profile 与 cluster GPU transfer factor
+  - 变体放大：`variant_count=4`，`variant_complexity_factor=0.75-1.0`
+- 估算结果：
+  - CUDA smoke：`3.7-5.8` 秒
+  - CUDA formal：`18.2-28.6` 小时
+  - CPU smoke：`9.5-17.6` 秒
+  - CPU formal：`47.0-86.8` 小时
 
-## 6. 推荐运行顺序
+## 7. 建议补跑的最小 profile（仅建议，不自动执行）
 
-- 推荐先跑现有 smoke 线，再决定是否扩大到 formal。
-- 若只做设备与链路检查，优先级从低到高建议为：
-  - 新实验 5 CPU smoke
-  - 新实验 1 CUDA smoke
-  - 新实验 2 CPU smoke
-  - 新实验 6 CPU smoke
-  - 新实验 3 CUDA smoke
-  - 新实验 4 grouped-client ablation smoke
-- 若进入 formal，建议的资源优先级从低到高为：
-  - 新实验 1 formal
-  - 新实验 2 formal
-  - 新实验 5 formal
-  - 新实验 6 formal
+当前若要把实验 3-6 的 GPU 估算从“中/低置信度”提升到“中-高置信度”，建议单独补跑下列最小 profile，并显式记录 `elapsed_seconds` 或 `wall_time_sec`：
+
+```powershell
+# 实验 1 单网格主实验 CUDA profile
+Measure-Command {
+  python -m real_data_experiments.single_intersection_client.sic_core `
+    --workflow train `
+    --rounds 3 `
+    --local-epochs 1 `
+    --device cuda `
+    --output-dir results/real_data_experiments/time_profile/grid_cell_main_cuda_r3e1
+}
+
+# 实验 3 grouped-client CUDA profile
+Measure-Command {
+  python -m real_data_experiments.region_client_full_cells.rfc_core `
+    --workflow train `
+    --rounds 3 `
+    --local-epochs 1 `
+    --device cuda `
+    --output-dir results/real_data_experiments/time_profile/grouped_client_cuda_r3e1
+}
+```
+
+## 8. 结论
+
+- 已发现真实 elapsed 字段，但它们是部分覆盖而不是全覆盖。
+- 因此当前文件不是纯猜测，但也不是全实验线完整实测 benchmark；它属于“部分实测 + 参数化外推”的可排期估算。
+- 建议必须使用 CUDA 的实验：
   - 新实验 3 formal
   - 新实验 4 formal
-
-## 7. 结论
-
-- 当前已有结果判断为 GPU/CUDA 的主线是：新实验 1、新实验 3。
-- 当前已有结果判断为 CPU 的主线是：新实验 2、新实验 5、新实验 6。
-- 新实验 4 当前缺少独立 formal ablation 结果目录，设备判断只能写为未确认，但按实现结构推定正式运行必须优先考虑 CUDA。
-- 对正式排期的建议是：
-  - 新实验 1：formal 可用 CUDA 执行，属于几十分钟到数小时级。
-  - 新实验 2：现有 CPU smoke 足够做轻量验证；若扩展到 formal，建议 CUDA。
-  - 新实验 3：formal 基本应视为 CUDA 必需，且接近过夜级。
-  - 新实验 4：formal 应视为 CUDA 必需，且可能进入 1-2 天级。
-  - 新实验 5：CPU smoke 足够，但 formal 不建议继续用 CPU。
-  - 新实验 6：CPU smoke 足够，但 formal 不建议继续用 CPU。
+  - 新实验 5 formal
+  - 新实验 6 formal
+- CPU 只适合 smoke 或非常轻量验证的实验：
+  - 新实验 2 smoke
+  - 新实验 5 smoke
+  - 新实验 6 smoke
+- 即使新实验 1 CPU formal 估算仍在几十分钟内，主线正式运行仍建议继续沿用 CUDA，以保持与现有 formal/diagnostics 结果一致。
