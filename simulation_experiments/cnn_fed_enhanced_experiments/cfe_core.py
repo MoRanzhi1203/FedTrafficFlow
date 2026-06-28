@@ -491,6 +491,54 @@ def _build_summary(df: pd.DataFrame, group_cols):
     return agg_df
 
 
+def _safe_sweep_metrics_and_summary(
+    rows: list,
+    output_dir: Path,
+    metrics_filename: str,
+    summary_filename: str,
+    group_cols: list[str],
+):
+    """安全生成 metrics 和 summary，处理全部 task 被 skip 的空结果场景。
+
+    情况 A：rows 非空 → 正常生成 metrics 和 summary；
+    情况 B：rows 为空且 summary 文件已存在 → 不写 metrics，不覆盖已有 summary；
+    情况 C：rows 为空且 summary 不存在 → 生成空 metrics 和 skip-only summary。
+    """
+    metrics_path = output_dir / metrics_filename
+    summary_path = output_dir / summary_filename
+
+    if rows:
+        # 情况 A：正常写入
+        df = pd.DataFrame(rows)
+        save_dataframe(df, output_dir, metrics_filename)
+        save_dataframe(_build_summary(df, group_cols), output_dir, summary_filename)
+        return
+
+    # 情况 B/C：rows 为空
+    if summary_path.exists():
+        print(f"[skip] All tasks skipped; using existing summary: {summary_path}")
+        return
+
+    # 情况 C：生成 skip-only summary
+    print("[skip] All tasks skipped; no existing summary found, writing skip-only summary.")
+    skip_row = {"status": "skipped", "reason": "all_tasks_completed"}
+    for col in group_cols:
+        skip_row.setdefault(col, "N/A")
+    df_skip = pd.DataFrame([skip_row])
+    save_dataframe(df_skip, output_dir, metrics_filename)
+    # 生成 summary 需要 metrics 列用于 _build_summary
+    skip_summary = pd.DataFrame([skip_row])
+    skip_summary["mse"] = None
+    skip_summary["rmse"] = None
+    skip_summary["mae"] = None
+    skip_summary["mape"] = None
+    save_dataframe(
+        _build_summary(skip_summary, group_cols),
+        output_dir,
+        summary_filename,
+    )
+
+
 def _pred_rows_from_results(results, workflow: str, method: str, seed: int):
     rows = []
     for item in results:
@@ -1059,9 +1107,12 @@ def run_aggregation_experiment(
                 "mape": result["mape"],
             } for result in results)
             ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "method": _method_label(method_key)})
-    df = pd.DataFrame(rows)
-    save_dataframe(df, output_dir, "cnn_enhanced_aggregation_metrics.csv")
-    save_dataframe(_build_summary(df, ["method"]), output_dir, "cnn_enhanced_aggregation_summary.csv")
+    _safe_sweep_metrics_and_summary(
+        rows, output_dir,
+        "cnn_enhanced_aggregation_metrics.csv",
+        "cnn_enhanced_aggregation_summary.csv",
+        ["method"],
+    )
 
 
 def run_lambda_experiment(
@@ -1102,9 +1153,12 @@ def run_lambda_experiment(
                 "mape": result["mape"],
             } for result in results)
             ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "lambda": lambda_value})
-    df = pd.DataFrame(rows)
-    save_dataframe(df, output_dir, "cnn_enhanced_lambda_metrics.csv")
-    save_dataframe(_build_summary(df, ["lambda_value", "method"]), output_dir, "cnn_enhanced_lambda_summary.csv")
+    _safe_sweep_metrics_and_summary(
+        rows, output_dir,
+        "cnn_enhanced_lambda_metrics.csv",
+        "cnn_enhanced_lambda_summary.csv",
+        ["lambda_value", "method"],
+    )
 
 
 def run_convergence_experiment(
@@ -1171,9 +1225,12 @@ def run_client_scale_experiment(
                 "mape": result["mape"],
             } for result in results)
             ctx.mark_completed(extra={"rounds": COMM_ROUNDS, "num_clients": num_clients})
-    df = pd.DataFrame(rows)
-    save_dataframe(df, output_dir, "cnn_enhanced_client_scale_metrics.csv")
-    save_dataframe(_build_summary(df, ["num_clients", "method"]), output_dir, "cnn_enhanced_client_scale_summary.csv")
+    _safe_sweep_metrics_and_summary(
+        rows, output_dir,
+        "cnn_enhanced_client_scale_metrics.csv",
+        "cnn_enhanced_client_scale_summary.csv",
+        ["num_clients", "method"],
+    )
 
 
 def run_noniid_experiment(
