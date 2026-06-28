@@ -7,7 +7,7 @@ import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import pandas as pd
@@ -860,6 +860,151 @@ def limit_prediction_samples(prediction_df: pd.DataFrame, total_limit: int) -> p
     return pd.concat(sampled_frames, ignore_index=True)
 
 
+def evaluate_daily_seasonal_naive(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+    calendar_features: Optional[pd.DataFrame] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """DailySeasonalNaive: predict y[t] = y[t-96] (yesterday same slot)."""
+    from real_data_experiments.common.calendar_baselines import daily_seasonal_naive as _dsn
+    client_rows = []
+    prediction_frames = []
+    for client in clients:
+        y_train_all, test_indices, y_test = _extract_full_client_sequence(config, client)
+        if y_train_all is None:
+            continue
+        preds = _dsn(y_train_all, y_test, test_indices)
+        metrics = compute_regression_metrics(y_test, preds)
+        metrics.update(_make_entity_record(client))
+        client_rows.append({"method": "DailySeasonalNaive", **metrics})
+        prediction_frames.append(_make_pred_df(client, "DailySeasonalNaive", y_test, preds))
+    return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
+
+
+def evaluate_weekly_seasonal_naive(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+    calendar_features: Optional[pd.DataFrame] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """WeeklySeasonalNaive: predict y[t] = y[t-672] (last week same day+slot)."""
+    from real_data_experiments.common.calendar_baselines import weekly_seasonal_naive as _wsn
+    client_rows = []
+    prediction_frames = []
+    for client in clients:
+        y_train_all, test_indices, y_test = _extract_full_client_sequence(config, client)
+        if y_train_all is None:
+            continue
+        preds = _wsn(y_train_all, y_test, test_indices)
+        metrics = compute_regression_metrics(y_test, preds)
+        metrics.update(_make_entity_record(client))
+        client_rows.append({"method": "WeeklySeasonalNaive", **metrics})
+        prediction_frames.append(_make_pred_df(client, "WeeklySeasonalNaive", y_test, preds))
+    return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
+
+
+def evaluate_calendar_profile_naive(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+    calendar_features: Optional[pd.DataFrame] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """CalendarProfileNaive: client-specific weekday/weekend slot profile."""
+    from real_data_experiments.common.calendar_baselines import (
+        build_client_seasonal_profile, calendar_profile_naive_predict as _cpn_predict
+    )
+    client_rows = []
+    prediction_frames = []
+    for ci, client in enumerate(clients):
+        y_train_all, test_indices, y_test = _extract_full_client_sequence(config, client)
+        if y_train_all is None:
+            continue
+        n_train = len(y_train_all)
+        if calendar_features is not None:
+            cal_train = calendar_features.iloc[:n_train]
+            test_end = n_train + len(y_test)
+            cal_test = calendar_features.iloc[n_train:test_end].reset_index(drop=True)
+        else:
+            cal_train = pd.DataFrame({"slot_of_day": np.tile(np.arange(96), n_train // 96 + 1)[:n_train]})
+            cal_test = pd.DataFrame({"slot_of_day": np.tile(np.arange(96), len(y_test) // 96 + 1)[:len(y_test)]})
+        profile = build_client_seasonal_profile(y_train_all, cal_train, "weekday_weekend")
+        preds = _cpn_predict(y_train_all, y_test, test_indices, cal_test, profile)
+        metrics = compute_regression_metrics(y_test, preds)
+        metrics.update(_make_entity_record(client))
+        client_rows.append({"method": "CalendarProfileNaive", **metrics})
+        prediction_frames.append(_make_pred_df(client, "CalendarProfileNaive", y_test, preds))
+    return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
+
+
+def _extract_full_client_sequence(
+    config: ExperimentConfig, client
+) -> tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
+    """Extract full time series for a client from the tensor, using train/test split.
+
+    Returns (y_train_all, test_time_indices, y_test) or (None, None, None) on failure.
+    """
+    try:
+        bundle = load_grid_tensor_bundle(config.tensor_path, config.regions_path)
+    except Exception:
+        return None, None, None
+
+    target_ch = config.target_channel
+    entity_id = getattr(client, 'entity_id', getattr(client, 'node_id', None))
+    if entity_id is None:
+        return None, None, None
+
+    # Find the grid index for this entity_id
+    grid_idx = None
+    regions_df = bundle.regions_df
+    if 'region_id' in regions_df.columns:
+        match = regions_df[regions_df['region_id'] == int(entity_id)]
+        if len(match) > 0:
+            grid_idx = regions_df.index.get_loc(match.index[0])
+
+    if grid_idx is None:
+        return None, None, None
+
+    full_seq = bundle.tensor[target_ch, grid_idx, :].numpy().astype(np.float64)
+    total = len(full_seq)
+    train_len = int(config.train_ratio * total)
+    y_train_all = full_seq[:train_len]
+    y_test = full_seq[train_len:]
+    test_indices = np.arange(train_len, total, dtype=int)
+    return y_train_all, test_indices, y_test
+
+
+def _extract_client_data(base_dataset, client):
+    """Extract y_train_all, test_indices, y_test from client data."""
+    y_all = []
+    for idx in range(len(base_dataset)):
+        _, target = base_dataset[idx]
+        y_all.append(float(target.view(-1)[0].item()))
+    y_all = np.array(y_all, dtype=np.float64)
+    total = len(y_all)
+    test_size = len(client.test_loader.dataset) if hasattr(client.test_loader, 'dataset') else total
+    train_len = total - test_size
+    y_train_all = y_all[:train_len]
+    y_test = y_all[train_len:]
+    test_indices = np.arange(train_len, total, dtype=int)
+    return y_train_all, test_indices, y_test
+
+
+def _make_pred_df(client, method, y_test, preds):
+    import pandas as pd
+    record = _make_entity_record(client)
+    skip_keys = {"train_samples", "val_samples", "test_samples"}
+    return pd.DataFrame({
+        **{k: v for k, v in record.items() if k not in skip_keys},
+        "method": method,
+        "sample_index": np.arange(len(y_test), dtype=int),
+        "y_true": y_test,
+        "y_pred": preds,
+    })
+    sampled_frames: list[pd.DataFrame] = []
+    for index, (_, group_df) in enumerate(method_groups):
+        quota = base_quota + (1 if index < remainder else 0)
+        sampled_frames.append(group_df.head(quota))
+    return pd.concat(sampled_frames, ignore_index=True)
+
+
 def export_results(
     config: ExperimentConfig,
     output_dir: Path,
@@ -874,9 +1019,13 @@ def export_results(
     prediction_df: pd.DataFrame,
     input_scaler: InputScaler | None = None,
     target_scaler: TargetScaler | None = None,
+    extra_client_dfs: list[pd.DataFrame] | None = None,
 ) -> None:
     """Write experiment artifacts to disk."""
-    client_metrics_df = pd.concat([fed_client_df, ind_client_df, naive_client_df], ignore_index=True)
+    all_client_dfs = [fed_client_df, ind_client_df, naive_client_df]
+    if extra_client_dfs:
+        all_client_dfs.extend(extra_client_dfs)
+    client_metrics_df = pd.concat(all_client_dfs, ignore_index=True)
     main_metrics_df = (
         client_metrics_df.groupby("method", as_index=False)[METRIC_COLUMNS]
         .mean()
@@ -924,6 +1073,18 @@ def export_results(
     if config.data_mode == "parquet":
         note_lines.append("- 本次运行使用了 legacy parquet fallback，仅用于兼容旧 smoke test。")
     write_text("\n".join(note_lines), output_dir / "experiment_notes_zh.md")
+
+
+def _load_calendar_features(config: ExperimentConfig) -> Optional[pd.DataFrame]:
+    """Load 15min calendar features if configured."""
+    cal_path = getattr(config, "calendar_features_path", None)
+    if cal_path and Path(cal_path).exists():
+        return pd.read_csv(cal_path)
+    # Try default path
+    default = Path("data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv")
+    if default.exists():
+        return pd.read_csv(default)
+    return None
 
 
 def run_experiment(config: ExperimentConfig) -> dict[str, object]:
@@ -984,7 +1145,32 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     log_info("NaiveLastValue baseline started")
     naive_client_df, naive_prediction_df = evaluate_naive_last_value(config, clients)
     log_info("NaiveLastValue baseline finished")
-    prediction_df = pd.concat([fed_prediction_df, ind_prediction_df, naive_prediction_df], ignore_index=True)
+
+    # Calendar periodicity baselines
+    cal_features = _load_calendar_features(config)
+    daily_naive_df = pd.DataFrame()
+    weekly_naive_df = pd.DataFrame()
+    cal_profile_df = pd.DataFrame()
+    if cal_features is not None:
+        log_info("DailySeasonalNaive baseline started")
+        daily_naive_df, daily_pred_df = evaluate_daily_seasonal_naive(config, clients, cal_features)
+        log_info("DailySeasonalNaive baseline finished")
+        log_info("WeeklySeasonalNaive baseline started")
+        weekly_naive_df, weekly_pred_df = evaluate_weekly_seasonal_naive(config, clients, cal_features)
+        log_info("WeeklySeasonalNaive baseline finished")
+        log_info("CalendarProfileNaive baseline started")
+        cal_profile_df, cal_pred_df = evaluate_calendar_profile_naive(config, clients, cal_features)
+        log_info("CalendarProfileNaive baseline finished")
+        prediction_df = pd.concat(
+            [fed_prediction_df, ind_prediction_df, naive_prediction_df, daily_pred_df, weekly_pred_df, cal_pred_df],
+            ignore_index=True)
+    else:
+        prediction_df = pd.concat([fed_prediction_df, ind_prediction_df, naive_prediction_df], ignore_index=True)
+
+    # Merge client metrics
+    all_client_frames = [fed_client_df, ind_client_df, naive_client_df]
+    if not daily_naive_df.empty:
+        all_client_frames.extend([daily_naive_df, weekly_naive_df, cal_profile_df])
 
     run_config_payload = build_run_config_payload(config, device_info)
     environment_summary = build_environment_summary(device)
@@ -1011,6 +1197,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         prediction_df=prediction_df,
         input_scaler=input_scaler,
         target_scaler=target_scaler,
+        extra_client_dfs=[df for df in [daily_naive_df, weekly_naive_df, cal_profile_df] if len(df) > 0] if len(daily_naive_df) > 0 else None,
     )
     log_info(f"Results written to {output_dir}")
     selected_ids = []
