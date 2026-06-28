@@ -93,6 +93,49 @@ class CNNLSTMAttentionRegressor(nn.Module):
         return self.head(context)
 
 
+class AdaptiveSwish(nn.Module):
+    """Adaptive Swish activation with learnable beta parameter (from legacy ipynb)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.beta = nn.Parameter(torch.ones(1))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return x * torch.sigmoid(self.beta * x)
+
+
+class LegacyNotebookCNNLSTMAttentionRegressor(nn.Module):
+    """Enhanced CNN + LSTM + MultiheadAttention regressor migrated from legacy ipynb.
+
+    Key differences from baseline CNNLSTMAttentionRegressor:
+    - hidden_dim=64 (vs 32)
+    - BatchNorm1d after Conv1d
+    - AdaptiveSwish activation (vs ReLU)
+    - nn.MultiheadAttention (vs simple Linear+softmax attention)
+    """
+
+    def __init__(self, input_channels: int = 2, hidden_dim: int = 64, prediction_horizon: int = 1, num_heads: int = 4) -> None:
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Conv1d(input_channels, hidden_dim, kernel_size=3, padding=1),
+            nn.BatchNorm1d(hidden_dim),
+            AdaptiveSwish(),
+            nn.Conv1d(hidden_dim, hidden_dim, kernel_size=3, padding=1),
+            AdaptiveSwish(),
+        )
+        self.lstm = nn.LSTM(input_size=hidden_dim, hidden_size=hidden_dim, num_layers=1, batch_first=True)
+        self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
+        self.head = nn.Linear(hidden_dim, prediction_horizon)
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        encoded = self.encoder(inputs)            # (B, hidden_dim, T)
+        lstm_in = encoded.transpose(1, 2)         # (B, T, hidden_dim)
+        lstm_out, _ = self.lstm(lstm_in)          # (B, T, hidden_dim)
+        attn_out, _ = self.attn(lstm_out, lstm_out, lstm_out)  # (B, T, hidden_dim)
+        last_step = attn_out[:, -1, :]            # (B, hidden_dim)
+        return self.head(last_step)               # (B, prediction_horizon)
+
+
 @dataclass
 class ClientData:
     """Per-client datasets and loaders."""
@@ -623,6 +666,20 @@ def evaluate_round(
     }
 
 
+def _build_model(config: ExperimentConfig) -> CNNLSTMAttentionRegressor | LegacyNotebookCNNLSTMAttentionRegressor:
+    """Build the model instance according to model_variant config."""
+    input_channels = resolve_input_channels(config)
+    if config.model_variant == "legacy_ipynb":
+        return LegacyNotebookCNNLSTMAttentionRegressor(
+            input_channels=input_channels,
+            prediction_horizon=config.prediction_horizon,
+        )
+    return CNNLSTMAttentionRegressor(
+        input_channels=input_channels,
+        prediction_horizon=config.prediction_horizon,
+    )
+
+
 def run_fedavg_experiment(
     config: ExperimentConfig,
     clients: list[ClientData],
@@ -630,11 +687,8 @@ def run_fedavg_experiment(
     target_scaler: TargetScaler | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Run standard FedAvg across single-intersection clients."""
+    global_model = _build_model(config).to(device)
     input_channels = resolve_input_channels(config)
-    global_model = CNNLSTMAttentionRegressor(
-        input_channels=input_channels,
-        prediction_horizon=config.prediction_horizon,
-    ).to(device)
     log_info("FedAvg training started")
     round_history: list[dict[str, float]] = []
     round_iter = maybe_tqdm(
@@ -655,10 +709,7 @@ def run_fedavg_experiment(
             leave=False,
         )
         for client in client_iter:
-            local_model = CNNLSTMAttentionRegressor(
-                input_channels=input_channels,
-                prediction_horizon=config.prediction_horizon,
-            ).to(device)
+            local_model = _build_model(config).to(device)
             local_model.load_state_dict(copy.deepcopy(global_model.state_dict()))
             state_dict, train_loss = train_local_model(
                 local_model,
@@ -720,10 +771,7 @@ def run_independent_experiment(
         unit="client",
     )
     for client in client_iter:
-        model = CNNLSTMAttentionRegressor(
-            input_channels=input_channels,
-            prediction_horizon=config.prediction_horizon,
-        ).to(device)
+        model = _build_model(config).to(device)
         train_local_model(
             model,
             client.train_loader,

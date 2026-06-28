@@ -43,6 +43,7 @@ class ExperimentConfig:
     target_normalization_eps: float = 1e-6
     show_progress: bool = True
     progress_interval: int = 20
+    model_variant: str = "baseline"
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-friendly config dict."""
@@ -91,6 +92,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--hide-progress", dest="show_progress", action="store_false")
     parser.set_defaults(show_progress=True)
     parser.add_argument("--progress-interval", type=int, default=20)
+    parser.add_argument("--model-variant", type=str, default="baseline", choices=["baseline", "legacy_ipynb"])
     return parser
 
 
@@ -121,4 +123,5 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         target_normalization_eps=args.target_normalization_eps,
         show_progress=args.show_progress,
         progress_interval=args.progress_interval,
+        model_variant=args.model_variant,
     )
