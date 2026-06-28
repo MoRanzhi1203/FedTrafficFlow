@@ -3,7 +3,7 @@
 ## 1. 本次运行范围
 
 - 本次只运行实验 1：`grid_cell main full`
-- 未运行实验 2 / 3 / 4
+- 未运行新实验 2-6
 
 ## 2. 使用代码版本
 
@@ -134,9 +134,10 @@ python -m real_data_experiments.single_intersection_client.sic_core \
 ## 12. Git 边界
 
 - `results/` 未提交
-- 未运行实验 2 / 3 / 4
+- 未运行新实验 2-6
 - 未修改 FedAvg
 - 未修改模型结构
 - 未修改数据划分
 - 未修改 LaTeX
 - 未修改 `simulation_experiments`
+

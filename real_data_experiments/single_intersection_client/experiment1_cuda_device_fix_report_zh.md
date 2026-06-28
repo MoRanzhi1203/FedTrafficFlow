@@ -1,4 +1,4 @@
-# 实验 1：CUDA fallback 排查与修复报告
+﻿# 实验 1：CUDA fallback 排查与修复报告
 
 ## 1. 问题背景
 
@@ -78,3 +78,4 @@
   - `torch.cuda.get_device_name(0)` 可正常返回
 
   再继续做实验 1 的 CUDA smoke，并准备重跑正式实验 1 v4 CUDA
+

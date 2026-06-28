@@ -1,36 +1,33 @@
-# 簇级客户端设置主实验
+# 新实验 5：全局所有网格按相似度划分为客户端的对比实验
 
 ## 当前定义
 
-- 当前 `region_client` 在文档中统一解释为：簇级客户端联邦学习设置 / Cluster-level Client Federated Learning Setting。
-- 每个 `client` = 一组 pooled grid regions。
-- 当前正式输入为 tensor-only：
-  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`
-- 当前正式 `regions_path`：
-  `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_regions.csv`
-- 当前正式 `pool_mode = sum_mean`
-- 当前正式 `layout = standard`
-- 当前正式 `tensor shape = (2, 630, 5856)`
+- 本目录固定对应新实验 5：`global similarity partition comparison`。
+- 旧新映射：原实验 3 -> 新实验 5。
+- 当前文档语义强调：全局所有网格按相似度划分为客户端。
+- 形式化边界为：`All grid cells are partitioned into K non-overlapping clients.`
+- 该实验线关注全局覆盖式客户端划分，且 `client_i and client_j are non-overlapping when i != j.`
 
-## 默认主流程
+## 代码与实现说明
 
-- `partition_method = spatial_block`
-- `num_clients = 3`
-- `sequence_length = 12`
-- `prediction_horizon = 1`
-- `use_channels = [0, 1]`
-- `target_channel = 0`
-- `FedAvg = standard sample-size weighted FedAvg`
-- `Independent baseline = enabled`
-- `split = temporal_contiguous_by_target_time`
+- `rc_config.py`：区域主实验配置。
+- `rc_core.py`：区域主实验训练与结果导出。
+- `rc_visualization.py`：区域主实验图表生成。
+- `region_notebook_migration_zh.md`：原 notebook 到 Python 的迁移映射。
+- `historical_notes_zh.md`：历史探索逻辑记录。
 
-## 目录文件
+## 当前主流程
 
-- `rc_config.py`：区域主实验配置
-- `rc_core.py`：区域主实验训练与结果导出
-- `rc_visualization.py`：区域主实验图表生成
-- `region_notebook_migration_zh.md`：原 notebook 到 py 的迁移映射
-- `historical_notes_zh.md`：历史探索逻辑记录
+- 默认输入为 tensor-only：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。
+- 当前实现会把参与划分的 pooled regions 分配到多个 client，并输出 assignment / distribution / non-IID 汇总文件。
+- 代码保留 `spatial_block` 与 `flow_kmeans` 两种全局划分实现；在新的实验编号语义中，`flow_kmeans` 对应相似度划分主线，`spatial_block` 作为同目录内保留的全局划分实现与 smoke 入口。
+- 默认联邦聚合仍为标准样本量加权 `FedAvg`。
+- 数据划分仍为按 target time 的连续切分。
+
+## 结果路径归属
+
+- `results/real_data_experiments/region_client_tensor_smoke/` 归入新实验 5 的 smoke 结果。
+- 旧结果路径不移动，只在文档和 inventory 中新增新编号对应关系。
 
 ## smoke test
 
@@ -38,12 +35,3 @@
 python -m real_data_experiments.region_client.rc_core --workflow all --data-mode tensor --partition-method spatial_block --num-clients 3 --rounds 1 --local-epochs 1 --batch-size 32 --sequence-length 12 --learning-rate 0.001 --device cpu --output-dir results/real_data_experiments/region_client_tensor_smoke
 python -m real_data_experiments.region_client.rc_visualization --workflow all --input-dir results/real_data_experiments/region_client_tensor_smoke --dpi 150
 ```
-
-- 若只做 agent / CI 级 smoke test，可追加：
-  `--max-samples-per-client-split 1024`
-- 该参数只截断每个 client 的 split 样本数用于加速联调，不改变区域划分、客户端定义和标准样本量加权 `FedAvg` 的权重计算方式。
-
-## 说明
-
-- 当前正式主流程不引入 `FedProx`、`server damping`、`personalization`。
-- 历史 notebook 中出现的探索逻辑仅记录在 `historical_notes_zh.md`，默认不运行。

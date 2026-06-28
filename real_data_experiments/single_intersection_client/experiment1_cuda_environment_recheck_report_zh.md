@@ -1,4 +1,4 @@
-# 实验 1：CUDA 环境调用修复与复核报告
+﻿# 实验 1：CUDA 环境调用修复与复核报告
 
 ## 1. 问题背景
 
@@ -101,7 +101,7 @@ smoke 指标摘要：
 - 未修改 FedAvg
 - 未修改模型结构
 - 未修改数据划分
-- 未运行实验 2/3/4
+- 未运行新实验 2-6
 - 未修改 LaTeX
 - 未修改 `simulation_experiments`
 - 未修改 conda 环境
@@ -125,3 +125,4 @@ $PY = "E:\anaconda3\envs\FedTrafficFlow\python.exe"
 ```
 
 - 这样可以避免再次误用 `E:\anaconda3\python.exe` 或用户目录中的 CPU-only torch
+

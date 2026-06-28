@@ -431,7 +431,7 @@ def render_report(baselines: list[dict], candidates: list[dict]) -> str:
         "- 不修改 FedAvg；",
         "- 不修改模型结构；",
         "- 不修改数据划分；",
-        "- 不进入实验 2/3/4；",
+        "- 不进入新实验 2-6；",
         "- 所有结果均为 diagnostics/smoke。",
         "",
         "## 3. 候选方案",
@@ -492,7 +492,7 @@ def render_report(baselines: list[dict], candidates: list[dict]) -> str:
         "- lr 降低是否有效：本阶段候选固定为 `0.0005`，相对先前正式设置属于更保守学习率。",
         "- 继续增加 rounds 是否仍有效：需结合 `r80` 与 `r100` 对比判断；若只带来 RMSE 小幅改善而其他指标停滞，则继续增 rounds 的边际收益有限。",
         "- 289 是否仍是关键问题：若 K=5 方案中仍由 `289` 贡献最大 FedAvg-vs-Naive gap，则答案为是。",
-        "- 是否建议进入 cluster/region client：若 K=5 与 K=4 都不能全面改善多指标，应建议进入 cluster/region client。",
+        "- 是否建议进入后续实验：若 K=5 与 K=4 都不能全面改善多指标，应建议进入新实验 3/4 的 grouped-client 线或新实验 5/6 的全局覆盖式划分线。",
         "- 是否建议继续直接调 K=5：仅当 K=5 出现明显多指标改善且未退化 RMSE 时才继续，否则应降低优先级。",
         "",
         "## 9. 推荐下一步",
@@ -501,7 +501,7 @@ def render_report(baselines: list[dict], candidates: list[dict]) -> str:
         "",
         "## 10. 边界声明",
         "",
-        "本阶段只做实验 1 范围内 FedAvg 多指标优化 smoke；未修改 FedAvg 聚合公式，未修改模型结构，未修改数据划分，未运行实验 2/3/4，未提交 results。",
+        "本阶段只做实验 1 范围内 FedAvg 多指标优化 smoke；未修改 FedAvg 聚合公式，未修改模型结构，未修改数据划分，未运行新实验 2-6，未提交 results。",
     ]
     return "\n".join(lines) + "\n"
 

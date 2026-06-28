@@ -1,4 +1,4 @@
-# 实验 1：常数预测问题排查与修复报告
+﻿# 实验 1：常数预测问题排查与修复报告
 
 ## 1. 本阶段范围
 
@@ -135,3 +135,4 @@ python -m real_data_experiments.single_intersection_client.sic_core \
 - 未弹出独立 PowerShell/CMD 窗口，本次在当前终端内验证进度显示
 - 已确认没有重复启动训练进程
 - 已确认进度显示不影响结果文件生成
+

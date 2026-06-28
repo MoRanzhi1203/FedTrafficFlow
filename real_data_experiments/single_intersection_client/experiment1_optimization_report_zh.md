@@ -1,4 +1,4 @@
-# 实验 1：grid_cell main full 指标异常排查与优化报告
+﻿# 实验 1：grid_cell main full 指标异常排查与优化报告
 
 ## 1. 本阶段范围
 
@@ -140,3 +140,4 @@ smoke sanity 结论：
 - 小规模 smoke 已验证输出尺度恢复正常，且不再出现 `R2=-700` 级别的异常
 - 由于 smoke 仅使用 `2 clients / 2 rounds / 1 local epoch`，它只用于确认修复有效，不足以代表正式 full 性能上限
 - 正式重跑后仍应把 naive baseline 一并作为 sanity reference；如果 full 结果仍显著落后于 naive baseline，再继续做只读排查
+

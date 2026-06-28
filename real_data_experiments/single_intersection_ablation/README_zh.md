@@ -1,13 +1,18 @@
-# 网格单元级客户端设置消融实验说明
+﻿# 新实验 2：单个网格作为单个客户端的消融实验
 
-## 当前状态
+## 当前定位
 
-- 本目录用于承载网格单元级客户端设置的消融实验实现。
-- 当前实现仅比较模型结构变体，不改变联邦聚合方式。
+- 本目录固定对应新实验 2：`single grid client ablation`。
+- 旧新映射：原实验 2 -> 新实验 2。
+- 客户端定义与新实验 1 完全一致：`client_i = grid_cell_i`。
+- 本目录只比较模型结构变体，不改变联邦聚合方式。
 - 默认联邦聚合仍为标准样本量加权 `FedAvg`。
-- 当前正式默认输入为 `data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。
-- 当前正式名称为：网格单元级客户端联邦学习设置 / Grid-cell-level Client Federated Learning Setting。
-- 当前 `client` 的含义为：每个客户端对应一个 active pooled region，也即 one pooled grid cell / one pooled grid region。
+
+## 目录边界
+
+- 该目录仍然属于单个网格作为单个客户端实验线。
+- 不能把多个 grid cells 合并进同一个 client。
+- grouped-client 与 global-partition 的实验语义不写入本目录。
 
 ## 变体对应关系
 
@@ -22,17 +27,11 @@
 - `sia_core.py`：正式 tensor 读取、active region 选择、时间顺序划分、四种结构变体的联邦训练与结果导出。
 - `sia_visualization.py`：读取已有 CSV，生成消融对比图。
 
-## 数据与划分
+## 数据与结果归属
 
-- 正式数据入口与单路口主实验一致：`final_sum_mean_standard/node_flow_grid_tensor.pt`。
-- 默认仅使用 active regions，并按 `channel 0` 平均总流量选择 top-K region 作为客户端。
-- 训练、验证、测试采用 target time 的时间顺序划分。
-- 不允许 `train/val/test` 复用。
-
-## Legacy Fallback
-
-- `data_mode = parquet` 仍保留，但仅作为历史 smoke test fallback。
-- `parquet-direct` 不作为后续正式消融结果入口。
+- 正式数据入口与新实验 1 一致：`data/processed/node_flow_grid/final_sum_mean_standard/node_flow_grid_tensor.pt`。
+- `results/real_data_experiments/single_intersection_ablation/` 与 `results/real_data_experiments/single_intersection_ablation_tensor/` 统一归入新实验 2。
+- 旧 results 路径不移动，只新增新编号说明。
 
 ## 禁止进入主流程的内容
 

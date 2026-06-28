@@ -133,7 +133,7 @@
 - `r20 / r40 / r60` rounds 诊断
 - client 异质性诊断
 - 发现 `289` 是主要拖累 client
-- 当前仍未进入实验 2 / 3 / 4
+- 当前仍未进入新实验 2-6
 
 补充的 client 组织口径：
 
@@ -142,7 +142,7 @@
 - 当前实验 1 使用 `selected_clients = 290,284,318,288,289`，即 `K=5` 的 grid-cell-level client 设置。
 - 结合当前项目内可读取文本版本，原稿的 cluster / region client 口径可对应为 `K=3`；因此当前 `K=5` 可视为对原稿 `K=3` 的增强，而不是更弱设置。
 - 但当前仍缺少“为什么固定选择这 5 个 grid cells”的论文级依据说明。
-- `cluster-level client` 当前尚未完成，后续更适合由实验 3 承接。
+- grouped-client / global-partition 客户端实验线当前尚未完成，后续更适合由新实验 3-6 分别承接。
 
 | 原始要求 | 当前是否已回应 | 对应文件/结果 | 证据 | 仍需补充 |
 |---|---|---|---|---|
@@ -153,7 +153,7 @@
 | non-IID / 异质性分析 | 是 | `experiment1_fedavg_gap_diagnosis_zh.md`、`experiment1_client_heterogeneity_diagnosis_zh.md` | 已确认 non-IID 明显，且 `289` 为主要拖累 client | 若写论文，最好再配图或表格化说明 |
 | 通信轮次 vs 精度权衡 | 是 | `experiment1_fedavg_rounds_smoke_report_zh.md`、`experiment1_fedavg_rounds_r60_smoke_report_zh.md` | `20 -> 40 -> 60` 明显改善，但边际收益变小 | 需形成论文中的“收益递减”解释 |
 | 模型结构为 CNN/GCN + BiLSTM + Attention | 部分回应 | `sic_core.py`、实验 1诊断报告 | 真实数据实验 1 实际模型为 `CNNLSTMAttentionRegressor` | 需统一 `CCN/CNN` 命名，并与论文叙事一致 |
-| grid-cell-level 与 cluster-level client 组织 | 部分回应 | `single_intersection_client/README_zh.md`、`region_client/README_zh.md` | 当前已落地 `grid-cell-level client`，并在项目内保留 `cluster-level client` 定义与默认 `num_clients=3` 口径 | 当前实验 1 尚未给出 cluster-level 结果，需由实验 3 承接 |
+| grid-cell-level 与后续多网格客户端组织 | 部分回应 | `single_intersection_client/README_zh.md`、`region_client_full_cells/README_zh.md`、`region_client/README_zh.md` | 当前已落地 `grid-cell-level client`，并已在项目内区分 grouped-client 与 global-partition 两条后续实验线 | 当前实验 1 尚未给出新实验 3-6 的结果，需后续分别补齐 |
 | 消融实验 | 否 | 当前仅有计划，无正式结果 | 一审策略明确要求移除 CNN/BiLSTM/Attention 的消融 | 需在实验 1 主结果稳定后进入实验 2 |
 | 证明 FedAvg 在真实数据上有效 | 部分回应 | v4/r40/r60 报告 | 已证明联邦链路可运行、修复有效、加 rounds 有帮助 | 但 FedAvg 仍未全面超过 `NaiveLastValue` |
 | 结果解释框架 | 是 | `experiment1_fedavg_gap_diagnosis_zh.md`、`experiment1_client_heterogeneity_diagnosis_zh.md` | 已将问题归因为“异质性 + 强 naive baseline”，并排除了实现错误 | 需转化为论文级文字表述 |
@@ -181,7 +181,7 @@
 
 - 实验 2：单路口消融（去 CNN / 去 LSTM / 去 Attention）尚未启动
 - “FedAvg 在真实数据上优于强基线”的最终候选结果尚未拿到
-- client 分组 / cluster-level client 解释路径尚未正式展开，且应由实验 3 承接
+- client 分组 / grouped-client / global-partition 解释路径尚未正式展开，且应由新实验 3-6 承接
 
 需要重新表述：
 
@@ -201,16 +201,16 @@
 6. `Independent` 仍应被视为主学习型 baseline，而 `NaiveLastValue` 是用于刻画短时惯性的 sanity baseline，不应因当前 FedAvg 未全面超过它就直接删除；
 7. `NaiveLastValue` 本身是强基线，平均 lag-1 相关性达到 `0.969279`；
 8. 因此，当前更适合把问题解释为“真实数据联邦链路已闭环，但在强非 IID 条件下，标准 FedAvg 仍受跨 client 平均欠拟合影响”；
-9. 当前实验 1 更准确的定位是 `grid-cell-level` 强异质性场景：`K=5` 相比原稿 `K=3` 有增强，但仍缺少 selected clients 选择依据和 cluster-level 对照；
-10. 后续更合适的回应方向是 client 分组、区域 / cluster client 设计，或在实验 3 中通过更适合的 client 组织方式解释这一现象，而不是继续简单增加 rounds。
+9. 当前实验 1 更准确的定位是 `grid-cell-level` 强异质性场景：`K=5` 相比原稿 `K=3` 有增强，但仍缺少 selected clients 选择依据，以及新实验 3-6 的 grouped-client / global-partition 对照；
+10. 后续更合适的回应方向是 client 分组、grouped-client 设计或全局覆盖式客户端划分，或在新实验 3-6 中通过更适合的 client 组织方式解释这一现象，而不是继续简单增加 rounds。
 
 ## 9. 后续修改思路
 
 只整理思路，不改代码。
 
 - 如果一审要求加强真实数据验证：当前实验 1 已完成基础闭环，但还需补充最终候选结果。
-- 如果一审要求说明 client 划分：需要补充原稿中的 `grid-cell-level client` 与 `cluster-level client` 组织逻辑，以及为什么当前选取 `290,284,318,288,289` 作为 `K=5` 的 grid-cell-level client。
-- 如果一审要求证明 FedAvg 有效：当前真实数据 5-client 结果只能说明“FedAvg 可运行且可改进”，不能直接说明“已全面优于强基线”；更适合在更同质的 client 组织或 cluster client 设定下补证据。
+- 如果一审要求说明 client 划分：需要补充原稿中的单网格客户端、新实验 3/4 的 grouped-client 逻辑，以及新实验 5/6 的全局覆盖式划分逻辑，并说明为什么当前选取 `290,284,318,288,289` 作为 `K=5` 的 grid-cell-level client。
+- 如果一审要求证明 FedAvg 有效：当前真实数据 5-client 结果只能说明“FedAvg 可运行且可改进”，不能直接说明“已全面优于强基线”；更适合在新实验 3/4 的 grouped-client 组织或新实验 5/6 的全局覆盖式划分设定下补证据。
 - 如果会议要求做消融：应继续遵守当前推进边界，在实验 1 主结果口径稳定后再进入实验 2。
 - 如果会议要求强调真实数据：应把正式 tensor 数据入口、selected clients、可复现命令、v4 CUDA 环境和报告路径整理成论文可引用材料。
 - 如果会议关注 non-IID：当前 `289` 异质性诊断正好可以作为解释材料，并可支撑“为什么 FedAvg 仍弱于 NaiveLastValue”；但应把 `289` 写成诊断结果，而不是随意删除某个 client 的依据。
@@ -230,7 +230,7 @@
 - 当前实验 1 尚未完全回应的内容主要包括：
   - `FedAvg` 尚未全面超过 `NaiveLastValue`，还不能作为论文候选正式结果；
   - client 划分逻辑尚未形成论文级说明，尤其缺少为什么固定选择 `290,284,318,288,289`；
-  - 当前实验 1 只是 `K=5` 的 `grid-cell-level client`，`cluster-level client` 尚未完成；
+  - 当前实验 1 只是 `K=5` 的 `grid-cell-level client`，新实验 3-6 的 grouped-client / global-partition 客户端实验线尚未完成；
   - 消融实验（实验 2）尚未开始；
   - 真实数据侧的 `CCN/CNN` 命名与论文叙述仍需统一。
 - 下一步最小动作：**先补充 client 分配检测报告，并修正对齐报告中的 client 组织表述**。
@@ -238,9 +238,10 @@
 ## 11. 边界声明
 
 - 本阶段未运行训练。
-- 未运行实验 2 / 3 / 4。
+- 未运行新实验 2-6。
 - 未修改 FedAvg。
 - 未修改模型结构。
 - 未修改数据划分。
 - 未提交 `results/`。
 - 只新增整理报告和一个只读检索脚本。
+

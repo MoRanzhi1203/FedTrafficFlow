@@ -3,7 +3,7 @@
 ## 1. 本次运行范围
 
 - 本次只运行实验 1：`grid_cell main full`
-- 未运行实验 2 / 3 / 4
+- 未运行新实验 2-6
 - 未修改实验代码后再启动本次正式 v4 CUDA
 
 ## 2. 使用环境
@@ -164,7 +164,7 @@ $PY = "E:\anaconda3\envs\FedTrafficFlow\python.exe"
 ## 12. Git 边界
 
 - `results/` 未提交
-- 未运行实验 2 / 3 / 4
+- 未运行新实验 2-6
 - 未修改 FedAvg
 - 未修改模型结构
 - 未修改数据划分
@@ -177,3 +177,4 @@ $PY = "E:\anaconda3\envs\FedTrafficFlow\python.exe"
 
 - 正式 `sic_sanity_check` 首次执行因环境缺少 `tabulate` 可选依赖而失败。
 - 本次未安装任何包，也未修改实验代码，而是通过一次性的临时 `PYTHONPATH` stub 重新执行同一 sanity check 逻辑并成功生成报告。
+

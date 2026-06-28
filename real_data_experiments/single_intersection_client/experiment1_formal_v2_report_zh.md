@@ -1,10 +1,10 @@
-# 实验 1：grid_cell main full 正式重跑 v2 报告
+﻿# 实验 1：grid_cell main full 正式重跑 v2 报告
 
 ## 1. 运行状态
 
 - 正式实验 1 v2 已完成。
 - 本次仅检查并审计实验 1：`grid_cell main full`
-- 未运行实验 2/3/4。
+- 未运行新实验 2-6。
 
 ## 2. 输出目录
 
@@ -99,9 +99,10 @@
 ## 8. Git 边界
 
 - `results/` 未进入 Git
-- 未运行实验 2/3/4
+- 未运行新实验 2-6
 - 未修改 FedAvg
 - 未修改模型结构
 - 未修改数据划分
 - 未修改 LaTeX
 - 未修改 `simulation_experiments`
+

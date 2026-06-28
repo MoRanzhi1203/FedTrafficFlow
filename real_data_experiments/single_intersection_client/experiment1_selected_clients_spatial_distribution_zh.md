@@ -1,4 +1,4 @@
-# 实验 1：selected_clients 空间覆盖与分布统计报告
+﻿# 实验 1：selected_clients 空间覆盖与分布统计报告
 
 ## 1. 报告目的
 
@@ -12,7 +12,7 @@
 - `result_dir`：`E:\Jupter_Notebook\FedTrafficFlow\results\real_data_experiments\formal\grid_cell_main_full_cuda_v4`
 - 数据入口：`tensor_path=E:\Jupter_Notebook\FedTrafficFlow\data\processed\node_flow_grid\final_sum_mean_standard\node_flow_grid_tensor.pt`，`regions_path=E:\Jupter_Notebook\FedTrafficFlow\data\processed\node_flow_grid\final_sum_mean_standard\node_flow_grid_regions.csv`
 - 与原稿 `K=3` 的关系：当前 K=5 是相对 K=3 的增强。
-- 与 `cluster-level client` 的区别：当前仅覆盖 grid-cell-level；cluster-level 需把多个 grid cells 聚为一个 client，尚未完成。
+- 与新实验 3-6 的区别：当前仅覆盖 single-grid client；后续 grouped-client 与 global-partition 实验线尚未完成。
 
 ## 3. client 基础信息
 
@@ -94,13 +94,13 @@
 ## 9. 当前局限
 
 - 当前仍不是全路网覆盖。
-- 当前仍未完成 `cluster-level client`。
+- 当前仍未完成新实验 3-6 所涉及的 grouped-client / global-partition 客户端实验线。
 - 当前空间覆盖主要是局部 pooled-grid 子区域，而不是城市尺度均匀取样。
 - 当前不应声称这 5 个 client 是唯一最优组合。
 
 ## 10. 推荐论文表述
 
-本实验采用 K=5 的 grid-cell-level client 设置，选取 290、284、318、288 和 289 作为细粒度空间单元客户端。该设置相较原稿 K=3 增加了参与客户端数量，使实验能够观察更明显的 client-level variability。统计结果显示，不同客户端在节点数量、流量尺度、波动强度和时间相关性方面存在差异，其中 289 与其他客户端的相关性较低，并在 FedAvg 与 NaiveLastValue 的对比中表现出明显 gap，说明其代表了强异质客户端。因而，该设置适合用于验证真实数据联邦链路在 grid-cell-level non-IID 场景下的可运行性和局限性。需要强调的是，该设置不是对全路网客户端的穷尽覆盖，后续 cluster-level 或 region-level client 实验将用于进一步验证更同质的客户端组织方式是否能够缓解跨客户端分布差异造成的性能下降。
+本实验采用 K=5 的 grid-cell-level client 设置，选取 290、284、318、288 和 289 作为细粒度空间单元客户端。该设置相较原稿 K=3 增加了参与客户端数量，使实验能够观察更明显的 client-level variability。统计结果显示，不同客户端在节点数量、流量尺度、波动强度和时间相关性方面存在差异，其中 289 与其他客户端的相关性较低，并在 FedAvg 与 NaiveLastValue 的对比中表现出明显 gap，说明其代表了强异质客户端。因而，该设置适合用于验证真实数据联邦链路在 grid-cell-level non-IID 场景下的可运行性和局限性。需要强调的是，该设置不是对全路网客户端的穷尽覆盖，后续 后续新实验 3/4（多个相似网格合并为一个客户端）与新实验 5/6（全局所有网格按相似度划分为客户端）将进一步验证更同质或更系统的客户端组织方式是否能够缓解跨客户端分布差异造成的性能下降。
 
 ## 11. 结论
 
@@ -113,8 +113,9 @@
 ## 12. 边界声明
 
 - 本阶段未运行训练。
-- 未运行实验 2/3/4。
+- 未运行新实验 2-6。
 - 未修改 FedAvg。
 - 未修改模型结构。
 - 未修改数据划分。
 - 未提交 `results/`。
+

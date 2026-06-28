@@ -1,4 +1,4 @@
-# 实验 1：grid_cell main full v4 CUDA Sanity Check 报告
+﻿# 实验 1：grid_cell main full v4 CUDA Sanity Check 报告
 
 ## 1. 配置
 
@@ -56,3 +56,4 @@
 
 - 当前 CUDA v4 已通过“设备正确、尺度正确、无 NaN/Inf、无常数预测、R2 为正、收敛正常”的基础 sanity。
 - 但项目主线标准要求实验 1 的正式 CUDA 结果应先达到或优于 `NaiveLastValue`，而当前 `FedAvg` 仍未满足该条件。
+

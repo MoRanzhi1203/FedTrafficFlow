@@ -66,8 +66,8 @@
 | 当前 client 数量是否仍可能被认为偏少 | 5 个真实数据 client 已高于 K=3，但总体仍属小规模真实数据 FL。 | 需要说明限制 | 可能仍被审稿人认为覆盖范围有限。 | 明确写出“增强但仍是小规模真实数据 FL”这一限制。 |
 | 当前是否已充分说明为什么选这 5 个 client | 已明确固定 ID，但缺少论文级选择依据。 | 未满足 | 缺少 selected_clients 选择逻辑、筛选准则和与原稿叙事的映射。 | 补充选择依据与固定 5 个 grid cells 的设计说明。 |
 | 当前是否已充分说明空间覆盖 | 已有 pooled_row / pooled_col / centroid / source_node_count 事实。 | 部分满足 | 已有事实表，但尚未转化为空间覆盖解释。 | 在报告中补 5 个 grid cells 的空间覆盖与流量分布说明。 |
-| 当前是否已充分说明 cluster procedure | 项目内已有 cluster client 迁移口径，但实验 1 未展开。 | 未满足 | 当前实验 1 没有 cluster procedure 结果或正式说明。 | 明确 cluster-level client 由实验 3 承接，当前仅说明原稿组织方式。 |
-| 当前是否已经完成 cluster-level client 实验 | 当前 result_dir 为 `grid_cell_main_full_cuda_v4`，且对齐报告已说明尚未完成。 | 未满足 | 缺少 cluster-level 实验结果与报告。 | 不要在实验 1 中冒充已完成；保留为后续实验 3。 |
+| 当前是否已充分说明 cluster procedure | 项目内已有后续多网格客户端迁移口径，但实验 1 未展开。 | 未满足 | 当前实验 1 没有 grouped-client / global-partition 结果或正式说明。 | 明确 grouped-client / global-partition 客户端实验线由新实验 3-6 分别承接，当前仅说明原稿组织方式。 |
+| 当前是否已经完成 cluster-level client 实验 | 当前 result_dir 为 `grid_cell_main_full_cuda_v4`，且对齐报告已说明尚未完成。 | 未满足 | 缺少 cluster-level 实验结果与报告。 | 不要在实验 1 中冒充已完成；保留为后续新实验 3-6 对比/消融线补齐。 |
 | 当前是否已经回应 non-IID | 已有 gap diagnosis 与 heterogeneity diagnosis，并锁定 289。 | 已满足 | 需要把结论转写为论文级表述。 | 把 289 异质性写成诊断结果和 FedAvg 局限解释。 |
 | 当前是否已经回应 client-level variability | 已有 per-client 指标、pairwise correlation、leave-one-client-out 统计。 | 已满足 | 正文尚缺精炼版表格。 | 补一张 client-level variability 汇总表。 |
 | 当前实验 1 是否满足一审 / 导师要求 | 已有真实数据闭环、split 证据、non-IID 证据，但缺选择依据与 cluster-level 补充。 | 部分满足 | selected_clients 依据不足，cluster-level 未完成。 | 先补文档和审计报告，再决定后续实验方向。 |
@@ -79,7 +79,7 @@
 - 补充 `client-level variability` 表，保留 per-client 指标与差异摘要。
 - 把 `289` 异质性写成“诊断结果”，不要写成随意删除依据。
 - 说明 5-client 是对原稿 `K=3` 的增强，但仍属于小规模真实数据 FL。
-- 说明 `cluster-level client` 还未完成，后续由实验 3 承接。
+- 说明 grouped-client / global-partition 客户端实验线还未完成，后续由新实验 3-6 分别承接。
 - 统一 `CCN/CNN` 表述，真实数据实验 1 以 `CNN-LSTM-Attention` 为准。
 - 明确 `NaiveLastValue` 是 sanity baseline，不是原始主对比 baseline。
 - 明确 `Independent` 仍是主学习型 baseline。
@@ -91,7 +91,7 @@
 - 该设置用于验证真实数据联邦链路，并暴露强 non-IID 下标准 FedAvg 的局限。
 - `selected_clients=290,284,318,288,289` 将原稿 `K=3` 扩展为 `K=5`，增强了 `client-level variability` 分析。
 - 其中 `289` 显示出明显异质性，是解释 FedAvg 未全面超过 `NaiveLastValue` 的关键证据。
-- 后续 cluster/region-level client 实验用于验证更同质的 client 组织是否能缓解 FedAvg 的跨 client 平均欠拟合问题。
+- 后续新实验 3/4 的 grouped-client 组织与新实验 5/6 的全局覆盖式划分，将用于验证更同质或更系统的 client 组织是否能缓解 FedAvg 的跨 client 平均欠拟合问题。
 
 ## 8. 是否需要立即修改实验
 
@@ -100,21 +100,22 @@
 - 不建议现在直接进入实验 2。
 - 不建议现在改 `FedAvg`。
 - 建议先补齐 client 分配依据和诊断报告。
-- 下一步可做 `leave-one-client-out / 4-client smoke` 或 `cluster-level client` 审计。
+- 下一步可做 `leave-one-client-out / 4-client smoke`，或转入新实验 3-6 的 grouped-client / global-partition 审计。
 
 ## 9. 结论
 
 - 一审 / 导师没有要求固定 client ID。
 - 一审 / 导师真正要求的是 client 分配逻辑、异质性证据、client 数量说明、clustering procedure、client-level variability。
 - 当前实验 1 已部分满足。
-- 当前最大缺口是 `selected_clients` 选择依据和 `cluster-level client` 尚未完成。
+- 当前最大缺口是 `selected_clients` 选择依据，以及新实验 3-6 的 grouped-client / global-partition 客户端实验线尚未完成。
 - 当前最小修复动作是补充 client 分配检测报告，并修正对齐报告中的相关表述。
 
 ## 10. 边界声明
 
 - 本阶段未运行训练。
-- 未运行实验 2/3/4。
+- 未运行新实验 2-6。
 - 未修改 FedAvg。
 - 未修改模型结构。
 - 未修改数据划分。
 - 未提交 `results/`。
+

@@ -1,4 +1,4 @@
-# 实验 1：selected_clients 选择依据说明报告
+﻿# 实验 1：selected_clients 选择依据说明报告
 
 ## 1. 报告目的
 
@@ -94,12 +94,12 @@
 - 不代表全部真实路网。
 - 不代表最终最优 client 组合。
 - 仍需补充空间覆盖解释。
-- 仍需补充 `cluster-level client`。
+- 仍需补充新实验 3-6 的 grouped-client / global-partition 实验线。
 - 仍需补充更多 client 或 `region-client` 结果。
 
 ## 9. 推荐论文表述
 
-当前实验 1 采用 K=5 的 grid-cell-level client 设置。与原稿 K=3 的设置相比，该设置增加了参与客户端数量，使实验能够更直接地观察 client-level variability 和强 non-IID 对标准 FedAvg 的影响。五个客户端均来自当前真实数据正式实验链路，并已完成 FedAvg、Independent、NaiveLastValue、通信轮次和异质性诊断。需要强调的是，该设置不是对真实路网全部客户端的穷尽覆盖，而是用于构造一个细粒度异质客户端场景，以检验标准 FedAvg 在真实交通流数据中的可运行性、收敛性和局限性。后续 cluster-level 或 region-level client 实验将进一步用于验证更同质的客户端组织方式是否能够缓解跨客户端分布差异带来的性能下降。
+当前实验 1 采用 K=5 的 grid-cell-level client 设置。与原稿 K=3 的设置相比，该设置增加了参与客户端数量，使实验能够更直接地观察 client-level variability 和强 non-IID 对标准 FedAvg 的影响。五个客户端均来自当前真实数据正式实验链路，并已完成 FedAvg、Independent、NaiveLastValue、通信轮次和异质性诊断。需要强调的是，该设置不是对真实路网全部客户端的穷尽覆盖，而是用于构造一个细粒度异质客户端场景，以检验标准 FedAvg 在真实交通流数据中的可运行性、收敛性和局限性。后续 后续新实验 3/4 与新实验 5/6 将进一步用于验证更同质或更系统的客户端组织方式是否能够缓解跨客户端分布差异带来的性能下降。
 
 ## 10. 结论
 
@@ -113,8 +113,9 @@
 ## 11. 边界声明
 
 - 本阶段未运行训练。
-- 未运行实验 2/3/4。
+- 未运行新实验 2-6。
 - 未修改 FedAvg。
 - 未修改模型结构。
 - 未修改数据划分。
 - 未提交 `results/`。
+
