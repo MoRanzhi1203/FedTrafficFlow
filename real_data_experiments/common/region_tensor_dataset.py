@@ -27,7 +27,8 @@ class RegionClientWindowDataset(Dataset):
         if input_length <= 0 or horizon <= 0:
             raise ValueError("input_length and horizon must be positive.")
 
-        self.tensor = tensor.detach().clone().to(dtype=torch.float32)
+        self.tensor = tensor.detach().to(dtype=torch.float32)
+        self._own_tensor = False  # shared reference, no clone to avoid O(n_clones) memory/time
         self.region_ids = [int(region_id) for region_id in region_ids]
         self.input_length = int(input_length)
         self.horizon = int(horizon)

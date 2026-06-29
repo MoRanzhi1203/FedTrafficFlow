@@ -99,11 +99,15 @@ def build_region_client_data(
     config: ExperimentConfig,
 ) -> tuple[list[RegionClientData], dict[str, object], RegionPartitionResult]:
     """Construct tensor-only regional clients and split summaries."""
+    import time
 
     if config.data_mode != "tensor":
         raise ValueError("region_client currently supports tensor-only input.")
 
+    t0 = time.time()
     bundle = load_grid_tensor_bundle(config.tensor_path, config.regions_path)
+    print(f"  [build_rc] load_grid_tensor_bundle took {time.time()-t0:.1f}s", flush=True)
+    t_part = time.time()
     try:
         partition_result = assign_region_clients(
             bundle=bundle,
@@ -130,6 +134,7 @@ def build_region_client_data(
             horizon=config.prediction_horizon,
             seed=config.seed,
         )
+    print(f"  [build_rc] assign_region_clients took {time.time()-t_part:.1f}s", flush=True)
 
     time_bounds = build_time_split_bounds(
         time_count=int(bundle.tensor.shape[2]),
@@ -145,9 +150,11 @@ def build_region_client_data(
 
     assignment_df = partition_result.assignment_df.copy()
     summary_df = partition_result.client_distribution_summary_df.copy()
+    t_ds = time.time()
     for row in summary_df.to_dict(orient="records"):
         client_id = int(row["client_id"])
         region_ids = partition_result.client_region_ids[client_id]
+        t_c = time.time()
         train_dataset = RegionClientWindowDataset(
             tensor=bundle.tensor,
             region_ids=region_ids,
@@ -194,6 +201,7 @@ def build_region_client_data(
             },
             client_metadata=row,
         )
+        print(f"  [build_rc] client {client_id}: {len(region_ids)} regions, {len(train_dataset)} train samples, dataset build took {time.time()-t_c:.1f}s", flush=True)
         clients.append(client)
         client_region_counts[str(client_id)] = int(len(region_ids))
         client_sample_counts[str(client_id)] = int(len(train_dataset))
@@ -428,7 +436,11 @@ def export_results(
 def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     """Run the regional-client experiment."""
 
+    import time
+    t0 = time.time()
     output_dir = prepare_output_dir(config.output_dir)
+    print(f"[stage] prepare_output_dir took {time.time()-t0:.1f}s", flush=True)
+    
     device_info = resolve_device(config.device)
     device = device_info.actual_device
     print(
@@ -441,7 +453,10 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     set_global_seed(config.seed)
     start_time = datetime.now().isoformat(timespec="seconds")
 
+    t1 = time.time()
+    print(f"[stage] build_region_client_data starting...", flush=True)
     clients, split_summary, partition_result = build_region_client_data(config)
+    print(f"[stage] build_region_client_data took {time.time()-t1:.1f}s, num_clients={len(clients)}", flush=True)
     fed_client_df, convergence_df, fed_prediction_df = run_fedavg_experiment(config, clients, device)
     ind_client_df, ind_prediction_df = run_independent_experiment(config, clients, device)
     prediction_df = pd.concat([fed_prediction_df, ind_prediction_df], ignore_index=True)
