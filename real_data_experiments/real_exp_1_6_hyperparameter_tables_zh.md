@@ -22,7 +22,7 @@
 
 | 模块 | 参数 | 实验适用范围 | 取值 | 来源文件 | 作用 | 选择依据 |
 |---|---|---|---|---|---|---|
-| Input | input_channels | Exp1/2/3: 2; Exp5/6: 2 | `use_channels=[0,1]` | `*_config.py` | 双通道输入（流量+速度） | 下游信道提供辅助信息 |
+| Input | input_channels | Exp1/2/3: 2; Exp5/6: 2 | `use_channels=[0,1]` | `*_config.py` | 双通道输入（total flow + mean flow） | 下游信道提供辅助信息 |
 | Input | input_length (sequence_length) | 全部 | 12 | `*_config.py` 默认; exp1 formal run_config 确认 | 12步历史窗口（3小时@15min） | 覆盖短时交通流模式 |
 | Output | prediction_horizon | 全部 | 1 | `*_config.py` 默认 | 单步预测（15min ahead） | 交通流短时预测标准设置 |
 | CNN | Conv1d layer 1 | 全部 | in→16, kernel=3, padding=1, ReLU | `sic_core.py` line 80-81 | 空间特征提取 | — |
@@ -86,8 +86,8 @@
 | Tensor shape | `[2, 630, 5856]` (2 channels × 630 regions × 5856 timesteps) |
 | 时间范围 | 2017-04-01 ~ 2017-05-31 (61天, 15min粒度) |
 | Active regions | 223 个 `is_active_region=True` |
-| 输入归一化 | z-score (per-channel, train-split statistics) |
-| 目标归一化 | z-score (train-split statistics) — Exp1/2/3 有，Exp5/6 ❌缺失 |
+| 输入归一化 | z-score (per-channel, train-split statistics) — Exp1/2/3/5/6 ✅ |
+| 目标归一化 | z-score (train-split statistics) — Exp1/2/3/5/6 ✅（本轮修复后） |
 | 数据划分策略 | 时序连续 (temporal contiguous), 非随机 |
 | GPU | NVIDIA GeForce RTX 3060 Laptop GPU |
 | Python | E:\anaconda3\envs\FedTrafficFlow\python.exe |
@@ -95,7 +95,18 @@
 
 ---
 
-## 5. 缺失参数清单
+## 5. 聚合策略一致性风险
+
+当前代码实现为标准 FedAvg，聚合权重为 sample_count / total_sample_count。论文旧稿中出现过数据量权重、loss-aware 权重、λ、β、ρ 和 smoothing 的描述，但当前代码未实现这些机制。后续必须二选一：
+
+1. 保持代码不变，将论文方法描述改为标准 FedAvg；
+2. 或新增 similarity/loss-aware aggregation 实现，并重新运行相关实验。
+
+本轮建议先保持代码不变，论文和超参数表统一写为标准 FedAvg，避免代码与论文不一致。
+
+---
+
+## 6. 缺失参数清单
 
 以下参数在源码或 run_config 中未显式记录，但论文可能需要报告：
 
@@ -113,9 +124,9 @@
 
 ---
 
-## 6. 论文可写入内容建议
+## 7. 论文可写入内容建议
 
-### 6.1 参数选择理由
+### 7.1 参数选择理由
 
 - **sequence_length=12**：覆盖 3 小时（15min×12）的短期交通流动态，与城市交通流短时预测文献一致
 - **prediction_horizon=1**：单步 15min 预测，是交通流预测的标准设置
@@ -123,7 +134,7 @@
 - **batch_size=32/64**：适应 GPU 内存（RTX 3060 6GB），multi-region client 场景下每个 client 样本量很大（~300k samples），32 可加速 DataLoader 遍历
 - **learning_rate=1e-3**：Adam 默认学习率，在归一化训练空间下表现稳定
 
-### 6.2 关于 λ (聚合权重)
+### 7.2 关于 λ (聚合权重)
 
 本工作使用标准 FedAvg，按各 client 的 train split 样本数加权聚合，未引入额外的 λ 超参数：
 
@@ -133,7 +144,7 @@ global_weights = Σ_k (n_k / n_total) × local_weights_k
 
 其中 n_k 为 client k 的训练样本数。该策略确保大样本 client 对全局模型贡献更大，是 FedAvg 的标准做法。
 
-### 6.3 关于 ρ (平滑因子)
+### 7.3 关于 ρ (平滑因子)
 
 本工作未使用 FedAvg 动量或平滑机制，每轮独立聚合：
 
@@ -143,14 +154,14 @@ w_{t+1} = Σ_k (n_k / n_total) × w_k^t
 
 若审稿人要求讨论收敛稳定性，可在 revision 中补充 FedAvgM (momentum) 或 FedProx 作为对照，但当前主要实验未引入。
 
-### 6.4 local_epochs 与 client drift
+### 7.4 local_epochs 与 client drift
 
 local_epochs=1 的选择基于以下考虑：
 - 在样本量不均匀的 multi-region clients 下，过多 local epochs 会导致 client drift（局部模型偏离全局最优）
 - exp1 实验中 local_epochs=1 + rounds=20 已观察到收敛（FedAvg test_rmse 从 94,706 降至 20,753）
 - 历史 exp1/2 使用 local_epochs=3 也对齐了相同的收敛趋势
 
-### 6.5 关于 rounds 与收敛
+### 7.5 关于 rounds 与收敛
 
 exp1 的 round-level 收敛曲线显示：
 - Round 1: test_rmse=94,706

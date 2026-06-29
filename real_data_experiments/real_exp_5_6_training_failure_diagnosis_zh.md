@@ -229,3 +229,58 @@ apply_dataset_normalization(clients, input_scaler=input_scaler, target_scaler=ta
 修复 commit `d2b87f4` 在 `sia_core.py` 中补全了 scaler 链路，修复后 exp2 Full RMSE=17,346（正常）。
 
 **实验 5/6 的当前问题与实验 2 修复前的问题完全同源**，修复方案也一致。
+
+---
+
+## 5. Scaler 修复实现与最小诊断结果
+
+### 5.1 修改文件
+
+- `rc_config.py`: 添加 `input_normalization: bool = True` / `target_normalization: bool = True` 字段和 CLI flags
+- `rc_core.py`: 添加 `fit_rc_input_scaler()` / `fit_rc_target_scaler()` 函数、`evaluate_naive_last_value()` baseline、scaler 链路（fit → apply → evaluation with target_scaler）、raw dataset 存储
+- `ra_config.py`: 添加 `input_normalization: bool = True` / `target_normalization: bool = True` 字段和 CLI flags
+- `ra_core.py`: 导入并复用 `rc_core` 的 scaler 函数，在 `run_experiment()` 中接入完整 scaler 链路
+
+### 5.2 修复内容
+
+- 添加 `input_normalization` / `target_normalization` 配置字段
+- 添加 `input_scaler` / `target_scaler` 拟合：仅从 train split 计算 z-score statistics
+- Dataset normalization：通过 `apply_dataset_normalization()` 包装 DataLoader，val/test 仅 transform 不参与 fit
+- Evaluation 反归一化：`collect_predictions()` 接受 `target_scaler` 参数，评估结果在 raw scale
+- NaiveLastValue baseline：取输入窗口中 target channel 的最后一个时间步作为预测
+- 不破坏 Dataset lazy slicing，不恢复 `.clone()` 到 Dataset 构造函数
+
+### 5.3 Exp5 spatial_block r3e1 诊断结果
+
+**测试配置**: k=3, r=3, e=1, device=cuda, spatial_block, max_samples_per_client_split=5000
+
+| Method | RMSE | MAE | MAPE | R² |
+|---|---:|---:|---:|---:|
+| FedAvg | 159,527 | 133,827 | 4357% | 0.273 |
+| Independent | 270,238 | 224,122 | 99.3% | 0.097 |
+| NaiveLastValue | 8,744 | 4,941 | 3.2% | 0.9996 |
+
+**Convergence (FedAvg)**:
+
+| Round | train_loss | val_rmse | test_rmse |
+|---:|---:|---:|---:|
+| 1 | 0.313 | 306,043 | 305,349 |
+| 2 | 0.037 | 184,862 | 185,071 |
+| 3 | 0.017 | 158,875 | 159,527 |
+
+### 5.4 与修复前对比
+
+| 配置 | 修复前 r20 RMSE | 修复后 r3 RMSE | 改善 |
+|---|---:|---:|---|
+| spatial_block FedAvg | 627,741 (r1=r20, 无学习) | 159,527 (r3, 持续下降) | ✅ train_loss 下降, RMSE 改善 |
+| spatial_block Independent | 627,704 | 270,238 | ✅ 不再输出常数 |
+| NaiveLastValue | 不存在 | 8,744 | ✅ 已补充 baseline |
+
+### 5.5 结论
+
+- **Scaler 修复明显改善了训练**：train_loss 从 r1 的 0.313 降至 r3 的 0.017，RMSE 从 306k 降至 160k（vs 修复前 r1=r20 的 628k 常数输出）
+- **模型开始学习**：r1 到 r3 的 RMSE 持续下降，不再停滞
+- **NaiveLastValue 非常强** (RMSE=8,744)：说明对于 multi-region pooled 数据，简单的 persistence 已经非常有效，模型需要更多训练数据和更多 rounds 才能超越
+- **FedAvg 当前弱于 NaiveLastValue**：RMSE=160k vs 8.7k。但这与 exp1 的情况类似（exp1 r1e1 FedAvg=107k，r20e1 FedAvg=24k，仍弱于 NaiveLastValue 的 19k）
+- **改善明显**，可考虑后续重跑 exp5/6 formal（r20e1，full data）来判断 full data 下的最终性能。但当前 r3e1+capped data 不足以判断最终是否优于 NaiveLastValue
+- 如果 full data + r20 后 FedAvg 仍远弱于 NaiveLastValue，说明 multi-region pooled client 组织方式可能不利于 FedAvg，需要重新审视 client 划分策略

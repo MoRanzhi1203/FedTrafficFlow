@@ -27,8 +27,16 @@ from real_data_experiments.region_client.rc_core import (
     RegionClientData,
     _make_client_record,
     build_region_client_data,
+    fit_rc_input_scaler,
+    fit_rc_target_scaler,
 )
-from real_data_experiments.single_intersection_client.sic_core import Attention, collect_predictions
+from real_data_experiments.single_intersection_client.sic_core import (
+    Attention,
+    InputScaler,
+    TargetScaler,
+    apply_dataset_normalization,
+    collect_predictions,
+)
 
 
 VARIANT_LABELS = {
@@ -113,12 +121,12 @@ def build_model_fn(variant: str, input_channels: int, prediction_horizon: int) -
     )
 
 
-def evaluate_round(model: nn.Module, clients: list[RegionClientData], device: str) -> dict[str, float]:
+def evaluate_round(model: nn.Module, clients: list[RegionClientData], device: str, target_scaler: TargetScaler | None = None) -> dict[str, float]:
     val_rmses: list[float] = []
     test_rmses: list[float] = []
     for client in clients:
-        val_true, val_pred = collect_predictions(model, client.val_loader, device)
-        test_true, test_pred = collect_predictions(model, client.test_loader, device)
+        val_true, val_pred = collect_predictions(model, client.val_loader, device, target_scaler=target_scaler)
+        test_true, test_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
         val_metrics = compute_regression_metrics(val_true, val_pred)
         test_metrics = compute_regression_metrics(test_true, test_pred)
         val_rmses.append(val_metrics["rmse"])
@@ -136,10 +144,11 @@ def evaluate_variant(
     clients: list[RegionClientData],
     device: str,
     variant: str,
+    target_scaler: TargetScaler | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     client_rows: list[dict[str, object]] = []
     for client in clients:
-        y_true, y_pred = collect_predictions(model, client.test_loader, device)
+        y_true, y_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
         metrics = compute_regression_metrics(y_true, y_pred)
         client_rows.append(
             {
@@ -157,6 +166,7 @@ def run_variant(
     clients: list[RegionClientData],
     device: str,
     variant: str,
+    target_scaler: TargetScaler | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     input_channels = _resolve_input_channels(config)
     model_fn = build_model_fn(variant, input_channels, config.prediction_horizon)
@@ -178,13 +188,13 @@ def run_variant(
         global_model=global_model,
         clients=fed_clients,
         communication_rounds=config.communication_rounds,
-        evaluate_fn=lambda model: evaluate_round(model, clients, device),
+        evaluate_fn=lambda model: evaluate_round(model, clients, device, target_scaler=target_scaler),
     )
     history_df = pd.DataFrame(history)
     if not history_df.empty:
         history_df.insert(0, "variant", variant)
         history_df.insert(1, "variant_label", VARIANT_LABELS[variant])
-    client_metrics_df, _ = evaluate_variant(trained_model, clients, device, variant)
+    client_metrics_df, _ = evaluate_variant(trained_model, clients, device, variant, target_scaler=target_scaler)
     return client_metrics_df, history_df
 
 
@@ -250,11 +260,26 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     start_time = datetime.now().isoformat(timespec="seconds")
 
     clients, split_summary, partition_result = build_region_client_data(config)  # type: ignore[arg-type]
+
+    # --- Scaler fitting and normalization ---
+    input_scaler = fit_rc_input_scaler(clients) if config.input_normalization else None
+    target_scaler = fit_rc_target_scaler(clients) if config.target_normalization else None
+    if input_scaler is not None or target_scaler is not None:
+        apply_dataset_normalization(clients, input_scaler=input_scaler, target_scaler=target_scaler)
+    if input_scaler is not None:
+        split_summary["input_normalization"] = {"enabled": True, **input_scaler.to_dict()}
+    else:
+        split_summary["input_normalization"] = {"enabled": False}
+    if target_scaler is not None:
+        split_summary["target_normalization"] = {"enabled": True, **target_scaler.to_dict()}
+    else:
+        split_summary["target_normalization"] = {"enabled": False}
+
     selected_variants = list(config.variants or DEFAULT_VARIANTS)
     ablation_frames: list[pd.DataFrame] = []
     convergence_frames: list[pd.DataFrame] = []
     for variant in selected_variants:
-        client_df, history_df = run_variant(config, clients, device, variant)
+        client_df, history_df = run_variant(config, clients, device, variant, target_scaler=target_scaler)
         ablation_frames.append(client_df)
         convergence_frames.append(history_df)
 

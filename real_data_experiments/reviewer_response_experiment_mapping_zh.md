@@ -12,7 +12,7 @@
 | **超参数表** | 所有实验 | 三张超参数表已在此次整理中生成 (`real_exp_1_6_hyperparameter_tables_zh.md`) | 已覆盖：模型结构表、联邦训练表、数据划分表 |
 | **消融实验** | 实验 2/4/6 | Exp2: 代码存在（`sia_core.py`），历史成功运行但目录已删除，需恢复或重跑。Exp4: 未开发。Exp6: 仅 full variant，消融不完整（缺少 without_attention/without_cnn/without_lstm） | P1: 补跑 exp2 formal。P2: 开发 exp4 入口或弱化论文对应叙述。P0: 修复 exp6 scaler 后补全 4 个 variant |
 | **client 数量与异质性** | 实验 3/5 | Exp3: 5 clients (similarity_k5)，smoke 通过。Exp5: 3 clients (spatial_block/flow_kmeans)，formal pipeline 通过。exp5 有 `non_iid_summary.csv` 记录异质性。 | exp3 已产出 client-level smoke 指标，但仅为 r1e1；需要 r20 formal 才能形成 client 异质性结论。exp5 formal 指标异常（scaler 缺失），需修复后重新评估 |
-| **对比基线不足** | 实验 1/3/5 | Exp1: 6 baselines (FedAvg, Independent, NaiveLastValue, CalendarProfileNaive, DailySeasonalNaive, WeeklySeasonalNaive)。Exp3: 3 baselines (FedAvg, Independent, NaiveLastValue)。Exp5: 仅 2 (FedAvg, Independent)，缺少 NaiveLastValue。 | P1: exp5 补 NaiveLastValue baseline。P2: exp3 formal 后补充周期性 baselines |
+| **对比基线不足** | 实验 1/3/5 | Exp1: 6 baselines (FedAvg, Independent, NaiveLastValue, CalendarProfileNaive, DailySeasonalNaive, WeeklySeasonalNaive)。Exp3: 3 baselines (FedAvg, Independent, NaiveLastValue)。Exp5: ✅ 已补 NaiveLastValue baseline（本轮修复）。 | ✅ Exp5 已补 NaiveLastValue。P2: exp3 formal 后补充周期性 baselines |
 | **聚合策略讨论** | 所有联邦实验 | 当前仅使用标准 FedAvg（sample_count 加权），无 λ/β/ρ 超参数。`trainer.py` 和 `fedavg.py` 实现清晰。 | 论文中需说明：标准 FedAvg 聚合公式。若审稿人要求更多聚合策略对比，需补充 FedProx 或 FedAvgM |
 | **通信开销/掉线/鲁棒性** | 写作补充 | 当前实验均在全量 client 参与 + 无掉线条件下运行。无通信开销模拟。 | 在论文 limitations 或 discussion 中说明：当前实验假设全量 client 参与，通信开销和掉线鲁棒性作为未来工作或仿真实验补充 |
 | **GCN 真实数据** | 可选 | 当前未在真实数据上运行 GCN 实验。GCN 实验仅在 `results/simulation_experiments/` 中（仿真数据）。 | 在 limitations 中说明计算成本限制；或补一个轻量 GCN 真实数据测试 |

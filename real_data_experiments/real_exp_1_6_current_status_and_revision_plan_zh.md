@@ -8,7 +8,7 @@
 ## 1. 当前 Git 状态
 
 - **分支**: `feature/real-exp1-client-similarity-diagnosis`
-- **HEAD**: `d6453ef` — `docs(real-data): correct stale diff in section 3.2 and finalize smoke report`
+- **HEAD**: `afb2ebf` — `docs(real-data): consolidate revised experiments 1-6 plan, hyperparameters, failure diagnosis, reviewer mapping, and result table plan`
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |

@@ -41,6 +41,8 @@ class ExperimentConfig:
     use_active_regions_only: bool = True
     use_channels: list[int] = field(default_factory=lambda: [0, 1])
     target_channel: int = 0
+    input_normalization: bool = True
+    target_normalization: bool = True
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -80,6 +82,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", type=str, default="results/real_data_experiments/region_ablation_tensor")
     parser.add_argument("--variants", type=str, default="")
     parser.add_argument("--max-samples-per-client-split", type=int, default=0)
+    parser.add_argument("--input-normalization", dest="input_normalization", action="store_true", default=True)
+    parser.add_argument("--no-input-normalization", dest="input_normalization", action="store_false")
+    parser.add_argument("--target-normalization", dest="target_normalization", action="store_true", default=True)
+    parser.add_argument("--no-target-normalization", dest="target_normalization", action="store_false")
     return parser
 
 
@@ -103,4 +109,6 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         device=args.device,
         variants=parse_variants(args.variants),
         max_samples_per_client_split=(None if int(args.max_samples_per_client_split) <= 0 else int(args.max_samples_per_client_split)),
+        input_normalization=args.input_normalization,
+        target_normalization=args.target_normalization,
     )

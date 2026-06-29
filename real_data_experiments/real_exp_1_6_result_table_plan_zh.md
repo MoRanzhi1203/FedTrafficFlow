@@ -13,7 +13,7 @@
 |------|------|:---:|------|
 | 实验 1 | formal r20e1 ✅ | ✅ 可直接使用 | FedAvg 弱于 Independent 和 NaiveLastValue，如实报告 |
 | 实验 3 | 仅 smoke r1e1 | ❌ 暂不可 | 需 r20 formal 后才能纳入 |
-| 实验 5 | formal pipeline ✅ 但指标异常 | ❌ 暂不可 | 修复 scaler 后需重跑 |
+| 实验 5 | formal pipeline ✅ scaler 已修复 ✅ | ⚠️ 待重跑 formal | 修复后 r3e1 诊断确认模型开始学习（RMSE 从 628k 降至 160k），需 r20 formal 后判断是否可纳入主表 |
 
 ### 建议主结果表结构
 
