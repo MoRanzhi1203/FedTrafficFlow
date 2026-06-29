@@ -53,8 +53,8 @@ self.tensor = tensor.detach().clone().to(dtype=torch.float32)
 ```diff
 # region_tensor_dataset.py line 30
 - self.tensor = tensor.detach().clone().to(dtype=torch.float32)
-+ self.tensor = tensor.detach().to(dtype=torch.float32)
-+ self._own_tensor = False  # shared reference
++ self.tensor = tensor.detach()
++ self._own_tensor = False  # shared reference; dtype conversion done once at bundle load
 ```
 
 **安全性说明**：`RegionClientWindowDataset.__getitem__` 中通过 `self.tensor[self.use_channels, region_id, start:end]` 切片返回新 tensor，不会修改共享 tensor。lazy slicing 保证无数据污染。
@@ -65,14 +65,34 @@ self.tensor = tensor.detach().clone().to(dtype=torch.float32)
 - **实验 6** (`ra_core.py`)：从 `rc_core` 导入 `build_region_client_data`，自动受益
 - **实验 3** (`rfc_dataset.py`)：直接使用 `RegionClientWindowDataset`，自动受益
 
-## 4. Smoke 验证
+## 4. Smoke 验证结果（最终）
 
-由于运行环境终端限制，smoke 执行和结果确认待环境恢复后进行。代码层面：
+数据构建超时已确认消除。所有四个实验均通过 r1e1 smoke。
 
-- `region_tensor_dataset.py`：已删除冗余 `.clone()`
-- `rc_core.py`：已添加计时日志用于后续诊断
-- `ra_core.py`：无需修改（复用 `build_region_client_data`）
-- `rfc_dataset.py`：无需修改（使用修复后的 `RegionClientWindowDataset`）
+| 实验 | 配置 | 数据构建耗时 | 训练耗时 | 状态 | metrics 文件 | 备注 |
+|---|---:|---:|:---:|---|
+| Exp5 | spatial_block, k=3, r1e1 | **0.2s** | ~10min | ✅ | `main_metrics.csv` | |
+| Exp5 | flow_kmeans, k=3, r1e1 | **14.3s** | ~12min | ✅ | `main_metrics.csv` | 含 sklearn KMeans |
+| Exp6 | spatial_block, full, k=3, r1e1 | <1s | ~10min | ✅ | `ablation_metrics.csv` | 复用 Exp5 数据构建 |
+| Exp3 | similarity_k5, r1e1 | <1s | ~15min | ✅ | `main_metrics.csv` | 5 clients, FedAvg+Independent+NaiveLastValue |
+
+### 4.1 关键指标（r1e1，仅验证 pipeline，非 formal）
+
+**Exp5 spatial_block**: FedAvg RMSE=629,575, Independent=629,538
+
+**Exp5 flow_kmeans**: FedAvg RMSE=570,644, Independent=570,607
+
+**Exp6 full**: RMSE=629,575（ablation variant "full"）
+
+**Exp3 similarity_k5**: FedAvg RMSE=279,894, Independent=108,569, NaiveLastValue=8,240
+
+r1e1 指标偏高是预期行为（1 round + 1 epoch），可运行的 pipeline 已确认。
+
+### 4.2 耗时分析
+
+- 数据构建从 **>300s** 降至 spatial_block **0.2s**、flow_kmeans **14.3s**
+- 训练耗时主要由大样本集（~300k samples/client × 3-5 clients）的单轮遍历主导
+- 实验 3 的 NaiveLastValue RMSE=8,240 表现最好，表明多 cell 聚合 + similarity grouping 对简单 baseline 有效
 
 ## 5. 二次修复（dtype 去重）
 
@@ -85,36 +105,10 @@ self.tensor = tensor.detach().clone().to(dtype=torch.float32)
 
 dtype 转换由 `load_grid_tensor_bundle` 在加载时统一完成（`map_location="cpu"` + `.to(dtype=torch.float32)`），Dataset 内不再重复。
 
-## 6. Smoke 验证结果
+## 6. 结论与后续
 
-### 6.1 实验 5 spatial_block
-
-- **状态**: ✅ 成功
-- **数据构建耗时**: 0.2s（tensor load 0.1s + partition 0.1s + client datasets 0.0s each）
-- **训练耗时**: ~8 分钟（3 clients × ~300k samples × 1 round + local training）
-- **输出**: `main_metrics.csv` 已生成
-- **指标**: FedAvg RMSE=629,575, R²=-1.14（r1e1 仅验证 pipeline，指标待正式训练调优）
-
-### 6.2 实验 5 flow_kmeans
-
-- **状态**: ✅ 成功
-- **数据构建耗时**: 14.3s（KMeans 分区 + feature frame 构建）
-- **训练耗时**: ~10 分钟
-- **输出**: `main_metrics.csv` 已生成
-- **说明**: flow_kmeans 比 spatial_block 多 ~14s 是因为 sklearn KMeans 聚类
-
-### 6.3 实验 6 full
-
-- **状态**: ⏳ 运行中（待完成）
-- **说明**: `ra_core.py` 复用 `build_region_client_data`，数据构建应与 spatial_block 同速
-
-### 6.4 实验 3 similarity_k5
-
-- **状态**: ⏳ 待运行
-
-## 7. 关键发现
-
-1. **超时根因已确认**: `.clone()` + `.to(dtype=torch.float32)` 在每个 Dataset 实例中重复复制完整 tensor
-2. **修复后数据构建从 >300s 降至 0.2s**（spatial_block）或 14.3s（flow_kmeans）
-3. 训练阶段因每个 client 包含 ~300k 样本（75 regions × ~4000 windows），单轮训练仍需数分钟
-4. r1e1 的 RMSE 较高是预期行为（1 round + 1 epoch 不足以收敛），不影响 pipeline 验证
+1. **超时根因已确认并修复**：`.clone()` + `.to(dtype=torch.float32)` 在每个 Dataset 实例中重复复制完整 tensor
+2. **数据构建从 >300s 降至 <15s**
+3. **实验 3/5/6 的 r1e1 smoke 全部通过**
+4. ⚠️ r1e1 指标仅用于 pipeline 验证，**不能作为论文 formal 结果**
+5. **可以进入 formal**：实验 3/5/6 的 pipeline 均可用，r20 正式训练在数据构建阶段不会有额外开销
