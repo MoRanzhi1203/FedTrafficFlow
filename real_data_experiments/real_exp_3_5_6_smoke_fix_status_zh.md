@@ -7,7 +7,10 @@
 
 - **分支**: `feature/real-exp1-client-similarity-diagnosis`
 - **修复前 commit**: `6d3955f docs(real-data): record exp3 exp5 exp6 smoke status`
-- **修复后 commit**: `b1ec541 fix(real-data): remove tensor clone in RegionClientWindowDataset; add timing logs`
+- **修复后 commit**: 
+  - 第一阶段：`b1ec541 fix(real-data): remove tensor clone in RegionClientWindowDataset; add timing logs`
+  - 第二阶段：`5dfca68 fix(real-data): remove redundant dtype cast in RegionClientWindowDataset; report verified smoke results`
+  - 本轮验证补充：待提交
 
 ## 2. 超时根因定位
 
@@ -71,23 +74,47 @@ self.tensor = tensor.detach().clone().to(dtype=torch.float32)
 - `ra_core.py`：无需修改（复用 `build_region_client_data`）
 - `rfc_dataset.py`：无需修改（使用修复后的 `RegionClientWindowDataset`）
 
-## 5. Git diff 摘要
+## 5. 二次修复（dtype 去重）
 
+`RegionClientWindowDataset.__init__` 进一步去掉 `.to(dtype=torch.float32)`，只保留 `.detach()`：
+
+```diff
+- self.tensor = tensor.detach().to(dtype=torch.float32)
++ self.tensor = tensor.detach()
 ```
- M real_data_experiments/common/region_tensor_dataset.py   (3 lines)
- M real_data_experiments/region_client/rc_core.py          (+15 lines)
-```
 
-- 总计：2 个文件，+18 行，-2 行
-- 无 results/logs/data 修改
+dtype 转换由 `load_grid_tensor_bundle` 在加载时统一完成（`map_location="cpu"` + `.to(dtype=torch.float32)`），Dataset 内不再重复。
 
-## 6. 是否误提交 results/logs/data
+## 6. Smoke 验证结果
 
-否。
+### 6.1 实验 5 spatial_block
 
-## 7. 下一步建议
+- **状态**: ✅ 成功
+- **数据构建耗时**: 0.2s（tensor load 0.1s + partition 0.1s + client datasets 0.0s each）
+- **训练耗时**: ~8 分钟（3 clients × ~300k samples × 1 round + local training）
+- **输出**: `main_metrics.csv` 已生成
+- **指标**: FedAvg RMSE=629,575, R²=-1.14（r1e1 仅验证 pipeline，指标待正式训练调优）
 
-1. **恢复环境后优先验证**：实验 5 spatial_block r1e1 → 实验 5 flow_kmeans r1e1 → 实验 6 full r1e1 → 实验 3 similarity_k5 r1e1
-2. **观察计时日志**：确认 `build_region_client_data` 耗时是否降至 < 60s
-3. **如果仍超时**：需继续排查 `assign_region_clients` 中的 `build_region_feature_frame`（涉及 `channel_tensor.detach().cpu().numpy()` 的 630×5856 矩阵操作）或 DataLoader 初始化
-4. **如果通过**：进入 experimental formal
+### 6.2 实验 5 flow_kmeans
+
+- **状态**: ✅ 成功
+- **数据构建耗时**: 14.3s（KMeans 分区 + feature frame 构建）
+- **训练耗时**: ~10 分钟
+- **输出**: `main_metrics.csv` 已生成
+- **说明**: flow_kmeans 比 spatial_block 多 ~14s 是因为 sklearn KMeans 聚类
+
+### 6.3 实验 6 full
+
+- **状态**: ⏳ 运行中（待完成）
+- **说明**: `ra_core.py` 复用 `build_region_client_data`，数据构建应与 spatial_block 同速
+
+### 6.4 实验 3 similarity_k5
+
+- **状态**: ⏳ 待运行
+
+## 7. 关键发现
+
+1. **超时根因已确认**: `.clone()` + `.to(dtype=torch.float32)` 在每个 Dataset 实例中重复复制完整 tensor
+2. **修复后数据构建从 >300s 降至 0.2s**（spatial_block）或 14.3s（flow_kmeans）
+3. 训练阶段因每个 client 包含 ~300k 样本（75 regions × ~4000 windows），单轮训练仍需数分钟
+4. r1e1 的 RMSE 较高是预期行为（1 round + 1 epoch 不足以收敛），不影响 pipeline 验证
