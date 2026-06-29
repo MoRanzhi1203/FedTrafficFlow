@@ -7,7 +7,7 @@
 
 - **分支**: `feature/real-exp1-client-similarity-diagnosis`
 - **修复前 commit**: `6d3955f docs(real-data): record exp3 exp5 exp6 smoke status`
-- **修复后 commit**: 待提交
+- **修复后 commit**: `b1ec541 fix(real-data): remove tensor clone in RegionClientWindowDataset; add timing logs`
 
 ## 2. 超时根因定位
 
