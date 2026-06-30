@@ -65,6 +65,10 @@ class ExperimentConfig:
     )
     calendar_feature_mode: str = "target_time"
 
+    calendar_feature_sets: tuple[str, ...] = ("time_only", "holiday_only", "full")
+    calendar_gate_init: float = -5.0
+    calendar_fusion: str = "residual_gate"
+
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-friendly config dict."""
         return asdict(self)
@@ -122,6 +126,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--calendar-features-path", type=str, default="data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv")
     parser.add_argument("--calendar-feature-columns", type=str, default="")
     parser.add_argument("--calendar-feature-mode", type=str, default="target_time")
+    parser.add_argument("--calendar-feature-sets", type=str, default="time_only,holiday_only,full")
+    parser.add_argument("--calendar-gate-init", type=float, default=-5.0)
+    parser.add_argument("--calendar-fusion", type=str, default="residual_gate", choices=["residual_gate"])
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
     return parser
@@ -132,6 +139,17 @@ def _parse_calendar_columns(raw_text: str) -> tuple[str, ...]:
     if not raw_text or not raw_text.strip():
         return ()
     return tuple(col.strip() for col in raw_text.split(",") if col.strip())
+
+
+def _parse_calendar_feature_sets(raw_text: str) -> tuple[str, ...]:
+    if not raw_text or not raw_text.strip():
+        return ("time_only", "holiday_only", "full")
+    valid = {"time_only", "holiday_only", "full"}
+    values = tuple(part.strip() for part in raw_text.split(",") if part.strip())
+    invalid = [value for value in values if value not in valid]
+    if invalid:
+        raise ValueError(f"Invalid calendar feature sets: {invalid}. valid={sorted(valid)}")
+    return values
 
 
 def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
@@ -171,4 +189,7 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         calendar_features_path=args.calendar_features_path,
         calendar_feature_columns=_parse_calendar_columns(args.calendar_feature_columns) or ExperimentConfig.calendar_feature_columns,
         calendar_feature_mode=args.calendar_feature_mode,
+        calendar_feature_sets=_parse_calendar_feature_sets(args.calendar_feature_sets),
+        calendar_gate_init=args.calendar_gate_init,
+        calendar_fusion=args.calendar_fusion,
     )

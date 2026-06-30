@@ -9,7 +9,7 @@
 ## 1. 当前 Git 状态
 
 - **分支**: `feature/real-exp4-rfc-ablation`
-- **HEAD**：待本轮提交后更新（最新 commit 为 `cfd115b`，本轮 align split defaults 和 calendar status docs 后将进入新 commit）
+- **HEAD**：待本轮 CalendarFeatureFedAvg v2 提交后更新（最新 commit 为 `b7cecfa`）
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |

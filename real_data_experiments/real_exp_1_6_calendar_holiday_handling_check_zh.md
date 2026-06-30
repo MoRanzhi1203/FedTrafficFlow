@@ -7,7 +7,7 @@
 ## 1. Git 状态
 
 - **分支**：`feature/real-exp4-rfc-ablation`
-- **HEAD**：`cfd115b chore: add Trae instruction workspace`（80/10/10 默认值修复及日历文档同步将在本轮提交中更新）
+- **HEAD**：`b7cecfa` — 待本轮 CalendarFeatureFedAvg v2 提交后更新
 - **本轮是否运行 formal**：否
 - **本轮是否运行 smoke**：是，Exp5 final align smoke 用于验证 CalendarProfileNaive 样本对齐
 - **本轮是否修改源码**：是，前序提交已修改 `rc_core.py` 与 `calendar_utils.py`
