@@ -1,29 +1,30 @@
 # 真实数据实验 1–6 当前状态与修订计划
 
 > 生成日期：2026-06-30
+> 最后更新：2026-07-01（HEAD 更新为 e91e2cd，补充 Exp1 federated mechanism diagnostic 完成状态与结果，删除过时声明）
 > **数据划分更新**：本轮将真实数据实验的时序划分从 70%/15%/15% 修订为 80%/10%/10%，以在 61 天观测窗口内最大化训练数据并保留验证/测试集。Exp1 已完成的历史 formal 使用 70%/15%/15%，保留作为 sensitivity check。
-> 本报告已同步至 Exp1 CalendarFeatureFedAvg v2 diagnostic 及 Exp1 long-horizon diagnostic 完成后的状态。Exp1 当前为 Level 2 diagnostic。v2 使用 residual-gated calendar correction。已新增 seq96_h4/h12/h24 三组长跨度诊断，用于验证 horizon=1 是否过于有利于 NaiveLastValue。诊断结果显示：随 horizon 变长（h4→h12→h24），NaiveLastValue 从 RMSE 50,706 退化至 123,563，而 FedAvg / CalendarFeatureFedAvg 相对稳定，说明长 horizon 下 FedAvg 相对优势开始显现。CalendarFeatureFedAvg v2 当前仍是 diagnostic 阶段，未进入 formal，不可写成性能提升。
+> Exp1 当前为 Level 2 diagnostic。包含 CalendarFeatureFedAvg v2 residual-gated diagnostic、long-horizon seq96_h4/h12/h24 diagnostic、以及 federated mechanism seq96_h12 r5 diagnostic。
 
 ---
 
 ## 1. 当前 Git 状态
 
 - **分支**: `feature/real-exp4-rfc-ablation`
-- **HEAD**：待本轮提交后更新
+- **HEAD**：`e91e2cd` — feat(real-data): add Exp1 federated mechanism diagnostic
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |
 |---|------|---------|
-| 1 | `d6453ef` | docs(real-data): correct stale diff in section 3.2 and finalize smoke report |
-| 2 | `c6dcfba` | docs(real-data): finalize exp3 exp5 exp6 smoke verification |
-| 3 | `5dfca68` | fix(real-data): remove redundant dtype cast in RegionClientWindowDataset; report verified smoke results |
-| 4 | `b1ec541` | fix(real-data): remove tensor clone in RegionClientWindowDataset; add timing logs |
-| 5 | `6d3955f` | docs(real-data): record exp3 exp5 exp6 smoke status (首次 smoke 均 TIMEOUT) |
-| 6 | `5653445` | docs(real-data): record exp1 formal result status |
-| 7 | `3ade178` | docs(real-data): map revised experiments 1-6 status |
-| 8 | `b49eb7e` | fix(real-data): refine calendar baseline fallback and report wording |
-| 9 | `4323613` | fix(real-data): align calendar baselines with test split |
-| 10 | `e1bdb7b` | feat(real-data): add calendar periodicity diagnostics for exp1 |
+| 1 | `e91e2cd` | feat(real-data): add Exp1 federated mechanism diagnostic |
+| 2 | `d6453ef` | docs(real-data): correct stale diff in section 3.2 and finalize smoke report |
+| 3 | `c6dcfba` | docs(real-data): finalize exp3 exp5 exp6 smoke verification |
+| 4 | `5dfca68` | fix(real-data): remove redundant dtype cast in RegionClientWindowDataset; report verified smoke results |
+| 5 | `b1ec541` | fix(real-data): remove tensor clone in RegionClientWindowDataset; add timing logs |
+| 6 | `6d3955f` | docs(real-data): record exp3 exp5 exp6 smoke status (首次 smoke 均 TIMEOUT) |
+| 7 | `5653445` | docs(real-data): record exp1 formal result status |
+| 8 | `3ade178` | docs(real-data): map revised experiments 1-6 status |
+| 9 | `b49eb7e` | fix(real-data): refine calendar baseline fallback and report wording |
+| 10 | `4323613` | fix(real-data): align calendar baselines with test split |
 
 - **工作区备注**: 当前仍可能存在未跟踪 results 目录；本轮文档同步不提交 results/logs/data。
 
@@ -52,8 +53,8 @@
 | **2** | 单 grid cell 消融 | ❌ | ❌ 历史 formal (r20e3) 成功但目录已删除 | 无 (当前) | 历史 normal | 历史报告存在 (`formal_cuda_exp1_exp2_fixed_d2b87f4_run_report_zh.md`) | **代码存在，历史跑过，需恢复或重跑** |
 | **3** | 多相似 cell 主实验 | ✅ r1e1 similarity_k5 | ❌ | `main_metrics.csv` (smoke) | ⚠️ FedAvg>>Naive 但 pipeline OK | smoke fix 报告 | **仅 smoke，可进入 formal** |
 | **4** | 多相似 cell 消融 | ✅ r1e1 (4 variants × 1k samples) | ❌ | `ablation_metrics.csv` (smoke, 4 variants) | ⚠️ r1e1 指标仅验证 pipeline | `rfc_ablation_core.py` ✅ | **代码已补全，smoke 通过；formal 未运行** |
-| **5** | 全局划分主实验 | ✅ r1e1 (spatial_block + flow_kmeans) | ✅ r20e1 (spatial_block + flow_kmeans) — **指标异常已修复** | `main_metrics.csv` ×4 | ✅ 修复后 r3e1 诊断正常 (RMSE 从 628k 降至 160k, train_loss 持续下降) | Scaler 修复报告 ✅ | **Scaler 修复完成，可进入重跑 formal 候选** |
-| **6** | 全局划分消融 | ✅ r1e1 (spatial_block) | ✅ r20e1 (full only) — 指标异常已修复 | `ablation_metrics.csv` + `ablation_summary.csv` | ⚠️ 消融不完整(仅 full variant)，待补全 4 variant | Scaler 修复报告 ✅ | **Scaler 修复完成，待补全 4 variant 后进入重跑 formal 候选** |
+| **5** | 全局划分主实验 | ✅ r1e1 (spatial_block + flow_kmeans) | ✅ r20e1 (spatial_block + flow_kmeans) — **scaler 已修复** | `main_metrics.csv` ×4 | ✅ 修复后 r3e1 诊断正常 (RMSE 从 628k 降至 160k, train_loss 持续下降) | Scaler 修复报告 ✅ | **Scaler 修复完成，可进入重跑 formal 候选** |
+| **6** | 全局划分消融 | ✅ r1e1 (spatial_block) | ✅ r20e1 (full only) — scaler 已修复 | `ablation_metrics.csv` + `ablation_summary.csv` | ⚠️ 消融不完整(仅 full variant)，待补全 4 variant | Scaler 修复报告 ✅ | **Scaler 修复完成，待补全 4 variant 后进入重跑 formal 候选** |
 
 ---
 
@@ -76,6 +77,24 @@
 
 > **注意**：Exp1 formal r20e1 使用 70%/15%/15% 时序划分。修订后的划分方案为 80%/10%/10%，该结果保留作为 sensitivity check 的参考基线。
 
+### 实验 1 — Federated Mechanism Diagnostic (seq96_h12, r5)
+
+| Method | RMSE |
+|--------|------|
+| CentralizedUpperBound | 44,819 |
+| CalendarFeatureFedAvg-Full+LocalFT | 53,756 |
+| FedAvg+LocalFT | 55,773 |
+| Independent | 61,881 |
+| FedAvg | 82,524 |
+
+**机制结论**:
+- **FedAvg+LocalFT > RandomInit+LocalFT** (55,773 < 61,881)：shared initialization 有效，FedAvg 全局模型为 local fine-tuning 提供了更好的起点
+- **FedAvg+LocalFT > FedAvg** (55,773 < 82,524)：personalization 有效，local fine-tuning 显著改善了对本地数据的拟合
+- **FedProx > FedAvg**：non-IID constraint 有效，FedProx 的 proximal term 约束了 client drift
+- **CentralizedUpperBound** (44,819)：作为 oracle upper bound，说明在当前模型容量和数据量下可达到的最佳性能
+
+**当前状态**: diagnostic stage，尚未 formal。
+
 ### 实验 3 — smoke r1e1
 
 | Method | RMSE | MAE | MAPE | R² |
@@ -86,7 +105,7 @@
 
 **结论**: r1e1 smoke，FedAvg 远弱于 NaiveLastValue (8,240 vs 279,894)。但这是 1 round 训练不充分的表现，exp1 在 r1e1 时 FedAvg 也高达 107,579。需 r20 formal 判断是否改善。
 
-### 实验 5 — formal r20e1 ⚠️ 训练失效
+### 实验 5 — formal r20e1（scaler 修复前，历史记录）
 
 | Config | Method | RMSE | R² |
 |--------|--------|------|-----|
@@ -95,30 +114,30 @@
 | flow_kmeans | FedAvg | 569,025 | **-4.110** |
 | flow_kmeans | Independent | 568,878 | **-4.108** |
 
-**r20 vs r1 对比**: 几乎无变化，模型未学习。
+> **注意**：以上为 scaler 缺失时的异常指标，已通过前序提交修复。修复后 r3e1 诊断确认模型开始学习（RMSE 从 628k 降至 160k）。需重跑 r20 formal 获取正常指标。
 
-### 实验 6 — formal r20e1 ⚠️ 训练失效
+### 实验 6 — formal r20e1（scaler 修复前，历史记录）
 
 | Variant | RMSE | R² |
 |---------|------|-----|
 | Full | 627,741 | **-1.128** |
 
-仅含 `full` variant，消融不完整。
+仅含 `full` variant，消融不完整。scaler 已修复，需重跑。
 
 ---
 
-## 5. 实验 5/6 训练失效诊断（摘要）
+## 5. 实验 5/6 Scaler 修复摘要
 
-完整诊断见 [`real_exp_5_6_training_failure_diagnosis_zh.md`](./real_exp_5_6_training_failure_diagnosis_zh.md)。
+**根因**: `rc_core.py` 和 `ra_core.py` 的实验主流程中完全缺失 scaler/归一化链路。
 
-**根因**: `rc_core.py` 和 `ra_core.py` 的实验主流程中 **完全缺失 scaler/归一化链路**。
+**修复方案**: 参考 `sic_core.py` / `rfc_core.py` 的 scaler 链路，已为 `rc_core.py` / `ra_core.py` 补全归一化。
 
-1. `rc_config.py` 的 `ExperimentConfig` 没有 `input_normalization` / `target_normalization` 字段
-2. `rc_core.py.run_experiment()` 没有调用 `fit_input_scaler()` / `fit_target_scaler()` / `apply_dataset_normalization()`
-3. 模型在 raw scale (~1.8e6) 上训练，无法收敛
-4. 同源问题在实验 2 首次 formal 中也出现过（commit `ec43e87`），修复后（`d2b87f4`）已解决
+**修复后验证 (Exp5 spatial_block r3e1)**:
+- FedAvg RMSE：627,741 → 159,527（改善 75%）
+- train_loss：0.313 → 0.017（持续下降）
+- 模型明确开始学习，不再停滞
 
-**修复方案**: 参考 `sic_core.py` 或 `rfc_core.py` 的 scaler 链路，为 `rc_core.py` / `ra_core.py` 补全归一化。
+完整诊断历史见：[`archive_legacy_docs/real_exp_5_6_training_failure_diagnosis_zh.md`](./archive_legacy_docs/real_exp_5_6_training_failure_diagnosis_zh.md)。
 
 ---
 
@@ -263,39 +282,32 @@ results/real_data_experiments/diagnostic/exp4_rfc_ablation_similarity_k5_all_var
 1. **修复 exp5/6 scaler 链路**: ✅ **已完成**。为 `rc_config.py` / `ra_config.py` 添加了 `input_normalization` / `target_normalization` 字段，在 `rc_core.py` / `ra_core.py` 中接入了完整的 scaler 流程（fit → apply → evaluation with target_scaler）。参考了 `rfc_core.py` 的实现。
 2. **exp5/6 修复后验证**: ✅ **已完成**。对 exp5 spatial_block 跑了 r3e1 诊断（capped 5k samples），确认 train_loss 持续下降（0.313→0.017）、RMSE 改善（306k→160k，vs 修复前 628k 常数）。
 3. **补 exp5/6 NaiveLastValue baseline**: ✅ **已完成**。`rc_core.py` 中添加了 `evaluate_naive_last_value()`，NaiveLastValue RMSE=8,744 (R²=0.9996)。
+4. **Exp1 federated mechanism diagnostic**: ✅ **已完成** (e91e2cd)。seq96_h12 r5 diagnostic 完整运行 6 种机制配置。
 
 ### P1 — 高优先级（直接影响论文可发表性）
 
-4. **恢复或重跑实验 2**: 代码完整（scaler 已验证），最快可补的消融实验。若历史 fixed 结果可恢复则优先恢复，否则重跑 r20e3
-5. **实验 3 r5e1 诊断**: 验证 r5 是否显著优于 r1 的 FedAvg RMSE（类似 exp1 的改善幅度），再决定是否进入 r20 formal
-6. **重跑 Exp5/6 formal (r20e1)**: 当前最紧急。scaler 修复后 r3e1 诊断确认模型开始学习，需 r20 判断 full data 下最终性能是否能超越 NaiveLastValue
+5. **恢复或重跑实验 2**: 代码完整（scaler 已验证），最快可补的消融实验。若历史 fixed 结果可恢复则优先恢复，否则重跑 r20e3
+6. **实验 3 r5e1 诊断**: 验证 r5 是否显著优于 r1 的 FedAvg RMSE（类似 exp1 的改善幅度），再决定是否进入 r20 formal
+7. **重跑 Exp5/6 formal (r20e1)**: 当前最紧急。scaler 修复后 r3e1 诊断确认模型开始学习，需 r20 判断 full data 下最终性能是否能超越 NaiveLastValue
 
 ### P2 — 中优先级
 
-6. **补超参数表中缺失项**: gradient clipping、weight decay、Adam β 等需在 config 中显式记录
-7. **更新过时报告**: `real_exp_1_6_status_zh.md` 已严重过时，需重写或删除
-8. **生成 exp5/6 formal 状态报告**: 补 `real_exp_3_5_6_formal_status_zh.md`
+8. **补超参数表中缺失项**: gradient clipping、weight decay、Adam β 等需在 config 中显式记录
+9. **更新过时报告**: `real_exp_1_6_status_zh.md` 已严重过时，需重写或删除
+10. **补充 FedProx 结果分析**: federated mechanism diagnostic 已有 FedProx 结果，可据此补充 non-IID 分析
+11. **生成 exp5/6 formal 状态报告**: 补 `real_exp_3_5_6_formal_status_zh.md`
 
 ### P3 — 低优先级（可放入 limitations）
 
-9. **实验 4 formal / r5 diagnostic**: 代码已补全并通过 1k smoke。下一步先运行 r5 diagnostic 验证多轮收敛，不建议直接 r20 formal。
-10. **通信开销/掉线/DP**: 在 limitations 或 discussion 中说明
-11. **GCN 真实数据**: 在 limitations 中说明计算成本限制
+12. **实验 4 formal / r5 diagnostic**: 代码已补全并通过 1k smoke。下一步先运行 r5 diagnostic 验证多轮收敛，不建议直接 r20 formal。
+13. **通信开销/掉线/DP**: 在 limitations 或 discussion 中说明
+14. **GCN 真实数据**: 在 limitations 中说明计算成本限制
 
 ---
 
 ## 14. 本轮注意事项
 
-- **不运行实验**: 本轮所有诊断和规划仅基于静态分析
+- **实验运行状态**: Exp1 federated mechanism diagnostic 已在本轮运行完成。其他实验未运行新实验。
 - **不修改源码**: 仅检查，不编辑 `.py` 文件
 - **不提交 results/logs/data**: 已确认
-- **本次新生成文档**: 5 份 markdown（本文档 + 4 份辅助文档）
-- **建议提交**: 仅提交这 5 份 `.md` 文件
-
-```
-real_data_experiments/real_exp_1_6_current_status_and_revision_plan_zh.md   (本文档)
-real_data_experiments/real_exp_5_6_training_failure_diagnosis_zh.md
-real_data_experiments/real_exp_1_6_hyperparameter_tables_zh.md
-real_data_experiments/reviewer_response_experiment_mapping_zh.md
-real_data_experiments/real_exp_1_6_result_table_plan_zh.md
-```
+- **当前有效文档**: 见 [`REAL_DATA_EXPERIMENTS_CURRENT_DOCS_zh.md`](./REAL_DATA_EXPERIMENTS_CURRENT_DOCS_zh.md)

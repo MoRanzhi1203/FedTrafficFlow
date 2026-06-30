@@ -1,14 +1,14 @@
 # 真实数据实验 1–6 时间与节假日处理检查报告
 
 > 生成日期：2026-06-30
-> 最后更新：2026-06-30（CalendarFeatureFedAvg v2 + Exp1 long-horizon diagnostic seq96_h4/h12/h24）
-> 文档状态：已与当前源码状态同步（v2 + long-horizon diagnostic 完成）
+> 最后更新：2026-07-01（HEAD 更新为 e91e2cd，修正 calendar 进入神经网络输入结论，补充 federated mechanism diagnostic 和 grouped_metrics_by_calendar 说明）
+> 文档状态：当前有效
 
 ## 1. Git 状态
 
 - **分支**：`feature/real-exp4-rfc-ablation`
-- **HEAD**：待本轮提交后更新
-- **本轮是否运行 formal**：否
+- **HEAD**：`e91e2cd` — feat(real-data): add Exp1 federated mechanism diagnostic
+- **本轮是否运行 formal**：Exp1 federated mechanism diagnostic 已运行
 - **本轮是否运行 smoke**：是，Exp5 final align smoke 用于验证 CalendarProfileNaive 样本对齐
 - **本轮是否修改源码**：是，前序提交已修改 `rc_core.py` 与 `calendar_utils.py`
 - **本轮是否修改文档**：是，本文件已在多轮中更新
@@ -110,7 +110,7 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 | 实验 | 新版含义 | 时间索引 | weekday/weekend | 节假日/调休 | 日内 slot | calendar baseline | calendar 作为模型输入 | 当前等级 |
 |------|----------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Exp1 | 单 grid cell 主实验 | 真实时间索引 (80/10/10 划分) | CalendarProfileNaive 使用 | 日历 CSV 标注 | slot_of_day 0-95 | CalendarProfileNaive + Daily/WeeklySeasonalNaive + CalendarFeatureFedAvg | 是（CalendarFeatureFedAvg diagnostic，Level 2） | **Level 2 diagnostic** |
+| Exp1 | 单 grid cell 主实验 | 真实时间索引 (80/10/10 划分) | CalendarProfileNaive 使用 | 日历 CSV 标注 | slot_of_day 0-95 | CalendarProfileNaive + Daily/WeeklySeasonalNaive + CalendarFeatureFedAvg v2 | 是（CalendarFeatureFedAvg v2 diagnostic + federated mechanism diagnostic 中进入神经网络辅助分支） | **Level 2 diagnostic** |
 | Exp2 | 单 grid cell 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无（未继承 Exp1） | 否 | **Level 0** |
 | Exp3 | 多相似 cell 主实验 | 纯整数 tensor index | 无 | 无 | 无 | CalendarProfileNaive (新增) | 否 | **Level 1** |
 | Exp4 | 多相似 cell 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无 | 否 | **Level 0** |
@@ -135,13 +135,13 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 - **calendar CSV 加载**：有。`sic_core.py` 第 1099 行 `_load_calendar_features()` 从 `data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv` 加载日历特征。
 
-- **日历特征进入模型输入**：否。神经网络输入仅来自 grid tensor 的通道维度（`use_channels=[0, 1]`），calendar DataFrame 仅用于三个 baseline 评估。
+- **日历特征进入模型输入**：是，仅在 Exp1 的 CalendarFeatureFedAvg v2 diagnostic 和 federated mechanism diagnostic 中进入神经网络辅助分支。主神经网络输入仍来自 grid tensor 通道维度（`use_channels=[0, 1]`），calendar 特征通过 residual-gated 辅助分支并入。
 
 - **时间切分**：`split_strategy = "temporal_contiguous_by_target_time"`，按真实时间顺序切分 train/val/test（当前比例 0.8/0.1/0.1；历史 formal 使用 0.7/0.15/0.15）。
 
 - **已有运行结果**：`results/real_data_experiments/diagnostics/exp1_calendar_periodicity/calendar_baselines_r5e1_cuda/run_config.json` 记录了 Exp1 的 calendar baselines 运行配置。
 
-**结论**：Exp1 已从 Level 1 升级至 Level 2 diagnostic。CalendarFeatureFedAvg 已将 calendar/holiday 特征作为辅助输入分支接入神经网络训练链路（diagnostic r5e1），但该 diagnostic 当前表现弱于 FedAvg，不可写成性能提升。CalendarProfileNaive 仍是独立 baseline。Exp3 和 Exp5 也已接入 CalendarProfileNaive baseline（见下文）。
+**结论**：Exp1 已从 Level 1 升级至 Level 2 diagnostic。CalendarFeatureFedAvg v2 已将 calendar/holiday 特征作为 residual-gated 辅助输入分支接入神经网络训练链路（diagnostic r5e1）；Exp1 federated mechanism diagnostic 中 CalendarFeatureFedAvg-Full+LocalFT 同样使用了 calendar 辅助分支。CalendarFeatureFedAvg v2 当前仍是 diagnostic 阶段，未进入 formal，不可写成性能提升。CalendarProfileNaive 仍是独立 baseline。Exp3 和 Exp5 也已接入 CalendarProfileNaive baseline（见下文）。
 
 > **历史划分说明**：Exp1 formal r20e1 使用 70%/15%/15% 时序划分。修订后的划分方案为 80%/10%/10%，以适应 61 天观测窗口。70%/15%/15% 结果保留作为 sensitivity check 参考。
 
@@ -230,8 +230,9 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 - 数据时间范围包含 2017 年 4–5 月清明节、劳动节、端午节及调休日；
 - 已构建完整的 calendar feature 文件（日级 + 15 分钟级，含节假日/调休/工作日标注）；
 - Exp1（单 cell 实验）已使用 CalendarProfileNaive / DailySeasonalNaive / WeeklySeasonalNaive 作为 calendar baselines，按 `is_effective_workday` + `slot_of_day` 检查周期性；
-- CalendarProfileNaive 是独立 baseline，验证了简单工作日/非工作日 profile 不足以捕捉交通流动态（RMSE=32,194 vs FedAvg 更低）；
-- 节假日变量当前 **已作为** 独立的 baseline 评估参考，但 **尚未** 作为 FedAvg 神经网络模型的输入特征。
+- CalendarProfileNaive 是独立 baseline，验证了简单工作日/非工作日 profile 不足以捕捉交通流动态；
+- calendar/holiday 特征目前在 Exp1 的 CalendarFeatureFedAvg v2 diagnostic 和 federated mechanism diagnostic 中进入神经网络辅助分支（residual-gated）；
+- Exp3/Exp5 已接入 CalendarProfileNaive baseline（Level 1）。
 
 ### 8.2 不能写
 
@@ -239,8 +240,10 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 - 不能写"CalendarFeatureFedAvg 已经提升 FedAvg"；
 - 不能写"CalendarFeatureFedAvg 已经完成 formal"；
 - 不能写"Exp2/4/6 已有 without_calendar 消融"；
-- 不能写"Exp2/Exp3/Exp4/Exp5/Exp6 已经使用了 holiday feature 或 calendar baseline"（Exp3/Exp5 已有 CalendarProfileNaive baseline，可以写，但不能写成模型输入）；
-- 不能写"calendar 特征已被所有实验共享使用"。
+- 不能写"Exp2/Exp3/Exp4/Exp5/Exp6 已经使用了 holiday feature 或 calendar baseline 作为模型输入"（Exp3/Exp5 仅有 CalendarProfileNaive baseline，不能写成模型输入）；
+- 不能写"calendar 特征已被所有实验共享使用"；
+- 不能写"calendar/holiday 是否进入神经网络输入：否"；
+- 不能写"所有实验均未使用 calendar 特征进入神经网络"。
 
 ## 9. 缺口与下一步建议
 
@@ -250,18 +253,16 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 - 如果审稿人要求节假日处理，应在论文中明确：
   - "当前 calendar/holiday 特征已作为 CalendarProfileNaive / DailySeasonalNaive / WeeklySeasonalNaive 三个独立 baseline 评估（Exp1），用于验证周期性效应；"
-  - "但 calendar 特征尚未接入 FedAvg 等联邦模型的训练输入通道。"
+  - "CalendarFeatureFedAvg v2 已将 calendar 特征作为 residual-gated 辅助分支接入 FedAvg 训练链路（diagnostic 阶段），但尚未进入 formal。"
 
 ### P1（已完成）
 
 - Exp3 / Exp5 已新增 CalendarProfileNaive baseline。
-
-
-
+- CalendarProfileNaive 样本对齐已修复。
 
 ### P2（建议开发 calendar 增强模型）
 
-- 开发 CalendarFeature-FedAvg：将 `day_of_week` / `slot_of_day` / `is_holiday` / `is_effective_workday` 的 sin/cos 编码（日历 CSV 中已有）拼接为额外输入通道或辅助特征，进入 FedAvg 训练链路（Level 2）。
+- 推进 CalendarFeatureFedAvg v2 从 diagnostic 到 formal：当前已在 r5e1 diagnostic + federated mechanism diagnostic 中验证了辅助分支结构。
 
 ### P3（建议做节假日分组分析）
 
@@ -277,9 +278,9 @@ Exp5 的 `raw_test_dataset` 曾在 `_maybe_cap_dataset()` 之前保存，导致 
 
 #### 修复方式
 
-- [`rc_core.py`](file:///E:/Jupter_Notebook/FedTrafficFlow/real_data_experiments/region_client/rc_core.py#L204-L209)：调整数据构造顺序，先对 train/val/test dataset 执行 `_maybe_cap_dataset()`，再保存 `raw_train_dataset`、`raw_val_dataset`、`raw_test_dataset`；
-- [`calendar_utils.py`](file:///E:/Jupter_Notebook/FedTrafficFlow/real_data_experiments/common/calendar_utils.py#L244-L252)：增加 `raw_test_dataset` 与 `test_loader.dataset` 的长度一致性检查，不匹配时 `raise ValueError`；
-- [`calendar_utils.py`](file:///E:/Jupter_Notebook/FedTrafficFlow/real_data_experiments/common/calendar_utils.py#L294-L303)：prediction 输出包含 `target_time`、`date`、`slot_of_day`、`is_effective_workday`、`is_holiday`、`is_weekend`、`holiday_name`。
+- `rc_core.py`：调整数据构造顺序，先对 train/val/test dataset 执行 `_maybe_cap_dataset()`，再保存 `raw_train_dataset`、`raw_val_dataset`、`raw_test_dataset`；
+- `calendar_utils.py`：增加 `raw_test_dataset` 与 `test_loader.dataset` 的长度一致性检查，不匹配时 `raise ValueError`；
+- `calendar_utils.py`：prediction 输出包含 `target_time`、`date`、`slot_of_day`、`is_effective_workday`、`is_holiday`、`is_weekend`、`holiday_name`。
 
 #### 对齐验证
 
@@ -294,17 +295,25 @@ Exp5 的 `raw_test_dataset` 曾在 `_maybe_cap_dataset()` 之前保存，导致 
 |------|------|
 | **当前显式使用日历/节假日 baseline 的实验** | Exp1、Exp3、Exp5。Exp1 含 CalendarProfileNaive + Daily/WeeklySeasonalNaive；Exp3/Exp5 新增 CalendarProfileNaive |
 | **当前完全无 calendar baseline 的消融实验** | Exp2、Exp4、Exp6 |
-| **calendar/holiday 是否进入神经网络输入** | 否。所有实验的神经网络输入仍为 tensor 通道，calendar 仅作为 baseline/诊断使用 |
-| **论文中如何表述** | 数据覆盖清明节、劳动节、端午节及调休日；主实验 Exp1/3/5 均已有 CalendarProfileNaive baseline；节假日特征尚未进入 FedAvg 模型输入 |
+| **calendar/holiday 是否进入神经网络输入** | 是（仅在 Exp1 的 CalendarFeatureFedAvg v2 diagnostic 和 federated mechanism diagnostic 中进入神经网络辅助分支）。Exp3/Exp5 仅作为 CalendarProfileNaive baseline；Exp2/4/6 未使用 calendar 特征。 |
+| **论文中如何表述** | Calendar/holiday 特征目前仅在 Exp1 的 CalendarFeatureFedAvg v2 diagnostic 和 federated mechanism diagnostic 中进入神经网络辅助分支；Exp3/Exp5 仅作为 CalendarProfileNaive baseline；Exp2/4/6 未使用 calendar 特征。 |
 | **是否误提交 results/logs/data** | 否（staged 区为空） |
 
 ### 分级总结
 
 | 实验 | 等级 | 一句话结论 |
 |------|:---:|------|
-| Exp1 | **Level 2 diagnostic** | 有 CalendarProfileNaive + Daily/WeeklySeasonalNaive baseline + CalendarFeatureFedAvg diagnostic (calendar 已进入模型输入，但仅 diagnostic 阶段) |
+| Exp1 | **Level 2 diagnostic** | 有 CalendarProfileNaive + Daily/WeeklySeasonalNaive baseline + CalendarFeatureFedAvg v2 diagnostic + federated mechanism diagnostic (calendar 已进入模型辅助输入分支，但仅 diagnostic 阶段) |
 | Exp2 | **Level 0** | 纯结构消融，无 calendar baseline |
 | Exp3 | **Level 1** | 新增 CalendarProfileNaive baseline，未进入模型输入 |
 | Exp4 | **Level 0** | 纯结构消融，无 calendar baseline |
 | Exp5 | **Level 1** | 新增 CalendarProfileNaive baseline，且 capped split 对齐已修复 |
 | Exp6 | **Level 0** | 纯结构消融，无 calendar baseline |
+
+### grouped_metrics_by_calendar 说明
+
+`grouped_metrics_by_calendar` 按 `is_effective_workday` / `is_holiday` / `is_weekend` 分组计算各方法在不同日期类型下的指标。该功能仅在以下方法中具有 calendar context：
+- **FedAvg / Independent / FedProx**：有 calendar context（通过 calendar features 时间对齐可追溯训练/评估窗口中的日期类型）
+- **CalendarFeatureFedAvg 变体**：有 calendar context
+- **LocalFT 方法**：有 calendar context
+- **DailySeasonalNaive / WeeklySeasonalNaive / CalendarProfileNaive**：**无** calendar context，因为这些 seasonal baseline 不依赖 calendar CSV 信息。DailySeasonalNaive 仅取 t-96、WeeklySeasonalNaive 仅取 t-672，无需知道当天是工作日还是节假日。CalendarProfileNaive 虽然使用 train 中的 is_effective_workday 构建 profile，但其预测输出仅依赖 slot_of_day + 工作日/非工作日的 profile lookup，不直接输出日期分组。
