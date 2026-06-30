@@ -203,10 +203,10 @@ def build_region_client_data(
         )
         raw_train_dataset = train_dataset
         raw_val_dataset = val_dataset
+        test_dataset = _maybe_cap_dataset(test_dataset, config.max_samples_per_client_split)
         raw_test_dataset = test_dataset
         train_dataset = _maybe_cap_dataset(train_dataset, config.max_samples_per_client_split)
         val_dataset = _maybe_cap_dataset(val_dataset, config.max_samples_per_client_split)
-        test_dataset = _maybe_cap_dataset(test_dataset, config.max_samples_per_client_split)
         client = RegionClientData(
             client_id=client_id,
             region_ids=region_ids,

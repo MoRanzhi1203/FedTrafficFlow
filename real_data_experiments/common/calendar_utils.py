@@ -240,6 +240,17 @@ def evaluate_calendar_profile_naive_for_clients(
                 f"CalendarProfileNaive requires raw (un-normalized) datasets."
             )
 
+        # Consistency check: raw_test_dataset must match test_loader.dataset length
+        if hasattr(client, "test_loader") and client.test_loader is not None:
+            raw_len = len(client.raw_test_dataset)
+            loader_len = len(client.test_loader.dataset)
+            if raw_len != loader_len:
+                raise ValueError(
+                    f"CalendarProfileNaive dataset mismatch for client {client_id}: "
+                    f"raw_test_dataset length={raw_len}, test_loader.dataset length={loader_len}. "
+                    f"Ensure raw_test_dataset is the capped version when max_samples_per_client_split is used."
+                )
+
         # Collect train data
         y_train, cal_train = collect_targets_and_calendar(
             client.raw_train_dataset, calendar_features, target_channel=target_channel
@@ -275,16 +286,19 @@ def evaluate_calendar_profile_naive_for_clients(
         client_rows.append(metrics)
 
         # Build prediction DataFrame
+        test_target_times = get_sample_target_times(client.raw_test_dataset)
         pred_df = pd.DataFrame({
             "method": method_name,
             "client_id": client_id,
             "sample_index": np.arange(len(y_test), dtype=int),
             "y_true": y_test,
             "y_pred": preds,
+            "target_time": test_target_times,
         })
 
         # Add calendar context columns if available
-        cal_context_cols = ["date", "slot_of_day", "is_effective_workday"]
+        cal_context_cols = ["date", "slot_of_day", "is_effective_workday",
+                           "is_holiday", "is_weekend", "holiday_name"]
         for col in cal_context_cols:
             if col in cal_test.columns:
                 pred_df[col] = cal_test[col].values
