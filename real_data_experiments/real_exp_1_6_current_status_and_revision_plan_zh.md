@@ -1,14 +1,14 @@
 # 真实数据实验 1–6 当前状态与修订计划
 
-> 生成日期：2026-06-29
-> 本轮不运行实验，不修改源码，仅做检查、诊断和规划。
+> 生成日期：2026-06-30
+> 本报告已同步至 Exp4 代码补全后的状态。Exp4 已新增独立消融入口并通过极小 smoke；formal 尚未运行。
 
 ---
 
 ## 1. 当前 Git 状态
 
-- **分支**: `feature/real-exp1-client-similarity-diagnosis`
-- **HEAD**: `afb2ebf` — `docs(real-data): consolidate revised experiments 1-6 plan, hyperparameters, failure diagnosis, reviewer mapping, and result table plan`
+- **分支**: `feature/real-exp4-rfc-ablation`
+- **HEAD**: `1ceb287` — `docs(real-data): update hyperparameter tables, result plan, and reviewer mapping for Exp4`
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |
@@ -24,14 +24,7 @@
 | 9 | `4323613` | fix(real-data): align calendar baselines with test split |
 | 10 | `e1bdb7b` | feat(real-data): add calendar periodicity diagnostics for exp1 |
 
-- **工作区状态**:
-  - Modified (未暂存): `simulation_experiments/cnn_fed_enhanced_experiments/cfe_visualization.py`, `simulation_experiments/gcn_fed_base/gfb_visualization.py` (仿真实验可视化，非本次关注)
-  - Untracked 诊断报告: `exp1_legacy_ipynb_model_diagnosis_zh.md`, `formal_cuda_exp1_exp2_anomaly_diagnosis_zh.md`, `formal_cuda_exp1_exp2_metric_analysis_zh.md`
-  - Untracked results: `results/real_data_experiments/smoke/`
-  - Deleted (staged): 大量 `results/simulation_experiments/` 文件
-
-- **是否有实验进程运行**: 无（6 个 python + 2 个 pythonw 均为 IDE/Jupyter 后台）
-- **是否存在未跟踪结果文件**: 是 (`results/real_data_experiments/smoke/` 未跟踪)
+- **工作区备注**: 当前仍可能存在未跟踪 results 目录；本轮文档同步不提交 results/logs/data。
 
 ---
 
@@ -159,27 +152,36 @@
 
 ---
 
-## 8. 实验 4 开发规划
+## 8. 实验 4 状态更新
 
 ### 当前状态
 
-- **独立入口**: 无
-- **代码**: 与实验 3 共用 `region_client_full_cells/rfc_core.py`，无 `--variants` 或 `--ablation` 参数
-- **Scaler 链路**: exp3 已正确接入
+- **独立入口**: ✅ 已新增 `real_data_experiments/region_client_full_cells/rfc_ablation_core.py`
+- **配置文件**: ✅ 已新增 `real_data_experiments/region_client_full_cells/rfc_ablation_config.py`
+- **client 构造**: ✅ 复用 Exp3 的 `similarity_k5.json` 和 `build_full_cells_client_data`
+- **Scaler 链路**: ✅ 复用 Exp3 的 `fit_rfc_input_scaler` / `fit_rfc_target_scaler`
+- **Variants**: ✅ `full`, `without_attention`, `without_cnn`, `without_lstm`
+- **Smoke**: ✅ all variants r1e1 + 1k samples + CUDA 通过
+- **Formal**: ❌ 尚未运行
 
-### 建议方案
+### Smoke 指标（仅用于 pipeline 验证）
 
-在 `real_data_experiments/region_client_full_cells/` 中新增消融入口：
+| Variant | RMSE |
+|---|---:|
+| full | 294,334 |
+| without_attention | 311,891 |
+| without_cnn | 130,883 |
+| without_lstm | 201,132 |
 
-1. 新建 `rfc_ablation_core.py`（或在 `rfc_core.py` 中添加 `--variants` 参数）
-2. 复用 `similarity_k5.json`、`RegionClientWindowDataset`、已修复的 lazy tensor 引用逻辑
-3. 复用 exp3 的 `fit_rfc_input_scaler` / `fit_rfc_target_scaler` 归一化链路
-4. 4 个 variants: `full`, `without_cnn`, `without_lstm`, `without_attention`
-5. 输出: `ablation_metrics.csv` / `ablation_summary.csv`
+**注意**: 以上结果只说明四个 variants 能跑通，不能作为正式消融结论。r1e1 下 `without_cnn` 表现最好属于单轮随机现象，不能据此认为 CNN 无效。
 
-实验 4 当前无独立入口，属于未开发状态。若论文保留 cluster-level ablation，需要开发 rfc ablation 入口；若时间不允许，需要删减或弱化论文中 cluster-level ablation 相关结论。
+### 输出目录
 
-**开发优先级**: P3（可以放入 limitations 作为未来工作）
+```
+results/real_data_experiments/diagnostic/exp4_rfc_ablation_similarity_k5_all_variants_r1_e1_cuda_1k/
+```
+
+（该目录不提交，仅用于 diagnostic 验证）
 
 ---
 
@@ -226,7 +228,7 @@
 
 关键映射：
 - 超参数表 → 已生成
-- 消融实验 → Exp2 需恢复，Exp4 未开发，Exp6 不完整
+- 消融实验 → Exp2 需恢复，Exp4 代码已补全但 formal 待跑，Exp6 不完整
 - 收敛性 → Exp1 有完整曲线，Exp3/5/6 缺失
 - client 异质性 → Exp1 有 client-level 指标，Exp5 non_iid_summary 存在
 - 对比基线 → Exp1 完整，Exp3/5/6 缺失 NaiveLastValue
@@ -240,7 +242,7 @@
 
 核心建议：
 - 主表仅纳入实验 1（当前唯一可信 formal 结果）
-- 消融表暂空（exp2 需恢复，exp4 未开发，exp6 不完整）
+- 消融表暂空（exp2 需恢复，exp4 代码已补全但 formal 未运行，exp6 不完整）
 - 主指标：MSE / RMSE / MAE / MAPE
 - R² 仅附录
 - 必须含相对提升率 Δ%
@@ -269,7 +271,7 @@
 
 ### P3 — 低优先级（可放入 limitations）
 
-9. **实验 4 开发**: 若论文保留 cluster-level ablation，开发 rfc ablation 入口
+9. **实验 4 formal / r5 diagnostic**: 代码已补全并通过 1k smoke。下一步先运行 r5 diagnostic 验证多轮收敛，不建议直接 r20 formal。
 10. **通信开销/掉线/DP**: 在 limitations 或 discussion 中说明
 11. **GCN 真实数据**: 在 limitations 中说明计算成本限制
 

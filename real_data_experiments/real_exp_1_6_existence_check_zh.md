@@ -7,8 +7,8 @@
 
 ## 1. Git 状态
 
-- **分支**: `main`
-- **HEAD**: `be1d448` — `docs(real-data): consolidate markdown reports and cleanup obsolete documents`
+- **分支**: `feature/real-exp4-rfc-ablation`
+- **HEAD**: `1ceb287` — `docs(real-data): update hyperparameter tables, result plan, and reviewer mapping for Exp4`
 - **staged 区是否为空**: 是
 - **是否存在未跟踪 results**: 是（`results/real_data_experiments/smoke/` 等多处未跟踪）
 - **本轮是否运行实验**: 否
@@ -23,7 +23,7 @@
 | **Exp1** | 单 grid cell 主实验 | ✅ `sic_core.py` | ✅ `sic_config.py` | ✅ FedAvg/Independent/NaiveLastValue/DailySeasonal/WeeklySeasonal/CalendarProfile | ✅ input+target | ✅ 6 种方法 | **存在** | 功能完整 |
 | **Exp2** | 单 grid cell 消融 | ✅ `sia_core.py` | ✅ `sia_config.py` | ✅ full/without_attention/without_cnn/without_lstm | ✅ input+target | N/A (消融) | **存在** | 独立消融入口，DEFAULT_VARIANTS 完整 |
 | **Exp3** | 多相似 cell 主实验 | ✅ `rfc_core.py` | ✅ `rfc_config.py` | ✅ FedAvg/Independent/NaiveLastValue + `--partition-file` | ✅ input+target | ✅ 3 种方法 | **存在** | similarity_k5.json 可用 |
-| **Exp4** | 多相似 cell 消融 | ❌ 不存在 | ❌ 不存在 | ❌ `rfc_core.py` 无 variants/ablation 参数 | ❌ | ❌ | **不存在** | 无独立入口 `rfc_ablation_core.py`，无 `region_client_full_cells_ablation` 目录，rfc_core/rfc_config 均无消融参数 |
+| **Exp4** | 多相似 cell 消融 | ✅ `rfc_ablation_core.py` | ✅ `rfc_ablation_config.py` | ✅ full/without_attention/without_cnn/without_lstm | ✅ input+target | N/A (消融) | **存在** | 独立消融入口已补全，复用 Exp3 similarity_k5 client 构造 |
 | **Exp5** | 全部 grid cells 主实验 | ✅ `rc_core.py` | ✅ `rc_config.py` | ✅ spatial_block / flow_kmeans | ✅ input+target | ✅ FedAvg/Independent/NaiveLastValue | **存在** | 功能完整 |
 | **Exp6** | 全部 grid cells 消融 | ✅ `ra_core.py` | ✅ `ra_config.py` | ✅ full/without_attention/without_cnn/without_lstm | ✅ input+target | N/A (消融) | **存在** | 输出 ablation_metrics.csv + ablation_summary.csv |
 
@@ -36,7 +36,7 @@
 | **Exp1** | 无独立 smoke | ✅ `formal/exp1_single_grid_baseline_r20_e1_cuda/` | 无 | ✅ `main_metrics.csv` (R² 正常 0.55-0.95) | **存在，可用** | 6 种方法指标正常 |
 | **Exp2** | 无 | ❌ 历史目录已删除 | 无 | 无 | **不存在** | 历史 formal 结果目录 (`exp2_single_grid_ablation_formal_cuda*`) 已删除 |
 | **Exp3** | ✅ `smoke/exp3_rfc_similarity_k5_r1e1/` | ❌ 不存在 | 无 | ✅ smoke `main_metrics.csv` | **仅 smoke** | formal 尚未运行 |
-| **Exp4** | 无 | 无 | 无 | 无 | **不存在** | 代码未开发，无任何结果 |
+| **Exp4** | ✅ diagnostic smoke: `exp4_rfc_ablation_similarity_k5_all_variants_r1_e1_cuda_1k/` | ❌ formal 未运行 | ✅ diagnostic 存在 | ✅ `ablation_metrics.csv` + `convergence_history.csv` | **diagnostic 存在，formal 不存在** | all variants smoke 通过，仅验证 pipeline |
 | **Exp5** | ✅ `smoke/exp5_rc_spatial_block_k3_r1e1/` + `exp5_rc_flow_kmeans_k3_r1e1/` | ⚠️ formal 存在但**指标异常** (R² < 0) | ✅ `exp5_rc_spatial_block_k3_r3_e1_cuda_scaler_fix*` (2 个) | ✅ formal 文件存在但内容损坏 | **旧结果不可用** | 旧 formal 为 scaler 修复前运行，MAPE≈100%, R²<0；diagnostic 有 scaler 修复版 |
 | **Exp6** | ✅ `smoke/exp6_ra_spatial_block_k3_r1e1/` | ⚠️ formal 仅 `full` variant，且**指标异常** (R²<0) | 无 | ✅ `ablation_metrics.csv` (仅 1 行 full) | **旧结果不可用** | 与 Exp5 同源损坏；仅 full variant，缺少 without_attention/without_cnn/without_lstm |
 
@@ -83,7 +83,7 @@ Independent    ~627,000    ~98%    -1.13
 - **Exp1**：代码存在 ✅ / 结果存在且正常 ✅ / **可用**
 - **Exp2**：代码存在 ✅ / 当前结果缺失 ❌ / **需恢复或重跑**
 - **Exp3**：代码存在 ✅ / smoke 存在 ✅ / formal 缺失 ❌ / **可直接进入 formal**
-- **Exp4**：代码不存在 ❌ / **未开发**。无独立入口，`rfc_core.py` 无 variants/ablation 参数。若论文需要此消融，需新建 `rfc_ablation_core.py` 或为 `rfc_core.py` 添加 `--variants` 参数
+- **Exp4**：代码存在 ✅ / diagnostic smoke 存在 ✅ / formal 缺失 ❌ / **已通过 all variants 1k r1e1 smoke，但不能作为论文正式结果。**
 - **Exp5**：代码存在 ✅ / 旧 formal 存在但结果异常 ❌ (scaler 修复前) / diagnostic 有 scaler 修复版 ⚠️ / **需用修复后代码重跑 formal**
 - **Exp6**：代码存在 ✅ / 旧 formal 仅 full variant 且异常 ❌ / **需补完整消融 (4 variants) 并重跑**
 
@@ -91,7 +91,7 @@ Independent    ~627,000    ~98%    -1.13
 
 ## 6. 下一步建议
 
-1. **Exp4 不存在**：后续决定是开发独立消融入口还是论文中删减此实验。
+1. **Exp4 已补全代码入口**：`rfc_ablation_core.py` + `rfc_ablation_config.py`，4 variants smoke 通过。下一步先跑 r5 diagnostic 验证多轮收敛，再决定是否进入 r20 formal。
 2. **Exp2 结果不存在**：历史 formal 目录已删除，需恢复（若有备份）或重跑 `sia_core`。
 3. **Exp3 仅 smoke**：pipeline 已验证，代码完整，可直接进入 formal (rounds=20)。
 4. **Exp5/6 代码存在但结果不可用**：

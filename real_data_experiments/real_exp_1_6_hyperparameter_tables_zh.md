@@ -35,6 +35,7 @@
 | Output | head | 全部 | Linear(hidden_dim→prediction_horizon) | `sic_core.py` line 87; `ra_core.py` line 88 | 回归输出 | — |
 | Model | variant (Exp1) | Exp1 | `baseline` (CNNLSTMAttentionRegressor) | `sic_core.py`; run_config 确认 | 主模型 | — |
 | Model | variants (Exp2) | Exp2 | `full`, `without_attention`, `without_cnn`, `without_lstm` | `sia_core.py` line 40-45; `sia_config.py` DEFAULT_VARIANTS | 消融变体 | CNN/LSTM/Attention 各组件消融 |
+| Model | variants (Exp4) | Exp4 | `full`, `without_attention`, `without_cnn`, `without_lstm` | `rfc_ablation_core.py`; `rfc_ablation_config.py` DEFAULT_VARIANTS | Cluster-level / similarity-client 消融变体 | CNN/LSTM/Attention 各组件消融，复用 Exp3 similarity_k5 client 构造 |
 | Model | variants (Exp6) | Exp6 | `full`, `without_attention`, `without_cnn`, `without_lstm` | `ra_core.py` line 34-38; `ra_config.py` DEFAULT_VARIANTS | 消融变体 | 同 Exp2 的 4 变体结构 |
 | Model | 参数量 (baseline) | Exp1/2/3/5 | 10,194 | `exp1_legacy_ipynb_model_diagnosis_zh.md` 记录 | 模型规模 | 轻量级 |
 | Model | 参数量 (legacy_ipynb) | Exp1 optional | 62,915 | `exp1_legacy_ipynb_model_diagnosis_zh.md` 记录 | 模型规模 | 仅诊断用，当前不推荐 |
@@ -87,8 +88,20 @@
 | Tensor shape | `[2, 630, 5856]` (2 channels × 630 regions × 5856 timesteps) |
 | 时间范围 | 2017-04-01 ~ 2017-05-31 (61天, 15min粒度) |
 | Active regions | 223 个 `is_active_region=True` |
-| 输入归一化 | z-score (per-channel, train-split statistics) — Exp1/2/3/5/6 ✅ |
-| 目标归一化 | z-score (train-split statistics) — Exp1/2/3/5/6 ✅（本轮修复后） |
+| 输入归一化 | z-score (per-channel, train-split statistics) — Exp1/2/3/4/5/6 ✅ |
+| 目标归一化 | z-score (train-split statistics) — Exp1/2/3/4/5/6 ✅（本轮修复后） |
+
+---
+
+### Exp4 CLI 注意事项
+
+`rfc_ablation_core.py` 的 `--variants` 参数使用逗号分隔，例如：
+
+```powershell
+--variants full,without_attention,without_cnn,without_lstm
+```
+
+不要写成空格分隔形式，否则 argparse 可能无法按预期解析。
 | 数据划分策略 | 时序连续 (temporal contiguous), 非随机 |
 | GPU | NVIDIA GeForce RTX 3060 Laptop GPU |
 | Python | E:\anaconda3\envs\FedTrafficFlow\python.exe |

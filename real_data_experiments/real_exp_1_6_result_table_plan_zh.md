@@ -44,7 +44,9 @@
 |------|------|:---:|------|
 | 实验 2 | 代码存在，结果已删除 | ⚠️ 需恢复 | 恢复历史结果或重跑 r20e3 formal |
 | 实验 6 | scaler 已修复，仅 full variant | ❌ 不可用 | 补全 4 variant + 重跑 |
-| 实验 4 | 未开发 | ❌ 不可用 | 需开发后再跑 |
+| 实验 4 | 代码已补全，all variants 1k smoke 通过 | ⚠️ formal 待跑 | 需 r5 diagnostic / r20 formal 后才能纳入 cluster-level ablation 表 |
+
+> **注意**: Exp4 smoke 中 `without_cnn` RMSE 最低（130,883），但该结果仅用于 pipeline 验证，r1e1 下不能作为正式消融结论。
 
 ### 建议消融表结构（如实验 2 恢复）
 

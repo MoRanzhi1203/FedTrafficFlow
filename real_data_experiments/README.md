@@ -41,7 +41,8 @@
 |------|------|--------|
 | 实验 1 | `single_intersection_client/` | [README_zh.md](single_intersection_client/README_zh.md) |
 | 实验 2 | `single_intersection_ablation/` | [README_zh.md](single_intersection_ablation/README_zh.md) |
-| 实验 3/4 | `region_client_full_cells/` | [README_zh.md](region_client_full_cells/README_zh.md) |
+| 实验 3 | `region_client_full_cells/rfc_core.py` | 多相似 grid cells 主实验 |
+| 实验 4 | `region_client_full_cells/rfc_ablation_core.py` + `rfc_ablation_config.py` | 多相似 grid cells 消融实验 |
 | 实验 5 | `region_client/` | [README_zh.md](region_client/README_zh.md) |
 | 实验 6 | `region_ablation/` | [README_zh.md](region_ablation/README_zh.md) |
 | 通用模块 | `common/` | [README_zh.md](common/README_zh.md) |
