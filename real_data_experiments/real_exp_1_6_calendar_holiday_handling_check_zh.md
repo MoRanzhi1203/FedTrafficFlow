@@ -1,8 +1,8 @@
 # 真实数据实验 1–6 时间与节假日处理检查报告
 
 > 生成日期：2026-06-30
-> 最后更新：2026-06-30（80/10/10 时序划分更新 + CalendarProfileNaive 接入 + capped split 对齐修复）
-> 文档状态：已与当前源码状态同步
+> 最后更新：2026-06-30（CalendarFeatureFedAvg v2 + Exp1 long-horizon diagnostic seq96_h4/h12/h24）
+> 文档状态：已与当前源码状态同步（v2 + long-horizon diagnostic 完成）
 
 ## 1. Git 状态
 

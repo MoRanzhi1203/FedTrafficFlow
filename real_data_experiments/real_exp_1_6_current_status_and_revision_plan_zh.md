@@ -2,14 +2,14 @@
 
 > 生成日期：2026-06-30
 > **数据划分更新**：本轮将真实数据实验的时序划分从 70%/15%/15% 修订为 80%/10%/10%，以在 61 天观测窗口内最大化训练数据并保留验证/测试集。Exp1 已完成的历史 formal 使用 70%/15%/15%，保留作为 sensitivity check。
-> 本报告已同步至 Exp1 CalendarFeatureFedAvg diagnostic 完成后的状态。Exp1 当前为 Level 2 diagnostic（CalendarFeatureFedAvg 已将 calendar/holiday 特征接入神经网络训练链路，但仅 diagnostic 阶段，未进入 formal）。CalendarFeatureFedAvg r5 diagnostic 当前表现弱于 FedAvg，不可写成性能提升。
+> 本报告已同步至 Exp1 CalendarFeatureFedAvg v2 diagnostic 及 Exp1 long-horizon diagnostic 完成后的状态。Exp1 当前为 Level 2 diagnostic。v2 使用 residual-gated calendar correction。已新增 seq96_h4/h12/h24 三组长跨度诊断，用于验证 horizon=1 是否过于有利于 NaiveLastValue。诊断结果显示：随 horizon 变长（h4→h12→h24），NaiveLastValue 从 RMSE 50,706 退化至 123,563，而 FedAvg / CalendarFeatureFedAvg 相对稳定，说明长 horizon 下 FedAvg 相对优势开始显现。CalendarFeatureFedAvg v2 当前仍是 diagnostic 阶段，未进入 formal，不可写成性能提升。
 
 ---
 
 ## 1. 当前 Git 状态
 
 - **分支**: `feature/real-exp4-rfc-ablation`
-- **HEAD**：待本轮 CalendarFeatureFedAvg v2 提交后更新（最新 commit 为 `b7cecfa`）
+- **HEAD**：`f8de3d3` — `feat(real-data): add residual-gated calendar FedAvg diagnostic`（待本轮 long-horizon diagnostic 提交后更新）
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |

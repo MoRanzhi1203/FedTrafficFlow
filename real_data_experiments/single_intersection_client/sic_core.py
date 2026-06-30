@@ -688,6 +688,10 @@ def train_local_model(
             targets = targets.to(device)
             optimizer.zero_grad()
             predictions = forward_model(model, features)
+            # For multi-horizon, only use first step to match single-target labels
+            if predictions.ndim == 2 and predictions.shape[1] > 1:
+                predictions = predictions[:, :1]
+            targets = targets.view_as(predictions)
             loss = criterion(predictions, targets)
             loss.backward()
             optimizer.step()
@@ -718,6 +722,9 @@ def collect_predictions(
             outputs = forward_model(model, features)
             if target_scaler is not None:
                 outputs = target_scaler.denormalize_tensor(outputs)
+            # For multi-horizon predictions, take only the first step to match single-target labels
+            if outputs.ndim == 2 and outputs.shape[1] > 1:
+                outputs = outputs[:, 0]
             outputs = outputs.cpu().numpy().reshape(-1)
             preds.append(outputs)
             truths.append(targets.numpy().reshape(-1))
