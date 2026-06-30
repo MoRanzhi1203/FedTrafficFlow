@@ -57,9 +57,9 @@
 | **1** | 单 grid cell 主实验 | ⚠️ 无独立 smoke 目录 (诊断中跑过 r5e1) | ✅ r20e1 | `main_metrics.csv` | ✅ 正常 (R² 全正) | `exp1_formal_result_status_zh.md` ✅ | **formal 已完成，可用** |
 | **2** | 单 grid cell 消融 | ❌ | ❌ 历史 formal (r20e3) 成功但目录已删除 | 无 (当前) | 历史 normal | 历史报告存在 (`formal_cuda_exp1_exp2_fixed_d2b87f4_run_report_zh.md`) | **代码存在，历史跑过，需恢复或重跑** |
 | **3** | 多相似 cell 主实验 | ✅ r1e1 similarity_k5 | ❌ | `main_metrics.csv` (smoke) | ⚠️ FedAvg>>Naive 但 pipeline OK | smoke fix 报告 | **仅 smoke，可进入 formal** |
-| **4** | 多相似 cell 消融 | ❌ | ❌ | 无 | — | 无 | **未开发** |
-| **5** | 全局划分主实验 | ✅ r1e1 (spatial_block + flow_kmeans) | ✅ r20e1 (spatial_block + flow_kmeans) | `main_metrics.csv` ×4 | ❌ R² 全负，训练失效 | **缺** formal 状态报告 | **formal pipeline 通过但结果不可用** |
-| **6** | 全局划分消融 | ✅ r1e1 (spatial_block) | ✅ r20e1 (full only) | `ablation_metrics.csv` + `ablation_summary.csv` | ❌ R² 为负，训练失效；消融不完整 | **缺** formal 状态报告 | **formal pipeline 通过但结果不可用** |
+| **4** | 多相似 cell 消融 | ✅ r1e1 (4 variants × 1k samples) | ❌ | `ablation_metrics.csv` (smoke, 4 variants) | ⚠️ r1e1 指标仅验证 pipeline | `rfc_ablation_core.py` ✅ | **代码已补全，smoke 通过；formal 未运行** |
+| **5** | 全局划分主实验 | ✅ r1e1 (spatial_block + flow_kmeans) | ✅ r20e1 (spatial_block + flow_kmeans) — **指标异常已修复** | `main_metrics.csv` ×4 | ✅ 修复后 r3e1 诊断正常 (RMSE 从 628k 降至 160k, train_loss 持续下降) | Scaler 修复报告 ✅ | **Scaler 修复完成，可进入重跑 formal 候选** |
+| **6** | 全局划分消融 | ✅ r1e1 (spatial_block) | ✅ r20e1 (full only) — 指标异常已修复 | `ablation_metrics.csv` + `ablation_summary.csv` | ⚠️ 消融不完整(仅 full variant)，待补全 4 variant | Scaler 修复报告 ✅ | **Scaler 修复完成，待补全 4 variant 后进入重跑 formal 候选** |
 
 ---
 
@@ -216,7 +216,7 @@
 | 聚合 | 方法 | FedAvg (sample_count 加权) |
 | 数据 | tensor shape | [2, 630, 5856] |
 | 数据 | 划分 | 70%/15%/15% 时序连续 |
-| 数据 | 归一化 | z-score (Exp1/2/3 ✅, Exp5/6 ❌) |
+| 数据 | 归一化 | z-score (Exp1/2/3/5/6 ✅，本轮修复) |
 
 ---
 
@@ -251,14 +251,15 @@
 
 ### P0 — 阻塞级（必须修复才能推进）
 
-1. **修复 exp5/6 scaler 链路**: 为 `rc_config.py` / `ra_config.py` 添加 `input_normalization` / `target_normalization` 字段，在 `rc_core.py` / `ra_core.py` 中接入完整的 scaler 流程。参考 `rfc_core.py` 或 `sic_core.py`
-2. **exp5/6 修复后验证**: 对 exp5 spatial_block 跑 r3e1 诊断，确认 train_loss 下降 + RMSE 改善
-3. **补 exp5/6 NaiveLastValue baseline**: 在 `rc_core.py` 中添加 `evaluate_naive_last_value()`
+1. **修复 exp5/6 scaler 链路**: ✅ **已完成**。为 `rc_config.py` / `ra_config.py` 添加了 `input_normalization` / `target_normalization` 字段，在 `rc_core.py` / `ra_core.py` 中接入了完整的 scaler 流程（fit → apply → evaluation with target_scaler）。参考了 `rfc_core.py` 的实现。
+2. **exp5/6 修复后验证**: ✅ **已完成**。对 exp5 spatial_block 跑了 r3e1 诊断（capped 5k samples），确认 train_loss 持续下降（0.313→0.017）、RMSE 改善（306k→160k，vs 修复前 628k 常数）。
+3. **补 exp5/6 NaiveLastValue baseline**: ✅ **已完成**。`rc_core.py` 中添加了 `evaluate_naive_last_value()`，NaiveLastValue RMSE=8,744 (R²=0.9996)。
 
 ### P1 — 高优先级（直接影响论文可发表性）
 
 4. **恢复或重跑实验 2**: 代码完整（scaler 已验证），最快可补的消融实验。若历史 fixed 结果可恢复则优先恢复，否则重跑 r20e3
 5. **实验 3 r5e1 诊断**: 验证 r5 是否显著优于 r1 的 FedAvg RMSE（类似 exp1 的改善幅度），再决定是否进入 r20 formal
+6. **重跑 Exp5/6 formal (r20e1)**: 当前最紧急。scaler 修复后 r3e1 诊断确认模型开始学习，需 r20 判断 full data 下最终性能是否能超越 NaiveLastValue
 
 ### P2 — 中优先级
 
