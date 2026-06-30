@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, Subset
 try:
     from tqdm.auto import tqdm
 except Exception:  # pragma: no cover - tqdm fallback is exercised at runtime
@@ -115,7 +116,7 @@ class Attention(nn.Module):
 class CNNLSTMAttentionRegressor(nn.Module):
     """CNN + LSTM + Attention regressor that supports 1 or more input channels."""
 
-    def __init__(self, input_channels: int = 1, hidden_dim: int = 32, prediction_horizon: int = 1) -> None:
+    def __init__(self, input_channels: int = 1, hidden_dim: int = 32, prediction_horizon: int = 1, output_dim: int = 1) -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Conv1d(input_channels, 16, kernel_size=3, padding=1),
@@ -125,7 +126,7 @@ class CNNLSTMAttentionRegressor(nn.Module):
         )
         self.lstm = nn.LSTM(input_size=32, hidden_size=hidden_dim, num_layers=1, batch_first=True)
         self.attention = Attention(hidden_dim)
-        self.head = nn.Linear(hidden_dim, prediction_horizon)
+        self.head = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         encoded = self.encoder(inputs)
@@ -155,7 +156,7 @@ class LegacyNotebookCNNLSTMAttentionRegressor(nn.Module):
     - nn.MultiheadAttention (vs simple Linear+softmax attention)
     """
 
-    def __init__(self, input_channels: int = 2, hidden_dim: int = 64, prediction_horizon: int = 1, num_heads: int = 4) -> None:
+    def __init__(self, input_channels: int = 2, hidden_dim: int = 64, prediction_horizon: int = 1, output_dim: int = 1, num_heads: int = 4) -> None:
         super().__init__()
         self.encoder = nn.Sequential(
             nn.Conv1d(input_channels, hidden_dim, kernel_size=3, padding=1),
@@ -166,7 +167,7 @@ class LegacyNotebookCNNLSTMAttentionRegressor(nn.Module):
         )
         self.lstm = nn.LSTM(input_size=hidden_dim, hidden_size=hidden_dim, num_layers=1, batch_first=True)
         self.attn = nn.MultiheadAttention(hidden_dim, num_heads, batch_first=True)
-        self.head = nn.Linear(hidden_dim, prediction_horizon)
+        self.head = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         encoded = self.encoder(inputs)            # (B, hidden_dim, T)
@@ -191,6 +192,7 @@ class ResidualGatedCalendarAwareCNNLSTMAttentionRegressor(nn.Module):
         input_channels: int = 1,
         calendar_dim: int = 9,
         prediction_horizon: int = 1,
+        output_dim: int = 1,
         calendar_hidden_dim: int = 16,
         hidden_dim: int = 32,
         calendar_gate_init: float = -5.0,
@@ -206,14 +208,14 @@ class ResidualGatedCalendarAwareCNNLSTMAttentionRegressor(nn.Module):
         self.lstm = nn.LSTM(input_size=32, hidden_size=hidden_dim, num_layers=1, batch_first=True)
         self.attention = Attention(hidden_dim)
         # Base prediction from traffic only
-        self.traffic_head = nn.Linear(hidden_dim, prediction_horizon)
+        self.traffic_head = nn.Linear(hidden_dim, output_dim)
         # Calendar branch (residual correction)
         self.calendar_mlp = nn.Sequential(
             nn.Linear(calendar_dim, calendar_hidden_dim),
             nn.ReLU(),
             nn.Linear(calendar_hidden_dim, calendar_hidden_dim),
             nn.ReLU(),
-            nn.Linear(calendar_hidden_dim, prediction_horizon),
+            nn.Linear(calendar_hidden_dim, output_dim),
         )
         # Learnable gate
         self.calendar_gate_logit = nn.Parameter(torch.tensor(calendar_gate_init))
@@ -661,6 +663,8 @@ def train_local_model(
     show_progress: bool = False,
     progress_interval: int = 20,
     progress_prefix: str = "",
+    proximal_state_dict: Optional[Dict[str, torch.Tensor]] = None,
+    proximal_mu: float = 0.0,
 ) -> tuple[dict[str, torch.Tensor], float]:
     """Train a local model from its current parameters."""
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -688,11 +692,16 @@ def train_local_model(
             targets = targets.to(device)
             optimizer.zero_grad()
             predictions = forward_model(model, features)
-            # For multi-horizon, only use first step to match single-target labels
-            if predictions.ndim == 2 and predictions.shape[1] > 1:
-                predictions = predictions[:, :1]
+            if not (predictions.ndim == 2 and predictions.shape[1] == 1):
+                raise ValueError(f"Model output must be [batch, 1], got {tuple(predictions.shape)}")
             targets = targets.view_as(predictions)
             loss = criterion(predictions, targets)
+            if proximal_state_dict is not None and proximal_mu > 0:
+                proximal_loss = 0.0
+                for name, param in model.named_parameters():
+                    if param.requires_grad and name in proximal_state_dict:
+                        proximal_loss += torch.sum((param - proximal_state_dict[name]) ** 2)
+                loss = loss + 0.5 * proximal_mu * proximal_loss
             loss.backward()
             optimizer.step()
             batch_losses.append(float(loss.item()))
@@ -722,9 +731,8 @@ def collect_predictions(
             outputs = forward_model(model, features)
             if target_scaler is not None:
                 outputs = target_scaler.denormalize_tensor(outputs)
-            # For multi-horizon predictions, take only the first step to match single-target labels
-            if outputs.ndim == 2 and outputs.shape[1] > 1:
-                outputs = outputs[:, 0]
+            if not (outputs.ndim == 2 and outputs.shape[1] == 1):
+                raise ValueError(f"Model output must be [batch, 1], got {tuple(outputs.shape)}")
             outputs = outputs.cpu().numpy().reshape(-1)
             preds.append(outputs)
             truths.append(targets.numpy().reshape(-1))
@@ -738,19 +746,14 @@ def evaluate_client_model(
     client: ClientData,
     device: str,
     target_scaler: TargetScaler | None = None,
+    method_name: str = "FedAvg",
+    calendar_features=None,
 ) -> tuple[dict[str, Any], pd.DataFrame]:
     """Evaluate a model on one client's test split and return metrics plus prediction samples."""
     y_true, y_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
     metrics: dict[str, Any] = compute_regression_metrics(y_true, y_pred)
     metrics.update(_make_entity_record(client))
-    prediction_df = pd.DataFrame(
-        {
-            **{key: value for key, value in _make_entity_record(client).items() if key not in {"train_samples", "val_samples", "test_samples"}},
-            "sample_index": np.arange(len(y_true), dtype=int),
-            "y_true": y_true,
-            "y_pred": y_pred,
-        }
-    )
+    prediction_df = build_prediction_df_for_client(client, y_true, y_pred, method_name, calendar_features=calendar_features)
     return metrics, prediction_df
 
 
@@ -788,10 +791,12 @@ def _build_model(config: ExperimentConfig) -> CNNLSTMAttentionRegressor | Legacy
         return LegacyNotebookCNNLSTMAttentionRegressor(
             input_channels=input_channels,
             prediction_horizon=config.prediction_horizon,
+            output_dim=1,
         )
     return CNNLSTMAttentionRegressor(
         input_channels=input_channels,
         prediction_horizon=config.prediction_horizon,
+        output_dim=1,
     )
 
 
@@ -800,7 +805,8 @@ def run_fedavg_experiment(
     clients: list[ClientData],
     device: str,
     target_scaler: TargetScaler | None = None,
-) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    calendar_features=None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, torch.Tensor]]:
     """Run standard FedAvg across single-intersection clients."""
     global_model = _build_model(config).to(device)
     input_channels = resolve_input_channels(config)
@@ -860,11 +866,88 @@ def run_fedavg_experiment(
     client_rows: list[dict[str, Any]] = []
     prediction_frames: list[pd.DataFrame] = []
     for client in clients:
-        metrics, prediction_df = evaluate_client_model(global_model, client, device, target_scaler=target_scaler)
+        metrics, prediction_df = evaluate_client_model(global_model, client, device, target_scaler=target_scaler, method_name="FedAvg", calendar_features=calendar_features)
         client_rows.append({"method": "FedAvg", **metrics})
-        prediction_frames.append(prediction_df.assign(method="FedAvg"))
+        prediction_frames.append(prediction_df)
     log_info("FedAvg training finished")
-    return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True)
+    global_state = copy.deepcopy(global_model.state_dict())
+    return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True), global_state
+
+
+def run_fedprox_experiment(
+    config: ExperimentConfig,
+    clients: list[ClientData],
+    device: str,
+    target_scaler: TargetScaler | None = None,
+    calendar_features: Optional[pd.DataFrame] = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, torch.Tensor]]:
+    """Run FedProx: FedAvg with proximal regularization term."""
+    global_model = _build_model(config).to(device)
+    input_channels = resolve_input_channels(config)
+    log_info("FedProx training started")
+    round_history: list[dict[str, float]] = []
+    round_iter = maybe_tqdm(
+        range(1, config.communication_rounds + 1),
+        enabled=config.show_progress,
+        desc="FedProx rounds",
+        unit="round",
+    )
+    for round_idx in round_iter:
+        local_state_dicts: list[dict[str, torch.Tensor]] = []
+        sample_counts: list[int] = []
+        train_losses: list[float] = []
+        client_iter = maybe_tqdm(
+            clients,
+            enabled=config.show_progress,
+            desc=f"Round {round_idx} clients",
+            unit="client",
+            leave=False,
+        )
+        for client in client_iter:
+            local_model = _build_model(config).to(device)
+            local_model.load_state_dict(copy.deepcopy(global_model.state_dict()))
+            state_dict, train_loss = train_local_model(
+                local_model,
+                client.train_loader,
+                device=device,
+                learning_rate=config.learning_rate,
+                local_epochs=config.local_epochs,
+                show_progress=config.show_progress,
+                progress_interval=config.progress_interval,
+                progress_prefix=f"FedProx r{round_idx} c{client.entity_id}",
+                proximal_state_dict=copy.deepcopy(global_model.state_dict()),
+                proximal_mu=config.fedprox_mu,
+            )
+            local_state_dicts.append(state_dict)
+            sample_counts.append(len(client.train_loader.dataset))
+            train_losses.append(train_loss)
+            if config.show_progress and tqdm is not None:
+                client_iter.set_postfix(client=client.entity_id, loss=f"{train_loss:.4f}")
+
+        global_model.load_state_dict(fedavg_aggregate(local_state_dicts, sample_counts))
+        history_record = {"method": "FedProx", "communication_round": round_idx, "train_loss": float(np.mean(train_losses))}
+        history_record.update(evaluate_round(global_model, clients, device, target_scaler=target_scaler))
+        round_history.append(history_record)
+        if config.show_progress and tqdm is not None:
+            round_iter.set_postfix(
+                round_loss=f"{history_record['train_loss']:.4f}",
+                val_rmse=f"{history_record['val_rmse']:.2f}",
+            )
+        elif config.show_progress:
+            log_info(
+                f"FedProx round {round_idx}/{config.communication_rounds}: "
+                f"train_loss={history_record['train_loss']:.4f}, val_rmse={history_record['val_rmse']:.2f}"
+            )
+
+    client_rows: list[dict[str, Any]] = []
+    prediction_frames: list[pd.DataFrame] = []
+    for client in clients:
+        metrics, prediction_df = evaluate_client_model(global_model, client, device, target_scaler=target_scaler, method_name="FedProx", calendar_features=calendar_features)
+        client_rows.append({"method": "FedProx", **metrics})
+        prediction_frames.append(prediction_df)
+    log_info("FedProx training finished")
+    global_state = copy.deepcopy(global_model.state_dict())
+    return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True), global_state
 
 
 def run_independent_experiment(
@@ -872,6 +955,7 @@ def run_independent_experiment(
     clients: list[ClientData],
     device: str,
     target_scaler: TargetScaler | None = None,
+    calendar_features=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run the independent baseline with the same data splits."""
     total_epochs = config.independent_total_epochs or (config.communication_rounds * config.local_epochs)
@@ -897,9 +981,9 @@ def run_independent_experiment(
             progress_interval=config.progress_interval,
             progress_prefix=f"Independent c{client.entity_id}",
         )
-        metrics, prediction_df = evaluate_client_model(model, client, device, target_scaler=target_scaler)
+        metrics, prediction_df = evaluate_client_model(model, client, device, target_scaler=target_scaler, method_name="Independent", calendar_features=calendar_features)
         client_rows.append({"method": "Independent", **metrics})
-        prediction_frames.append(prediction_df.assign(method="Independent"))
+        prediction_frames.append(prediction_df)
         if config.show_progress and tqdm is not None:
             client_iter.set_postfix(client=client.entity_id, rmse=f"{metrics['rmse']:.2f}")
         elif config.show_progress:
@@ -965,14 +1049,67 @@ def build_calendar_feature_clients(config, clients, calendar_features, feature_s
     return calendar_clients
 
 
-def _collect_prediction_df_with_calendar_context(
+def unwrap_base_dataset(dataset) -> Dataset:
+    """Unwrap Subset and CalendarFeatureDataset to the base window dataset."""
+    if isinstance(dataset, Subset):
+        return unwrap_base_dataset(dataset.dataset)
+    if hasattr(dataset, "base_dataset") and not hasattr(dataset, "window_starts"):
+        return unwrap_base_dataset(dataset.base_dataset)
+    if hasattr(dataset, "dataset") and not hasattr(dataset, "window_starts") and not isinstance(dataset, Subset):
+        return unwrap_base_dataset(dataset.dataset)
+    return dataset
+
+
+def resolve_target_times_for_loader(loader: DataLoader) -> List[int]:
+    """Resolve target_time for each sample in test_loader.dataset."""
+    dataset = loader.dataset
+    base = unwrap_base_dataset(dataset)
+    times = []
+    for i in range(len(dataset)):
+        t = _resolve_target_time_for_sample(base, i)
+        times.append(int(t))
+    return times
+
+
+def attach_calendar_context(df: pd.DataFrame, target_times: List[int], calendar_features: Optional[pd.DataFrame]) -> pd.DataFrame:
+    """Attach calendar context columns to prediction DataFrame. No clip, no except pass."""
+    if calendar_features is None:
+        raise ValueError("calendar_features is required for unified prediction_df")
+
+    cal_indexed = calendar_features.set_index("time_index")
+    missing = [int(t) for t in target_times if int(t) not in cal_indexed.index]
+    if missing:
+        raise ValueError(f"Calendar context missing target_time values. first_missing={missing[:10]}, total_missing={len(missing)}")
+
+    cal_rows = cal_indexed.loc[[int(t) for t in target_times]].reset_index(drop=True)
+
+    context_cols = [
+        "date", "slot_of_day", "is_holiday", "is_weekend",
+        "is_effective_workday", "is_adjusted_workday",
+        "days_to_nearest_holiday", "holiday_name",
+    ]
+    for col in context_cols:
+        if col in cal_rows.columns:
+            df[col] = cal_rows[col].values
+        else:
+            raise ValueError(f"Calendar context missing required column: {col}")
+
+    df["target_time"] = target_times
+
+    if len(df) != len(target_times):
+        raise ValueError(f"Row count mismatch: df={len(df)}, target_times={len(target_times)}")
+
+    return df
+
+
+def build_prediction_df_for_client(
     client,
-    y_true,
-    y_pred,
-    method_name,
-    calendar_features,
+    y_true: np.ndarray,
+    y_pred: np.ndarray,
+    method_name: str,
+    calendar_features: Optional[pd.DataFrame] = None,
 ) -> pd.DataFrame:
-    """Build prediction DataFrame with calendar context columns."""
+    """Build unified prediction DataFrame with calendar context for any method."""
     record = _make_entity_record(client)
     skip_keys = {"train_samples", "val_samples", "test_samples"}
     base = {k: v for k, v in record.items() if k not in skip_keys}
@@ -985,43 +1122,11 @@ def _collect_prediction_df_with_calendar_context(
         "y_pred": y_pred,
     })
 
-    # Add calendar context if available
     if calendar_features is not None:
-        cal_indexed = calendar_features.set_index("time_index")
-        # Resolve test dataset by unwrapping wrappers
-        test_dataset = client.test_loader.dataset
-        if isinstance(test_dataset, CalendarFeatureDataset):
-            test_dataset = test_dataset.base_dataset
-        if hasattr(test_dataset, "dataset") and not hasattr(test_dataset, "window_starts") and not isinstance(test_dataset, Subset):
-            test_dataset = test_dataset.dataset
-
-        # Resolve target times
-        target_times = []
-        for i in range(len(y_true)):
-            t = _resolve_target_time_for_sample(test_dataset, i)
-            target_times.append(int(t))
-
-        # Strict validation: no missing, no clip
-        missing = [int(t) for t in target_times if int(t) not in cal_indexed.index]
-        if missing:
-            raise ValueError(
-                f"Calendar context missing target_time values for method={method_name}. "
-                f"first_missing={missing[:10]}, total_missing={len(missing)}, "
-                f"calendar_time_index_range=[{cal_indexed.index.min()}, {cal_indexed.index.max()}]"
-            )
-
-        cal_rows = cal_indexed.loc[target_times].reset_index(drop=True)
-        calendar_context_cols = [
-            "date", "slot_of_day", "is_holiday", "is_weekend",
-            "is_effective_workday", "is_adjusted_workday",
-            "days_to_nearest_holiday", "holiday_name",
-        ]
-        for col in calendar_context_cols:
-            if col in cal_rows.columns:
-                df[col] = cal_rows[col].values
-
-        # Always include target_time
-        df["target_time"] = target_times
+        target_times = resolve_target_times_for_loader(client.test_loader)
+        df = attach_calendar_context(df, target_times, calendar_features)
+    else:
+        df["target_time"] = np.nan
 
     return df
 
@@ -1042,12 +1147,18 @@ def build_prediction_counts_by_method(prediction_df: pd.DataFrame) -> pd.DataFra
         record = dict(zip(group_cols, keys))
         record["full_prediction_rows"] = len(group)
         tt = group["target_time"].dropna()
+        record["target_time_count"] = len(tt)
+        record["target_time_unique_count"] = int(tt.nunique()) if len(tt) > 0 else 0
         if len(tt) > 0:
             record["target_time_min"] = int(tt.min())
             record["target_time_max"] = int(tt.max())
+            hash_input = ",".join(str(int(x)) for x in sorted(tt))
+            record["target_time_sequence_hash"] = hashlib.md5(hash_input.encode()).hexdigest()
         else:
             record["target_time_min"] = -1
             record["target_time_max"] = -1
+            record["target_time_sequence_hash"] = "N/A"
+        record["calendar_context_complete"] = not group["target_time"].isna().any()
         record["y_true_count"] = int(group["y_true"].notna().sum())
         record["y_pred_count"] = int(group["y_pred"].notna().sum())
         records.append(record)
@@ -1058,6 +1169,19 @@ def validate_prediction_alignment(counts_df: pd.DataFrame, reference_method: str
     """Validate that all methods have the same number of prediction rows per client."""
     if "client_id" not in counts_df.columns:
         return
+
+    # Determine which methods have valid calendar context
+    if "target_time_min" in counts_df.columns:
+        valid_methods = set(
+            counts_df.loc[counts_df["target_time_min"] >= 0, "method"].unique()
+        )
+    else:
+        valid_methods = set(counts_df["method"].unique())
+
+    if reference_method not in valid_methods:
+        return
+
+    # Validate full_prediction_rows (all methods)
     pivot = counts_df.pivot(index="client_id", columns="method", values="full_prediction_rows")
     if reference_method not in pivot.columns:
         return
@@ -1072,19 +1196,85 @@ def validate_prediction_alignment(counts_df: pd.DataFrame, reference_method: str
                 f"Mismatched clients:\n{mismatched[[reference_method, method]].to_string()}"
             )
 
+    # Validate target_time_min (only methods with valid target_time)
+    if "target_time_min" in counts_df.columns:
+        pivot_min = counts_df[counts_df["target_time_min"] >= 0].pivot(
+            index="client_id", columns="method", values="target_time_min"
+        )
+        if reference_method in pivot_min.columns:
+            ref_min = pivot_min[reference_method]
+            for method in pivot_min.columns:
+                if method == reference_method or method not in valid_methods:
+                    continue
+                if not (pivot_min[method] == ref_min).all():
+                    mismatched = pivot_min[pivot_min[method] != ref_min]
+                    raise ValueError(
+                        f"target_time_min mismatch: {method} vs {reference_method}. "
+                        f"Mismatched clients:\n{mismatched[[reference_method, method]].to_string()}"
+                    )
+
+    # Validate target_time_max
+    if "target_time_max" in counts_df.columns:
+        pivot_max = counts_df[counts_df["target_time_max"] >= 0].pivot(
+            index="client_id", columns="method", values="target_time_max"
+        )
+        if reference_method in pivot_max.columns:
+            ref_max = pivot_max[reference_method]
+            for method in pivot_max.columns:
+                if method == reference_method or method not in valid_methods:
+                    continue
+                if not (pivot_max[method] == ref_max).all():
+                    mismatched = pivot_max[pivot_max[method] != ref_max]
+                    raise ValueError(
+                        f"target_time_max mismatch: {method} vs {reference_method}. "
+                        f"Mismatched clients:\n{mismatched[[reference_method, method]].to_string()}"
+                    )
+
+    # Validate target_time_sequence_hash
+    if "target_time_sequence_hash" in counts_df.columns:
+        valid_hash = counts_df[counts_df["target_time_sequence_hash"] != "N/A"]
+        if not valid_hash.empty and reference_method in set(valid_hash["method"]):
+            pivot_hash = valid_hash.pivot(index="client_id", columns="method", values="target_time_sequence_hash")
+            if reference_method in pivot_hash.columns:
+                ref_hash = pivot_hash[reference_method]
+                for method in pivot_hash.columns:
+                    if method == reference_method or method not in valid_methods:
+                        continue
+                    if not (pivot_hash[method] == ref_hash).all():
+                        mismatched = pivot_hash[pivot_hash[method] != ref_hash]
+                        raise ValueError(
+                            f"target_time_sequence_hash mismatch: {method} vs {reference_method}. "
+                            f"Mismatched clients:\n{mismatched[[reference_method, method]].to_string()}"
+                        )
+
+    # Validate calendar_context_complete (only methods with valid target_time)
+    if "calendar_context_complete" in counts_df.columns:
+        valid_ccc = counts_df[counts_df["target_time_min"] >= 0]
+        if not valid_ccc.empty and reference_method in set(valid_ccc["method"]):
+            for method in set(valid_ccc["method"]) - {reference_method}:
+                if method not in valid_methods:
+                    continue
+                if not valid_ccc[valid_ccc["method"] == method]["calendar_context_complete"].all():
+                    raise ValueError(f"calendar_context_complete is not all True for: {method}")
+
 
 def build_grouped_calendar_metrics(prediction_df: pd.DataFrame) -> pd.DataFrame:
     """Build calendar-grouped metrics (holiday, weekend, workday, etc.)."""
+    # Only use rows with valid calendar context; seasonal baselines excluded
+    valid_df = prediction_df.dropna(subset=["target_time"])
+    if valid_df.empty:
+        raise ValueError("No prediction rows with valid calendar context.")
+
     calendar_group_cols = ["is_holiday", "is_weekend", "is_effective_workday", "is_adjusted_workday", "holiday_name"]
-    available_groups = [col for col in calendar_group_cols if col in prediction_df.columns]
+    available_groups = [col for col in calendar_group_cols if col in valid_df.columns]
 
     if not available_groups:
         raise ValueError("No calendar context columns found in prediction_df. Cannot build grouped metrics.")
 
     all_records = []
     for group_col in available_groups:
-        for method in prediction_df["method"].unique():
-            method_df = prediction_df[prediction_df["method"] == method]
+        for method in valid_df["method"].unique():
+            method_df = valid_df[valid_df["method"] == method]
             for group_value, group_df in method_df.groupby(group_col):
                 sample_count = len(group_df)
                 if sample_count == 0:
@@ -1215,18 +1405,144 @@ def run_calendar_feature_fedavg_experiment(
         metrics: dict[str, Any] = compute_regression_metrics(y_true, y_pred)
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": method_name, **metrics})
-        pred_df = _collect_prediction_df_with_calendar_context(
-            client, y_true, y_pred, method_name, calendar_features,
+        pred_df = build_prediction_df_for_client(
+            client, y_true, y_pred, method_name, calendar_features=calendar_features,
         )
         prediction_frames.append(pred_df)
 
     log_info(f"{method_name} training finished")
-    return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True)
+    global_state = copy.deepcopy(global_model.state_dict())
+    return pd.DataFrame(client_rows), pd.DataFrame(round_history), pd.concat(prediction_frames, ignore_index=True), global_state
+
+
+def run_local_finetune_from_state(
+    config,
+    clients,
+    device,
+    init_state_dict,
+    method_name,
+    target_scaler=None,
+    calendar_features=None,
+    fine_epochs=None,
+    fine_lr=None,
+    use_calendar_model: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Run local fine-tuning from an initial state dict on each client.
+
+    If init_state_dict is None, models are trained from random initialization.
+    """
+    if fine_epochs is None:
+        fine_epochs = config.local_finetune_epochs
+    if fine_lr is None:
+        fine_lr = config.local_finetune_lr or config.learning_rate
+
+    client_rows: list[dict[str, Any]] = []
+    prediction_frames: list[pd.DataFrame] = []
+    input_channels = resolve_input_channels(config)
+
+    for client in clients:
+        if use_calendar_model:
+            columns_for_fs = list(resolve_calendar_feature_columns(config, "full"))
+            calendar_dim = len(columns_for_fs)
+            model = ResidualGatedCalendarAwareCNNLSTMAttentionRegressor(
+                input_channels=input_channels,
+                calendar_dim=calendar_dim,
+                prediction_horizon=config.prediction_horizon,
+                output_dim=1,
+                calendar_gate_init=config.calendar_gate_init,
+            ).to(device)
+        else:
+            model = _build_model(config).to(device)
+
+        if init_state_dict is not None:
+            model.load_state_dict(copy.deepcopy(init_state_dict))
+
+        # Determine which loader to use
+        if use_calendar_model and calendar_features is not None:
+            cal_clients = build_calendar_feature_clients(config, [client], calendar_features, feature_set="full")
+            train_loader = cal_clients[0].train_loader
+        else:
+            train_loader = client.train_loader
+
+        train_local_model(
+            model,
+            train_loader,
+            device=device,
+            learning_rate=fine_lr,
+            local_epochs=fine_epochs,
+            show_progress=config.show_progress,
+            progress_interval=config.progress_interval,
+            progress_prefix=f"{method_name} c{client.entity_id}",
+        )
+
+        if use_calendar_model:
+            test_cal_clients = build_calendar_feature_clients(config, [client], calendar_features, feature_set="full")
+            test_loader = test_cal_clients[0].test_loader
+        else:
+            test_loader = client.test_loader
+
+        y_true, y_pred = collect_predictions(model, test_loader, device, target_scaler=target_scaler)
+        metrics: dict[str, Any] = compute_regression_metrics(y_true, y_pred)
+        metrics.update(_make_entity_record(client))
+        client_rows.append({"method": method_name, **metrics})
+        pred_df = build_prediction_df_for_client(
+            client, y_true, y_pred, method_name, calendar_features=calendar_features,
+        )
+        prediction_frames.append(pred_df)
+
+    return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
+
+
+def run_centralized_upper_bound(
+    config,
+    clients,
+    device,
+    target_scaler=None,
+    calendar_features=None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Train a single model on all clients' pooled training data (centralized upper bound).
+
+    Uses CNNLSTMAttentionRegressor (no calendar features).
+    """
+    dataset = torch.utils.data.ConcatDataset([c.train_loader.dataset for c in clients])
+    loader = DataLoader(dataset, batch_size=config.batch_size, shuffle=True)
+
+    model = _build_model(config).to(device)
+    total_epochs = config.centralized_epochs
+    lr = config.centralized_lr or config.learning_rate
+
+    log_info("CentralizedUpperBound training started")
+    train_local_model(
+        model,
+        loader,
+        device=device,
+        learning_rate=lr,
+        local_epochs=total_epochs,
+        show_progress=config.show_progress,
+        progress_interval=config.progress_interval,
+        progress_prefix="CentralizedUpperBound",
+    )
+
+    client_rows: list[dict[str, Any]] = []
+    prediction_frames: list[pd.DataFrame] = []
+    for client in clients:
+        y_true, y_pred = collect_predictions(model, client.test_loader, device, target_scaler=target_scaler)
+        metrics: dict[str, Any] = compute_regression_metrics(y_true, y_pred)
+        metrics.update(_make_entity_record(client))
+        client_rows.append({"method": "CentralizedUpperBound", **metrics})
+        pred_df = build_prediction_df_for_client(
+            client, y_true, y_pred, "CentralizedUpperBound", calendar_features=calendar_features,
+        )
+        prediction_frames.append(pred_df)
+
+    log_info("CentralizedUpperBound training finished")
+    return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
 
 
 def evaluate_naive_last_value(
     config: ExperimentConfig,
     clients: list[ClientData],
+    calendar_features=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Compute NaiveLastValue baseline: predict y_t = x_{t-1} (last value persistence)."""
     target_channel_index = config.target_channel
@@ -1264,15 +1580,7 @@ def evaluate_naive_last_value(
         metrics.update(_make_entity_record(client))
         client_rows.append({"method": "NaiveLastValue", **metrics})
         prediction_frames.append(
-            pd.DataFrame(
-                {
-                    **{key: value for key, value in _make_entity_record(client).items() if key not in {"train_samples", "val_samples", "test_samples"}},
-                    "method": "NaiveLastValue",
-                    "sample_index": np.arange(len(y_true_array), dtype=int),
-                    "y_true": y_true_array,
-                    "y_pred": y_pred_array,
-                }
-            )
+            build_prediction_df_for_client(client, y_true_array, y_pred_array, "NaiveLastValue", calendar_features=calendar_features)
         )
     return pd.DataFrame(client_rows), pd.concat(prediction_frames, ignore_index=True)
 
@@ -1445,16 +1753,8 @@ def _extract_client_split_sequences(
     return y_train_profile, train_time_indices, y_test, test_time_indices, full_seq
 
 
-def _make_pred_df(client, method, y_test, preds):
-    record = _make_entity_record(client)
-    skip_keys = {"train_samples", "val_samples", "test_samples"}
-    return pd.DataFrame({
-        **{k: v for k, v in record.items() if k not in skip_keys},
-        "method": method,
-        "sample_index": np.arange(len(y_test), dtype=int),
-        "y_true": y_test,
-        "y_pred": preds,
-    })
+def _make_pred_df(client, method, y_test, preds, calendar_features=None):
+    return build_prediction_df_for_client(client, y_test, preds, method, calendar_features=calendar_features)
 
 
 def export_results(
@@ -1516,22 +1816,24 @@ def export_results(
         counts_df = build_prediction_counts_by_method(prediction_df)
         write_csv(counts_df, output_dir / "prediction_counts_by_method.csv")
         write_json(counts_df.to_dict(orient="records"), output_dir / "prediction_counts_by_method.json")
-        try:
-            validate_prediction_alignment(counts_df, reference_method="FedAvg")
-        except ValueError as e:
-            log_info(f"WARNING: prediction alignment check failed: {e}")
-            # Also write the warning to a file for visibility
-            write_text(str(e), output_dir / "prediction_alignment_warning.txt")
+        validate_prediction_alignment(counts_df, reference_method="FedAvg")
 
     # Grouped calendar metrics
     calendar_context_cols = ["is_holiday", "is_weekend", "is_effective_workday", "is_adjusted_workday", "holiday_name"]
     if any(col in prediction_df.columns for col in calendar_context_cols):
-        try:
-            grouped_df = build_grouped_calendar_metrics(prediction_df)
-            write_csv(grouped_df, output_dir / "grouped_metrics_by_calendar.csv")
-            write_json(grouped_df.to_dict(orient="records"), output_dir / "grouped_metrics_by_calendar.json")
-        except Exception as e:
-            log_info(f"WARNING: grouped calendar metrics failed: {e}")
+        grouped_df = build_grouped_calendar_metrics(prediction_df)
+        write_csv(grouped_df, output_dir / "grouped_metrics_by_calendar.csv")
+        write_json(grouped_df.to_dict(orient="records"), output_dir / "grouped_metrics_by_calendar.json")
+
+    # Federated mechanism evaluation metrics
+    if config.enable_federated_mechanism_eval:
+        from real_data_experiments.common.federated_mechanism_metrics import build_federated_mechanism_advantage, build_client_win_rate
+        adv_df = build_federated_mechanism_advantage(main_metrics_df)
+        write_csv(adv_df, output_dir / "federated_mechanism_advantage.csv")
+        write_json(adv_df.to_dict(orient="records"), output_dir / "federated_mechanism_advantage.json")
+        win_df = build_client_win_rate(client_metrics_df, main_metrics_df)
+        write_csv(win_df, output_dir / "client_win_rate.csv")
+        write_json(win_df.to_dict(orient="records"), output_dir / "client_win_rate.json")
 
     note_lines = [
         "# 单路口客户端实验说明",
@@ -1558,6 +1860,11 @@ def export_results(
         note_lines.append(f"- calendar_feature_sets={list(getattr(config, 'calendar_feature_sets', ('time_only', 'holiday_only', 'full')))}")
     if getattr(config, "enable_calendar_profile_baseline", False):
         note_lines.append("- 本次运行启用了 CalendarProfileNaive 等 calendar baseline。")
+    if getattr(config, "enable_federated_mechanism_eval", False):
+        note_lines.append("- 本次运行启用了 Federated Mechanism Diagnostic v2，评估联邦机制优势指标。")
+        note_lines.append(f"- 评估方法: {list(config.mechanism_eval_methods)}")
+        note_lines.append(f"- FedProx mu={config.fedprox_mu}, local_finetune_epochs={config.local_finetune_epochs}")
+        note_lines.append(f"- centralized_epochs={config.centralized_epochs}")
     if config.data_mode == "parquet":
         note_lines.append("- 本次运行使用了 legacy parquet fallback，仅用于兼容旧 smoke test。")
     write_text("\n".join(note_lines), output_dir / "experiment_notes_zh.md")
@@ -1618,22 +1925,6 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     else:
         split_summary["target_normalization"] = {"enabled": False}
     apply_dataset_normalization(clients, input_scaler=input_scaler, target_scaler=target_scaler)
-    fed_client_df, convergence_df, fed_prediction_df = run_fedavg_experiment(
-        config,
-        clients,
-        device,
-        target_scaler=target_scaler,
-    )
-    ind_client_df, ind_prediction_df = run_independent_experiment(
-        config,
-        clients,
-        device,
-        target_scaler=target_scaler,
-    )
-    log_info("NaiveLastValue baseline started")
-    naive_client_df, naive_prediction_df = evaluate_naive_last_value(config, clients)
-    log_info("NaiveLastValue baseline finished")
-
     # Calendar periodicity baselines
     cal_features = _load_calendar_features(config)
     daily_naive_df = pd.DataFrame()
@@ -1642,6 +1933,24 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     daily_pred_df = pd.DataFrame()
     weekly_pred_df = pd.DataFrame()
     cal_pred_df = pd.DataFrame()
+
+    fed_client_df, convergence_df, fed_prediction_df, fedavg_global_state = run_fedavg_experiment(
+        config,
+        clients,
+        device,
+        target_scaler=target_scaler,
+        calendar_features=cal_features,
+    )
+    ind_client_df, ind_prediction_df = run_independent_experiment(
+        config,
+        clients,
+        device,
+        target_scaler=target_scaler,
+        calendar_features=cal_features,
+    )
+    log_info("NaiveLastValue baseline started")
+    naive_client_df, naive_prediction_df = evaluate_naive_last_value(config, clients, calendar_features=cal_features)
+    log_info("NaiveLastValue baseline finished")
 
     if cal_features is not None and getattr(config, "enable_calendar_profile_baseline", False):
         log_info("DailySeasonalNaive baseline started")
@@ -1668,23 +1977,29 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         cal_feat_fedavg_client_frames = []
         cal_feat_fedavg_conv_frames = []
         cal_feat_fedavg_pred_frames = []
+        calendar_full_state = None
         for feature_set in config.calendar_feature_sets:
+            # Only run "full" for mechanism eval
+            if feature_set != "full":
+                continue
             log_info(f"CalendarFeatureFedAvg-{feature_set} started")
-            client_df, conv_df, pred_df = run_calendar_feature_fedavg_experiment(
+            client_df, conv_df, pred_df, _calendar_state = run_calendar_feature_fedavg_experiment(
                 config, clients, device,
                 target_scaler=target_scaler,
                 calendar_features=cal_features,
                 feature_set=feature_set,
             )
+            calendar_full_state = _calendar_state
             cal_feat_fedavg_client_frames.append(client_df)
             cal_feat_fedavg_conv_frames.append(conv_df)
             cal_feat_fedavg_pred_frames.append(pred_df)
             log_info(f"CalendarFeatureFedAvg-{feature_set} finished")
-        cal_feat_fedavg_client_df = pd.concat(cal_feat_fedavg_client_frames, ignore_index=True)
-        cal_feat_fedavg_convergence_df = pd.concat(cal_feat_fedavg_conv_frames, ignore_index=True)
-        cal_feat_fedavg_prediction_df = pd.concat(cal_feat_fedavg_pred_frames, ignore_index=True)
+        cal_feat_fedavg_client_df = pd.concat(cal_feat_fedavg_client_frames, ignore_index=True) if cal_feat_fedavg_client_frames else pd.DataFrame()
+        cal_feat_fedavg_convergence_df = pd.concat(cal_feat_fedavg_conv_frames, ignore_index=True) if cal_feat_fedavg_conv_frames else pd.DataFrame()
+        cal_feat_fedavg_prediction_df = pd.concat(cal_feat_fedavg_pred_frames, ignore_index=True) if cal_feat_fedavg_pred_frames else pd.DataFrame()
         log_info("CalendarFeatureFedAvg experiment finished")
-        prediction_df = pd.concat([prediction_df, cal_feat_fedavg_prediction_df], ignore_index=True)
+        if not cal_feat_fedavg_prediction_df.empty:
+            prediction_df = pd.concat([prediction_df, cal_feat_fedavg_prediction_df], ignore_index=True)
 
     # Merge client metrics
     all_client_frames = [fed_client_df, ind_client_df, naive_client_df]
@@ -1692,6 +2007,80 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         all_client_frames.extend([daily_naive_df, weekly_naive_df, cal_profile_df])
     if not cal_feat_fedavg_client_df.empty:
         all_client_frames.append(cal_feat_fedavg_client_df)
+
+    # Federated mechanism evaluation
+    convergence_dfs = [convergence_df]
+    if not cal_feat_fedavg_convergence_df.empty:
+        convergence_dfs.append(cal_feat_fedavg_convergence_df)
+    if config.enable_federated_mechanism_eval:
+        methods_to_run = set(config.mechanism_eval_methods)
+
+        # RandomInit+LocalFT
+        if "RandomInit+LocalFT" in methods_to_run:
+            log_info("RandomInit+LocalFT started")
+            rl_client_df, rl_pred_df = run_local_finetune_from_state(
+                config, clients, device, None, "RandomInit+LocalFT",
+                target_scaler=target_scaler, calendar_features=cal_features,
+                fine_epochs=config.random_init_localft_epochs,
+            )
+            all_client_frames.append(rl_client_df)
+            prediction_df = pd.concat([prediction_df, rl_pred_df], ignore_index=True)
+
+        # FedAvg+LocalFT
+        if "FedAvg+LocalFT" in methods_to_run:
+            log_info("FedAvg+LocalFT started")
+            fl_client_df, fl_pred_df = run_local_finetune_from_state(
+                config, clients, device, fedavg_global_state, "FedAvg+LocalFT",
+                target_scaler=target_scaler, calendar_features=cal_features,
+                fine_epochs=config.local_finetune_epochs, fine_lr=config.local_finetune_lr,
+            )
+            all_client_frames.append(fl_client_df)
+            prediction_df = pd.concat([prediction_df, fl_pred_df], ignore_index=True)
+
+        # FedProx
+        fp_state = None
+        if "FedProx" in methods_to_run:
+            log_info("FedProx started")
+            fp_client_df, fp_conv_df, fp_pred_df, fp_state = run_fedprox_experiment(
+                config, clients, device, target_scaler=target_scaler, calendar_features=cal_features,
+            )
+            all_client_frames.append(fp_client_df)
+            prediction_df = pd.concat([prediction_df, fp_pred_df], ignore_index=True)
+            if not fp_conv_df.empty:
+                convergence_dfs.append(fp_conv_df)
+
+        # FedProx+LocalFT
+        if "FedProx+LocalFT" in methods_to_run and fp_state is not None:
+            log_info("FedProx+LocalFT started")
+            fpl_client_df, fpl_pred_df = run_local_finetune_from_state(
+                config, clients, device, fp_state, "FedProx+LocalFT",
+                target_scaler=target_scaler, calendar_features=cal_features,
+                fine_epochs=config.local_finetune_epochs, fine_lr=config.local_finetune_lr,
+            )
+            all_client_frames.append(fpl_client_df)
+            prediction_df = pd.concat([prediction_df, fpl_pred_df], ignore_index=True)
+
+        # CentralizedUpperBound
+        if "CentralizedUpperBound" in methods_to_run:
+            log_info("CentralizedUpperBound started")
+            cu_client_df, cu_pred_df = run_centralized_upper_bound(
+                config, clients, device, target_scaler=target_scaler, calendar_features=cal_features,
+            )
+            all_client_frames.append(cu_client_df)
+            prediction_df = pd.concat([prediction_df, cu_pred_df], ignore_index=True)
+
+        # CalendarFeatureFedAvg-Full+LocalFT
+        if "CalendarFeatureFedAvg-Full+LocalFT" in methods_to_run and calendar_full_state is not None:
+            log_info("CalendarFeatureFedAvg-Full+LocalFT started")
+            cfl_client_df, cfl_pred_df = run_local_finetune_from_state(
+                config, clients, device, calendar_full_state, "CalendarFeatureFedAvg-Full+LocalFT",
+                target_scaler=target_scaler, calendar_features=cal_features,
+                fine_epochs=config.local_finetune_epochs, fine_lr=config.local_finetune_lr,
+                use_calendar_model=True,
+            )
+            all_client_frames.append(cfl_client_df)
+            prediction_df = pd.concat([prediction_df, cfl_pred_df], ignore_index=True)
+
 
     run_config_payload = build_run_config_payload(config, device_info)
     # Add calendar feature config to run_config
@@ -1705,6 +2094,19 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         run_config_payload["calendar_fusion"] = getattr(config, "calendar_fusion", "residual_gate")
         run_config_payload["calendar_gate_init"] = getattr(config, "calendar_gate_init", -5.0)
         run_config_payload["calendar_feature_sets"] = list(getattr(config, "calendar_feature_sets", ("time_only", "holiday_only", "full")))
+    run_config_payload["enable_federated_mechanism_eval"] = config.enable_federated_mechanism_eval
+    run_config_payload["enable_fedprox"] = config.enable_fedprox
+    run_config_payload["enable_local_finetune"] = config.enable_local_finetune
+    run_config_payload["enable_centralized_upper_bound"] = config.enable_centralized_upper_bound
+    run_config_payload["fedprox_mu"] = config.fedprox_mu
+    run_config_payload["local_finetune_epochs"] = config.local_finetune_epochs
+    run_config_payload["local_finetune_lr"] = config.local_finetune_lr
+    run_config_payload["random_init_localft_epochs"] = config.random_init_localft_epochs
+    run_config_payload["centralized_epochs"] = config.centralized_epochs
+    run_config_payload["centralized_lr"] = config.centralized_lr
+    run_config_payload["mechanism_eval_methods"] = list(config.mechanism_eval_methods)
+    run_config_payload["forecast_task_type"] = "single_point_far_horizon"
+    run_config_payload["model_output_dim"] = 1
     environment_summary = build_environment_summary(device)
     environment_summary["seed"] = config.seed
     environment_summary["start_time"] = start_time
@@ -1716,10 +2118,17 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     environment_summary["device_fallback_reason"] = device_info.fallback_reason
 
     # Merge convergence history
-    convergence_dfs = [convergence_df]
-    if not cal_feat_fedavg_convergence_df.empty:
-        convergence_dfs.append(cal_feat_fedavg_convergence_df)
     merged_convergence_df = pd.concat(convergence_dfs, ignore_index=True)
+
+    # Build extra_client_dfs with calendar baselines and mechanism eval results
+    _extra = []
+    for _df in [daily_naive_df, weekly_naive_df, cal_profile_df, cal_feat_fedavg_client_df]:
+        if len(_df) > 0:
+            _extra.append(_df)
+    # Add mechanism eval client_dfs from all_client_frames (index 7+)
+    if len(all_client_frames) > 7:
+        _extra.extend(all_client_frames[7:])
+    _extra_client_dfs = _extra if _extra else None
 
     export_results(
         config=config,
@@ -1735,7 +2144,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         prediction_df=prediction_df,
         input_scaler=input_scaler,
         target_scaler=target_scaler,
-        extra_client_dfs=[df for df in [daily_naive_df, weekly_naive_df, cal_profile_df, cal_feat_fedavg_client_df] if len(df) > 0] if (len(daily_naive_df) > 0 or len(cal_feat_fedavg_client_df) > 0) else None,
+        extra_client_dfs=_extra_client_dfs,
     )
     log_info(f"Results written to {output_dir}")
     selected_ids = []

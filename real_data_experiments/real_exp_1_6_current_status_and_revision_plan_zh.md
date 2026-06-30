@@ -9,7 +9,7 @@
 ## 1. 当前 Git 状态
 
 - **分支**: `feature/real-exp4-rfc-ablation`
-- **HEAD**：`f8de3d3` — `feat(real-data): add residual-gated calendar FedAvg diagnostic`（待本轮 long-horizon diagnostic 提交后更新）
+- **HEAD**：待本轮提交后更新
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |
