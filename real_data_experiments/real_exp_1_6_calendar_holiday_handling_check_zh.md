@@ -1,16 +1,18 @@
 # 真实数据实验 1–6 时间与节假日处理检查报告
 
 > 生成日期：2026-06-30
-> 最后更新：2026-06-30（CalendarProfileNaive 样本对齐修复）
-> 本轮只做静态检查，不运行实验，不修改源码。
+> 最后更新：2026-06-30（CalendarProfileNaive 接入 + capped split 对齐修复）
+> 文档状态：已与当前源码状态同步
 
 ## 1. Git 状态
 
 - **分支**：`feature/real-exp4-rfc-ablation`
-- **HEAD**：`d71a841 feat(real-data): add calendar profile baselines to Exp3 and Exp5`
-- **本轮是否运行实验**：否（仅运行 standalone smoke 验证 pipeline）
-- **本轮是否修改源码**：否
-- **staged 区是否包含 results/logs/data**：否（未暂存任何文件）
+- **HEAD**：`2177cef docs(real-data): update calendar audit report with alignment fix and Level 1 for Exp3/Exp5`
+- **本轮是否运行 formal**：否
+- **本轮是否运行 smoke**：是，Exp5 final align smoke 用于验证 CalendarProfileNaive 样本对齐
+- **本轮是否修改源码**：是，前序提交已修改 `rc_core.py` 与 `calendar_utils.py`
+- **本轮是否修改文档**：是，本文件已在多轮中更新
+- **staged 区是否包含 results/logs/data**：否
 
 ## 2. 检查范围
 
@@ -164,11 +166,11 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 - **分区方式**：`rfc_config.py` 默认使用 `spatial_k5`，正式运行时推荐 `similarity_k5`（`README_zh.md` 推荐）。
 - **时间索引**：纯整数 tensor index。`build_time_split_bounds(time_count=<int>)` 按 0.7/0.15/0.15 比例计算整数边界，无任何 datetime/timestamp 映射。
 - **NaiveLastValue**：有。`rfc_core.py` 第 294–323 行实现，作为 baseline 之一（与 FedAvg、Independent 对比）。
-- **calendar baseline**：无。`CalendarProfileNaive`、`DailySeasonalNaive`、`WeeklySeasonalNaive` 均未被导入或调用。`calendar_baselines.py` 虽然存在于公共模块中，但 `rfc` 目录下任何文件都未引用。
+- **CalendarProfileNaive**：已新增。该 baseline 基于 `is_effective_workday + slot_of_day` 构建 client-specific profile。
 - **模型输入**：仅 tensor 通道（`use_channels=[0, 1]`），`rfc_ablation_core.py` 第 242/306 行明确记录 `"data_mode": "tensor"`。
 - **时间切分**：`split_strategy = "temporal_contiguous_by_target_time"`，但 target_time 是整数索引，不在 prediction 输出中保留。
 
-**结论**：Exp3 仅有 NaiveLastValue 作为最简单的 persistence baseline，没有任何 calendar baseline 或 holiday feature（Level 0）。不能写"Exp3 处理了节假日"。最多写"数据时间范围包含节假日，但模型未显式建模节假日"。
+**结论**：Exp3 已接入 CalendarProfileNaive baseline（Level 1）。该 baseline 基于 `is_effective_workday + slot_of_day` 构建 client-specific profile，并与 NaiveLastValue 一起作为非神经网络 baseline。Calendar/holiday 特征仍未进入 FedAvg 或 Independent 的神经网络输入。
 
 ### 6.4 Exp4：多相似 cell 消融
 
@@ -197,7 +199,7 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 - **分区方式**：`spatial_block` / `flow_kmeans`，均基于空间/流量特征，不使用日历信息。
 - **时间切分**：`"temporal_contiguous_by_target_time"`。
 
-**结论**：Exp5 仅有 NaiveLastValue baseline，无任何 calendar baseline 或 holiday feature（Level 0）。不能写"Exp5 处理了节假日"。
+**结论**：Exp5 已接入 CalendarProfileNaive baseline（Level 1）。本轮已修复 raw train/val/test dataset 与 capped dataloader 的样本对齐问题，确保 CalendarProfileNaive 与 NaiveLastValue/FedAvg/Independent 使用同一 capped split。Calendar/holiday 特征仍未进入神经网络输入。
 
 ### 6.6 Exp6：全部 grid cells 划分 client 消融
 
@@ -247,12 +249,12 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
   - "当前 calendar/holiday 特征已作为 CalendarProfileNaive / DailySeasonalNaive / WeeklySeasonalNaive 三个独立 baseline 评估（Exp1），用于验证周期性效应；"
   - "但 calendar 特征尚未接入 FedAvg 等联邦模型的训练输入通道。"
 
-### P1（建议补充 baseline）
+### P1（已完成）
 
-- 为 Exp3/Exp4（rfc）和 Exp5/Exp6（rc/ra）增加 CalendarProfileNaive baseline：
-  - 在 `rfc_core.py` 和 `rc_core.py` 中导入 `calendar_baselines`，调用 `build_client_seasonal_profile()` 和 `calendar_profile_naive_predict()`；
-  - 输出 CalendarProfileNaive 指标，纳入 `client_metrics_df` 与 FedAvg/Independent/NaiveLastValue 对比；
-  - 便于跨 client setting（单 cell / 多 cell / 全局 region）统一对比节假日效应。
+- Exp3 / Exp5 已新增 CalendarProfileNaive baseline。
+
+
+
 
 ### P2（建议开发 calendar 增强模型）
 
@@ -266,30 +268,40 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 ### CalendarProfileNaive 样本对齐修复
 
-- **修复前问题**：Exp5 的 `raw_test_dataset` 存储时未经过 `_maybe_cap_dataset`，导致 `CalendarProfileNaive` 和 `NaiveLastValue` 使用 full test dataset，而 `FedAvg`/`Independent` 使用 `test_loader.dataset`（capped）。当 `--max-samples-per-client-split 1000` 时，CalendarProfileNaive 会输出 196,017 行，而 FedAvg 仅 3,000 行。
-- **修复方式**：在 `rc_core.py` 中调整数据构造顺序，先对 `test_dataset` 执行 `_maybe_cap_dataset`，再赋值给 `raw_test_dataset`。Exp3 无需修改（无 capping 逻辑）。
-- **Exp3 对齐后预测数**：196,017（无 capping，与所有方法一致）
-- **Exp5 对齐后预测数**：3,000（3 clients × 1000，与 NaiveLastValue 一致）
-- **是否与 NaiveLastValue 一致**：是（Exp5: CalendarProfileNaive=3,000 == NaiveLastValue=3,000）
-- **prediction 是否包含 target_time/date/slot_of_day/is_effective_workday**：是，另含 `is_holiday`、`is_weekend`、`holiday_name`
+#### 修复前问题
+
+Exp5 的 `raw_test_dataset` 曾在 `_maybe_cap_dataset()` 之前保存，导致 `CalendarProfileNaive` 和 `NaiveLastValue` 可能使用 full test dataset，而 FedAvg/Independent 使用 capped test loader。当 `--max-samples-per-client-split 1000` 时，CalendarProfileNaive 会输出全量样本（如 196,017 行），而 FedAvg 仅 3,000 行。raw_train/raw_val 也存在同样的不对齐风险。
+
+#### 修复方式
+
+- [`rc_core.py`](file:///E:/Jupter_Notebook/FedTrafficFlow/real_data_experiments/region_client/rc_core.py#L204-L209)：调整数据构造顺序，先对 train/val/test dataset 执行 `_maybe_cap_dataset()`，再保存 `raw_train_dataset`、`raw_val_dataset`、`raw_test_dataset`；
+- [`calendar_utils.py`](file:///E:/Jupter_Notebook/FedTrafficFlow/real_data_experiments/common/calendar_utils.py#L244-L252)：增加 `raw_test_dataset` 与 `test_loader.dataset` 的长度一致性检查，不匹配时 `raise ValueError`；
+- [`calendar_utils.py`](file:///E:/Jupter_Notebook/FedTrafficFlow/real_data_experiments/common/calendar_utils.py#L294-L303)：prediction 输出包含 `target_time`、`date`、`slot_of_day`、`is_effective_workday`、`is_holiday`、`is_weekend`、`holiday_name`。
+
+#### 对齐验证
+
+| 实验 | 验证方式 | CalendarProfileNaive rows | NaiveLastValue rows | FedAvg rows | 是否一致 | 说明 |
+|---|:---:|---:|---:|---:|:---:|---|
+| Exp3 | full test 对齐检查 | 196,017 | 196,017 | 196,017 | 是 | Exp3 无 capping 逻辑，所有方法使用 full test |
+| Exp5 | 1k capped smoke | 3,000 | 3,000 | 3,000 | 是 | 3 clients × 1000，raw dataset 与 dataloader 完全对齐 |
 
 ## 10. 最终结论
 
 | 项目 | 结论 |
 |------|------|
-| **当前真正显式使用日历/节假日 baseline 的实验** | Exp1（CalendarProfileNaive + Daily/WeeklySeasonalNaive）、**Exp3（CalendarProfileNaive 新增）**、**Exp5（CalendarProfileNaive 新增）**，且仅作为独立 baseline，未进入模型输入 |
-| **当前无任何 calendar 处理（仅 NaiveLastValue）的实验** | Exp3、Exp5（已有 NaiveLastValue + CalendarProfileNaive baseline） |
-| **当前完全无 baseline 评估的消融实验** | Exp2、Exp4、Exp6（纯模型结构消融，无任何 baseline） |
-| **论文中如何表述** | 数据时间范围覆盖 2017 年 4–5 月三个节假日 + 调休日；Exp1 已通过三个 calendar baselines 验证周期性效应；Exp2–Exp6 作为模型/分区的拓展实验，未重复接入 calendar baseline，可作为未来补充工作 |
+| **当前显式使用日历/节假日 baseline 的实验** | Exp1、Exp3、Exp5。Exp1 含 CalendarProfileNaive + Daily/WeeklySeasonalNaive；Exp3/Exp5 新增 CalendarProfileNaive |
+| **当前完全无 calendar baseline 的消融实验** | Exp2、Exp4、Exp6 |
+| **calendar/holiday 是否进入神经网络输入** | 否。所有实验的神经网络输入仍为 tensor 通道，calendar 仅作为 baseline/诊断使用 |
+| **论文中如何表述** | 数据覆盖清明节、劳动节、端午节及调休日；主实验 Exp1/3/5 均已有 CalendarProfileNaive baseline；节假日特征尚未进入 FedAvg 模型输入 |
 | **是否误提交 results/logs/data** | 否（staged 区为空） |
 
 ### 分级总结
 
 | 实验 | 等级 | 一句话结论 |
 |------|:---:|------|
-| Exp1 | **Level 1** | 有 calendar baselines（CalendarProfileNaive + Daily/WeeklySeasonalNaive），但未进入模型输入 |
-| Exp2 | **Level 0** | 纯消融实验，无任何 calendar 特征 |
-| Exp3 | **Level 1** | 新增 CalendarProfileNaive baseline |
-| Exp4 | **Level 0** | 纯消融实验，无任何 calendar 特征 |
-| Exp5 | **Level 1** | 新增 CalendarProfileNaive + NaiveLastValue baseline |
-| Exp6 | **Level 0** | 纯消融实验，无任何 calendar 特征 |
+| Exp1 | **Level 1** | 有 CalendarProfileNaive + Daily/WeeklySeasonalNaive baseline，未进入模型输入 |
+| Exp2 | **Level 0** | 纯结构消融，无 calendar baseline |
+| Exp3 | **Level 1** | 新增 CalendarProfileNaive baseline，未进入模型输入 |
+| Exp4 | **Level 0** | 纯结构消融，无 calendar baseline |
+| Exp5 | **Level 1** | 新增 CalendarProfileNaive baseline，且 capped split 对齐已修复 |
+| Exp6 | **Level 0** | 纯结构消融，无 calendar baseline |
