@@ -71,7 +71,8 @@
 | Exp1 | `node_flow_grid_tensor.pt` | 5 selected grid cells (290,284,318,288,289) | 手动指定 selected_clients | 70%/15%/15% 时序连续 | 20 | 1 | 64 | cuda (RTX 3060) | `formal/exp1_single_grid_baseline_r20_e1_cuda/` |
 | Exp2 | 同上 | 同上 | 同上 | 同上 | 历史 20 (已删) | 历史 3 (已删) | 64 | cuda | 历史目录已删除 |
 | Exp3 smoke | 同上 + `similarity_k5.json` | 5 clients, 每 client 含 ~44 个相似 grid cells | similarity clustering (Pearson corr + 特征距离) | 70%/15%/15% | 1 | 1 | 32 | cuda | `smoke/exp3_rfc_similarity_k5_r1e1/` |
-| Exp4 | — | — | — | — | — | — | — | — | 未开发 |
+| Exp4 smoke | 同上 + `similarity_k5.json` | 5 clients, 每 client 含 ~44 个相似 grid cells | similarity clustering (复用 Exp3) | 70%/15%/15% | 1 | 1 | 32 | cuda | `diagnostic/exp4_rfc_ablation_similarity_k5_all_variants_r1_e1_cuda_1k/` |
+| Exp4 formal | 同上 | 同上 | 同上 | 同上 | 待定 | 待定 | 32 | cuda | 未运行 |
 | Exp5 smoke | 同上 | 3 clients, spatial 蛇形分块 | spatial_block | 70%/15%/15% | 1 | 1 | 32 | cuda | `smoke/exp5_rc_spatial_block_k3_r1e1/` |
 | Exp5 smoke | 同上 | 3 clients, KMeans 聚类 | flow_kmeans | 70%/15%/15% | 1 | 1 | 32 | cuda | `smoke/exp5_rc_flow_kmeans_k3_r1e1/` |
 | Exp5 formal | 同上 | 同上 | spatial_block | 70%/15%/15% | 20 | 1 | 32 | cuda | `formal/exp5_rc_spatial_block_k3_r20_e1_cuda/` |

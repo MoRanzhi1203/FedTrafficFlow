@@ -43,7 +43,7 @@
 | 实验 | 状态 | 是否可用 | 条件 |
 |------|------|:---:|------|
 | 实验 2 | 代码存在，结果已删除 | ⚠️ 需恢复 | 恢复历史结果或重跑 r20e3 formal |
-| 实验 6 | 仅 full variant + 指标异常 | ❌ 不可用 | 修复 scaler + 补全 4 variant + 重跑 |
+| 实验 6 | scaler 已修复，仅 full variant | ❌ 不可用 | 补全 4 variant + 重跑 |
 | 实验 4 | 未开发 | ❌ 不可用 | 需开发后再跑 |
 
 ### 建议消融表结构（如实验 2 恢复）
@@ -78,7 +78,7 @@
 
 - **不作为论文主指标**
 - 仅作为附录或诊断指标
-- 当前实验 5/6 的 R² 为负，若出现在论文中需额外解释
+- 实验 5/6 scaler 修复后 R² 已转正（修复前 R²=-1.128，修复后 r3e1 R²=0.273），但仍不建议主表使用 R²
 
 ### 必须包含的比较
 
@@ -139,4 +139,4 @@ Client 289 的 FedAvg 相比 Independent 恶化 156.9%，是跨 client 平均化
 3. **Analysis**: Client 289 是最不友好的 client，FedAvg 相比 Independent 恶化 156.9%，反映跨 client 平均化对异质性 client 的负面影响
 4. **Baseline**: NaiveLastValue (RMSE=19,419) 强于 FedAvg (RMSE=24,158)，说明数据具有强时间惯性
 5. **Calendar**: CalendarProfileNaive (RMSE=32,194) 弱于 FedAvg，说明简单周期 profile 不足以捕捉交通流动态
-6. **Limitations**: 当前仅在 5 个 grid cells 上验证，更全面的 cluster-level 和 global partition 设置因训练链路问题尚未形成可信结论
+6. **Limitations**: 当前仅在 5 个 grid cells 上验证（Exp1）。Exp5/6 scaler 已修复，r3e1 诊断确认模型开始学习，但需 r20 formal 后判断 full data 性能。Cluster-level (Exp3) 和 global partition (Exp5) 尚未形成 formal 结论
