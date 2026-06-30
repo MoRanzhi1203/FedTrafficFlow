@@ -16,6 +16,10 @@ import pandas as pd
 import torch
 import torch.nn as nn
 
+from real_data_experiments.common.calendar_utils import (
+    load_calendar_features,
+    evaluate_calendar_profile_naive_for_clients,
+)
 from real_data_experiments.common.client import FedClient
 from real_data_experiments.common.device_utils import DeviceResolution, resolve_device
 from real_data_experiments.common.metrics import METRIC_COLUMNS, compute_regression_metrics, summarize_metric_frame
@@ -343,12 +347,16 @@ def export_results(
     fed_client_df: pd.DataFrame,
     ind_client_df: pd.DataFrame,
     naive_client_df: pd.DataFrame,
+    calendar_client_df: pd.DataFrame,
     convergence_df: pd.DataFrame,
     prediction_df: pd.DataFrame,
     input_scaler=None,
     target_scaler=None,
 ) -> None:
-    client_metrics_df = pd.concat([fed_client_df, ind_client_df, naive_client_df], ignore_index=True)
+    client_metrics_df = pd.concat(
+        [fed_client_df, ind_client_df, naive_client_df, calendar_client_df],
+        ignore_index=True,
+    )
     main_metrics_df = (
         client_metrics_df.groupby("method", as_index=False)[METRIC_COLUMNS]
         .mean()
@@ -484,9 +492,41 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         {"elapsed_sec": round(time.perf_counter() - naive_start, 3), "rows": int(len(naive_client_df))},
     )
     # #endregion
-    prediction_df = pd.concat([fed_prediction_df, ind_prediction_df, naive_prediction_df], ignore_index=True)
+    # CalendarProfileNaive baseline
+    calendar_client_df = pd.DataFrame()
+    calendar_prediction_df = pd.DataFrame()
+    calendar_baseline_status: dict[str, object] = {}
+    if config.enable_calendar_profile_baseline:
+        cal_start = time.perf_counter()
+        try:
+            calendar_features = load_calendar_features(
+                config.calendar_features_path,
+                expected_time_count=None,
+            )
+            calendar_client_df, calendar_prediction_df = evaluate_calendar_profile_naive_for_clients(
+                clients=clients,
+                calendar_features=calendar_features,
+                target_channel=config.target_channel,
+                method_name="CalendarProfileNaive",
+            )
+            calendar_baseline_status = {
+                "calendar_baseline": "completed",
+                "calendar_baseline_elapsed_sec": round(time.perf_counter() - cal_start, 3),
+                "calendar_features_path": config.calendar_features_path,
+            }
+        except FileNotFoundError:
+            print("[calendar] Calendar features file not found; CalendarProfileNaive baseline skipped.", flush=True)
+            calendar_baseline_status = {"calendar_baseline": "skipped_missing_file"}
+        except Exception as exc:
+            print(f"[calendar] CalendarProfileNaive baseline error: {exc}; skipped.", flush=True)
+            calendar_baseline_status = {"calendar_baseline": f"skipped_error: {exc}"}
+    else:
+        calendar_baseline_status = {"calendar_baseline": "disabled"}
+    prediction_df = pd.concat([fed_prediction_df, ind_prediction_df, naive_prediction_df, calendar_prediction_df], ignore_index=True)
 
     run_config_payload = build_run_config_payload(config, device_info)
+    run_config_payload["calendar_features_path"] = config.calendar_features_path
+    run_config_payload["enable_calendar_profile_baseline"] = config.enable_calendar_profile_baseline
     environment_summary = build_environment_summary(device)
     environment_summary["seed"] = config.seed
     environment_summary["start_time"] = start_time
@@ -495,6 +535,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
     environment_summary["actual_device"] = device_info.actual_device
     environment_summary["cuda_device_name"] = device_info.cuda_device_name
     environment_summary["device_fallback_reason"] = device_info.fallback_reason
+    environment_summary.update(calendar_baseline_status)
 
     # #region debug-point G:export-start
     _debug_emit("G", "rfc_core.run_experiment:before_export", "exporting results", {"prediction_rows": int(len(prediction_df))})
@@ -510,6 +551,7 @@ def run_experiment(config: ExperimentConfig) -> dict[str, object]:
         fed_client_df=fed_client_df,
         ind_client_df=ind_client_df,
         naive_client_df=naive_client_df,
+        calendar_client_df=calendar_client_df,
         convergence_df=convergence_df,
         prediction_df=prediction_df,
         input_scaler=input_scaler,

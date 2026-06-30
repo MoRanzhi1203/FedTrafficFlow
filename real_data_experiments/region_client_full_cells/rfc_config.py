@@ -36,6 +36,8 @@ class ExperimentConfig:
     target_normalization_eps: float = 1e-6
     show_progress: bool = True
     progress_interval: int = 20
+    calendar_features_path: str = "data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv"
+    enable_calendar_profile_baseline: bool = True
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -72,6 +74,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--val-ratio", type=float, default=0.15)
     parser.add_argument("--prediction-sample-limit", type=int, default=500)
     parser.add_argument("--show-progress", action="store_true", default=False)
+    parser.add_argument(
+        "--calendar-features-path",
+        type=str,
+        default="data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv",
+    )
+    parser.add_argument("--enable-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_true", default=True)
+    parser.add_argument("--no-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_false")
     return parser
 
 
@@ -96,4 +105,6 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         device=args.device,
         prediction_sample_limit=args.prediction_sample_limit,
         show_progress=bool(args.show_progress),
+        calendar_features_path=args.calendar_features_path,
+        enable_calendar_profile_baseline=bool(args.enable_calendar_profile_baseline),
     )

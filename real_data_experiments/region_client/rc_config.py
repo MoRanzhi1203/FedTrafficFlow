@@ -36,6 +36,8 @@ class ExperimentConfig:
     target_channel: int = 0
     input_normalization: bool = True
     target_normalization: bool = True
+    calendar_features_path: str = "data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv"
+    enable_calendar_profile_baseline: bool = True
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -70,6 +72,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-input-normalization", dest="input_normalization", action="store_false")
     parser.add_argument("--target-normalization", dest="target_normalization", action="store_true", default=True)
     parser.add_argument("--no-target-normalization", dest="target_normalization", action="store_false")
+    parser.add_argument(
+        "--calendar-features-path",
+        type=str,
+        default="data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv",
+    )
+    parser.add_argument("--enable-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_true", default=True)
+    parser.add_argument("--no-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_false")
     return parser
 
 
@@ -94,4 +103,6 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         max_samples_per_client_split=(None if int(args.max_samples_per_client_split) <= 0 else int(args.max_samples_per_client_split)),
         input_normalization=args.input_normalization,
         target_normalization=args.target_normalization,
+        calendar_features_path=args.calendar_features_path,
+        enable_calendar_profile_baseline=bool(args.enable_calendar_profile_baseline),
     )
