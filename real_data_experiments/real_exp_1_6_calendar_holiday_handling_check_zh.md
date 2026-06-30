@@ -1,13 +1,13 @@
 # 真实数据实验 1–6 时间与节假日处理检查报告
 
 > 生成日期：2026-06-30
-> 最后更新：2026-06-30（CalendarProfileNaive 接入 + capped split 对齐修复）
+> 最后更新：2026-06-30（80/10/10 时序划分更新 + CalendarProfileNaive 接入 + capped split 对齐修复）
 > 文档状态：已与当前源码状态同步
 
 ## 1. Git 状态
 
 - **分支**：`feature/real-exp4-rfc-ablation`
-- **HEAD**：`2177cef docs(real-data): update calendar audit report with alignment fix and Level 1 for Exp3/Exp5`
+- **HEAD**：`cfd115b chore: add Trae instruction workspace`（80/10/10 默认值修复及日历文档同步将在本轮提交中更新）
 - **本轮是否运行 formal**：否
 - **本轮是否运行 smoke**：是，Exp5 final align smoke 用于验证 CalendarProfileNaive 样本对齐
 - **本轮是否修改源码**：是，前序提交已修改 `rc_core.py` 与 `calendar_utils.py`
@@ -110,7 +110,7 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 | 实验 | 新版含义 | 时间索引 | weekday/weekend | 节假日/调休 | 日内 slot | calendar baseline | calendar 作为模型输入 | 当前等级 |
 |------|----------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Exp1 | 单 grid cell 主实验 | 真实时间索引 | CalendarProfileNaive 使用 | 日历 CSV 标注 | slot_of_day 0-95 | CalendarProfileNaive + Daily/WeeklySeasonalNaive | 否（仅 baseline） | **Level 1** |
+| Exp1 | 单 grid cell 主实验 | 真实时间索引 (80/10/10 划分) | CalendarProfileNaive 使用 | 日历 CSV 标注 | slot_of_day 0-95 | CalendarProfileNaive + Daily/WeeklySeasonalNaive + CalendarFeatureFedAvg | 是（CalendarFeatureFedAvg diagnostic，Level 2） | **Level 2 diagnostic** |
 | Exp2 | 单 grid cell 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无（未继承 Exp1） | 否 | **Level 0** |
 | Exp3 | 多相似 cell 主实验 | 纯整数 tensor index | 无 | 无 | 无 | CalendarProfileNaive (新增) | 否 | **Level 1** |
 | Exp4 | 多相似 cell 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无 | 否 | **Level 0** |
@@ -137,11 +137,13 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 - **日历特征进入模型输入**：否。神经网络输入仅来自 grid tensor 的通道维度（`use_channels=[0, 1]`），calendar DataFrame 仅用于三个 baseline 评估。
 
-- **时间切分**：`split_strategy = "temporal_contiguous_by_target_time"`，按真实时间顺序切分 train/val/test（比例 0.7/0.15/0.15）。
+- **时间切分**：`split_strategy = "temporal_contiguous_by_target_time"`，按真实时间顺序切分 train/val/test（当前比例 0.8/0.1/0.1；历史 formal 使用 0.7/0.15/0.15）。
 
 - **已有运行结果**：`results/real_data_experiments/diagnostics/exp1_calendar_periodicity/calendar_baselines_r5e1_cuda/run_config.json` 记录了 Exp1 的 calendar baselines 运行配置。
 
-**结论**：Exp1 是唯一显式使用日历特征的实验，但仅限于 baseline 评估层面（Level 1）。Calendar/holiday 特征未进入 FedAvg 神经网络训练链路。可写为"已构建 calendar baselines 作为周期性诊断基准"。Exp3 和 Exp5 后续也已接入 CalendarProfileNaive baseline（见下文）。
+**结论**：Exp1 已从 Level 1 升级至 Level 2 diagnostic。CalendarFeatureFedAvg 已将 calendar/holiday 特征作为辅助输入分支接入神经网络训练链路（diagnostic r5e1），但该 diagnostic 当前表现弱于 FedAvg，不可写成性能提升。CalendarProfileNaive 仍是独立 baseline。Exp3 和 Exp5 也已接入 CalendarProfileNaive baseline（见下文）。
+
+> **历史划分说明**：Exp1 formal r20e1 使用 70%/15%/15% 时序划分。修订后的划分方案为 80%/10%/10%，以适应 61 天观测窗口。70%/15%/15% 结果保留作为 sensitivity check 参考。
 
 ### 6.2 Exp2：单 grid cell 消融
 
@@ -234,9 +236,10 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 ### 8.2 不能写
 
 - 不能写"Exp1–Exp6 全部都显式建模了节假日"；
-- 不能写"Exp2/Exp3/Exp4/Exp5/Exp6 已经使用了 holiday feature 或 calendar baseline"；
-- 不能写"calendar feature 已进入 FedAvg 神经网络输入"（Exp1 中仅作为 baseline，Exp2–Exp6 完全未接入）；
-- 不能写"节假日处理提升了 FedAvg 性能"，除非有专门的对照实验结果；
+- 不能写"CalendarFeatureFedAvg 已经提升 FedAvg"；
+- 不能写"CalendarFeatureFedAvg 已经完成 formal"；
+- 不能写"Exp2/4/6 已有 without_calendar 消融"；
+- 不能写"Exp2/Exp3/Exp4/Exp5/Exp6 已经使用了 holiday feature 或 calendar baseline"（Exp3/Exp5 已有 CalendarProfileNaive baseline，可以写，但不能写成模型输入）；
 - 不能写"calendar 特征已被所有实验共享使用"。
 
 ## 9. 缺口与下一步建议
@@ -299,7 +302,7 @@ Exp5 的 `raw_test_dataset` 曾在 `_maybe_cap_dataset()` 之前保存，导致 
 
 | 实验 | 等级 | 一句话结论 |
 |------|:---:|------|
-| Exp1 | **Level 1** | 有 CalendarProfileNaive + Daily/WeeklySeasonalNaive baseline，未进入模型输入 |
+| Exp1 | **Level 2 diagnostic** | 有 CalendarProfileNaive + Daily/WeeklySeasonalNaive baseline + CalendarFeatureFedAvg diagnostic (calendar 已进入模型输入，但仅 diagnostic 阶段) |
 | Exp2 | **Level 0** | 纯结构消融，无 calendar baseline |
 | Exp3 | **Level 1** | 新增 CalendarProfileNaive baseline，未进入模型输入 |
 | Exp4 | **Level 0** | 纯结构消融，无 calendar baseline |

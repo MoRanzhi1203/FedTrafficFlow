@@ -125,7 +125,7 @@ def main():
     parser.add_argument("--tensor-path", default=DEFAULT_TENSOR)
     parser.add_argument("--regions-path", default=DEFAULT_REGIONS)
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT)
-    parser.add_argument("--train-ratio", type=float, default=0.7)
+    parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--target-channel", type=int, default=0)
     parser.add_argument("--group-size", type=int, default=5)
     args = parser.parse_args()

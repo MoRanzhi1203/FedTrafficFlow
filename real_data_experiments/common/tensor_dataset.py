@@ -186,7 +186,7 @@ def select_region_clients(
     return selected_df[available_columns].copy()
 
 
-def build_time_split_bounds(time_count: int, train_ratio: float = 0.7, val_ratio: float = 0.15) -> dict[str, int | float]:
+def build_time_split_bounds(time_count: int, train_ratio: float = 0.8, val_ratio: float = 0.1) -> dict[str, int | float]:
     """Build contiguous time-index split bounds on the raw tensor timeline."""
     if time_count <= 0:
         raise ValueError("time_count must be positive.")

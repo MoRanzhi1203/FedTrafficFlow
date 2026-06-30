@@ -1,14 +1,15 @@
 # 真实数据实验 1–6 当前状态与修订计划
 
 > 生成日期：2026-06-30
-> 本报告已同步至 Exp1 CalendarFeatureFedAvg diagnostic 完成后的状态。Exp1 当前为 Level 2。
+> **数据划分更新**：本轮将真实数据实验的时序划分从 70%/15%/15% 修订为 80%/10%/10%，以在 61 天观测窗口内最大化训练数据并保留验证/测试集。Exp1 已完成的历史 formal 使用 70%/15%/15%，保留作为 sensitivity check。
+> 本报告已同步至 Exp1 CalendarFeatureFedAvg diagnostic 完成后的状态。Exp1 当前为 Level 2 diagnostic（CalendarFeatureFedAvg 已将 calendar/holiday 特征接入神经网络训练链路，但仅 diagnostic 阶段，未进入 formal）。CalendarFeatureFedAvg r5 diagnostic 当前表现弱于 FedAvg，不可写成性能提升。
 
 ---
 
 ## 1. 当前 Git 状态
 
 - **分支**: `feature/real-exp4-rfc-ablation`
-- **HEAD**: `1ceb287` — `docs(real-data): update hyperparameter tables, result plan, and reviewer mapping for Exp4`
+- **HEAD**：待本轮提交后更新（最新 commit 为 `cfd115b`，本轮 align split defaults 和 calendar status docs 后将进入新 commit）
 - **最近 10 个 commit** (含本次报告相关):
 
 | # | Hash | Message |
@@ -72,6 +73,8 @@
 | WeeklySeasonalNaive | 48,369 | 32,881 | 1.831 | 0.551 |
 
 **结论**: Independent 最好。FedAvg 弱于 Independent 和 NaiveLastValue。R² 均为正值，训练正常。
+
+> **注意**：Exp1 formal r20e1 使用 70%/15%/15% 时序划分。修订后的划分方案为 80%/10%/10%，该结果保留作为 sensitivity check 的参考基线。
 
 ### 实验 3 — smoke r1e1
 
@@ -221,7 +224,7 @@ results/real_data_experiments/diagnostic/exp4_rfc_ablation_similarity_k5_all_var
 | 训练 | learning_rate | 1e-3 (Adam) |
 | 聚合 | 方法 | FedAvg (sample_count 加权) |
 | 数据 | tensor shape | [2, 630, 5856] |
-| 数据 | 划分 | 70%/15%/15% 时序连续 |
+| 数据 | 划分 | 80%/10%/10% 时序连续 (Exp1 历史 formal 使用 70%/15%/15%，作为 sensitivity check) |
 | 数据 | 归一化 | z-score (Exp1/2/3/5/6 ✅，本轮修复) |
 
 ---
