@@ -1,13 +1,14 @@
 # 真实数据实验 1–6 时间与节假日处理检查报告
 
 > 生成日期：2026-06-30
+> 最后更新：2026-06-30（CalendarProfileNaive 样本对齐修复）
 > 本轮只做静态检查，不运行实验，不修改源码。
 
 ## 1. Git 状态
 
 - **分支**：`feature/real-exp4-rfc-ablation`
-- **HEAD**：`0cf5e69 docs(real-data): synchronize Exp4 status across reports`
-- **本轮是否运行实验**：否
+- **HEAD**：`d71a841 feat(real-data): add calendar profile baselines to Exp3 and Exp5`
+- **本轮是否运行实验**：否（仅运行 standalone smoke 验证 pipeline）
 - **本轮是否修改源码**：否
 - **staged 区是否包含 results/logs/data**：否（未暂存任何文件）
 
@@ -109,9 +110,9 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 |------|----------|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | Exp1 | 单 grid cell 主实验 | 真实时间索引 | CalendarProfileNaive 使用 | 日历 CSV 标注 | slot_of_day 0-95 | CalendarProfileNaive + Daily/WeeklySeasonalNaive | 否（仅 baseline） | **Level 1** |
 | Exp2 | 单 grid cell 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无（未继承 Exp1） | 否 | **Level 0** |
-| Exp3 | 多相似 cell 主实验 | 纯整数 tensor index | 无 | 无 | 无 | 无（仅有 NaiveLastValue） | 否 | **Level 0** |
+| Exp3 | 多相似 cell 主实验 | 纯整数 tensor index | 无 | 无 | 无 | CalendarProfileNaive (新增) | 否 | **Level 1** |
 | Exp4 | 多相似 cell 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无 | 否 | **Level 0** |
-| Exp5 | 全部 cells 划分 client 主实验 | 纯整数 tensor index | 无 | 无 | 无 | 无（仅有 NaiveLastValue） | 否 | **Level 0** |
+| Exp5 | 全部 cells 划分 client 主实验 | 纯整数 tensor index | 无 | 无 | 无 | CalendarProfileNaive (新增) + NaiveLastValue | 否 | **Level 1** |
 | Exp6 | 全部 cells 划分 client 消融 | 纯整数 tensor index | 无 | 无 | 无 | 无 | 否 | **Level 0** |
 
 ## 6. 分实验结论
@@ -138,7 +139,7 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 
 - **已有运行结果**：`results/real_data_experiments/diagnostics/exp1_calendar_periodicity/calendar_baselines_r5e1_cuda/run_config.json` 记录了 Exp1 的 calendar baselines 运行配置。
 
-**结论**：Exp1 是唯一显式使用日历特征的实验，但仅限于 baseline 评估层面（Level 1）。Calendar/holiday 特征未进入 FedAvg 神经网络训练链路。可写为"已构建 calendar baselines 作为周期性诊断基准"。
+**结论**：Exp1 是唯一显式使用日历特征的实验，但仅限于 baseline 评估层面（Level 1）。Calendar/holiday 特征未进入 FedAvg 神经网络训练链路。可写为"已构建 calendar baselines 作为周期性诊断基准"。Exp3 和 Exp5 后续也已接入 CalendarProfileNaive baseline（见下文）。
 
 ### 6.2 Exp2：单 grid cell 消融
 
@@ -263,12 +264,21 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
   - 将 test 集按 `is_holiday` / `is_weekend` / `is_effective_workday` 分组；
   - 报告各组 RMSE/MAE，揭示模型在不同日期类型下的性能差异（Level 3）。
 
+### CalendarProfileNaive 样本对齐修复
+
+- **修复前问题**：Exp5 的 `raw_test_dataset` 存储时未经过 `_maybe_cap_dataset`，导致 `CalendarProfileNaive` 和 `NaiveLastValue` 使用 full test dataset，而 `FedAvg`/`Independent` 使用 `test_loader.dataset`（capped）。当 `--max-samples-per-client-split 1000` 时，CalendarProfileNaive 会输出 196,017 行，而 FedAvg 仅 3,000 行。
+- **修复方式**：在 `rc_core.py` 中调整数据构造顺序，先对 `test_dataset` 执行 `_maybe_cap_dataset`，再赋值给 `raw_test_dataset`。Exp3 无需修改（无 capping 逻辑）。
+- **Exp3 对齐后预测数**：196,017（无 capping，与所有方法一致）
+- **Exp5 对齐后预测数**：3,000（3 clients × 1000，与 NaiveLastValue 一致）
+- **是否与 NaiveLastValue 一致**：是（Exp5: CalendarProfileNaive=3,000 == NaiveLastValue=3,000）
+- **prediction 是否包含 target_time/date/slot_of_day/is_effective_workday**：是，另含 `is_holiday`、`is_weekend`、`holiday_name`
+
 ## 10. 最终结论
 
 | 项目 | 结论 |
 |------|------|
-| **当前真正显式使用日历/节假日 baseline 的实验** | 仅 **Exp1**（CalendarProfileNaive + DailySeasonalNaive + WeeklySeasonalNaive），且仅作为独立 baseline，未进入模型输入 |
-| **当前无任何 calendar 处理（仅 NaiveLastValue）的实验** | Exp3、Exp5（有 NaiveLastValue baseline，无 calendar baseline） |
+| **当前真正显式使用日历/节假日 baseline 的实验** | Exp1（CalendarProfileNaive + Daily/WeeklySeasonalNaive）、**Exp3（CalendarProfileNaive 新增）**、**Exp5（CalendarProfileNaive 新增）**，且仅作为独立 baseline，未进入模型输入 |
+| **当前无任何 calendar 处理（仅 NaiveLastValue）的实验** | Exp3、Exp5（已有 NaiveLastValue + CalendarProfileNaive baseline） |
 | **当前完全无 baseline 评估的消融实验** | Exp2、Exp4、Exp6（纯模型结构消融，无任何 baseline） |
 | **论文中如何表述** | 数据时间范围覆盖 2017 年 4–5 月三个节假日 + 调休日；Exp1 已通过三个 calendar baselines 验证周期性效应；Exp2–Exp6 作为模型/分区的拓展实验，未重复接入 calendar baseline，可作为未来补充工作 |
 | **是否误提交 results/logs/data** | 否（staged 区为空） |
@@ -279,7 +289,7 @@ sin_time_of_day, cos_time_of_day, sin_day_of_week, cos_day_of_week
 |------|:---:|------|
 | Exp1 | **Level 1** | 有 calendar baselines（CalendarProfileNaive + Daily/WeeklySeasonalNaive），但未进入模型输入 |
 | Exp2 | **Level 0** | 纯消融实验，无任何 calendar 特征 |
-| Exp3 | **Level 0** | 仅有 NaiveLastValue baseline，无 calendar baseline |
+| Exp3 | **Level 1** | 新增 CalendarProfileNaive baseline |
 | Exp4 | **Level 0** | 纯消融实验，无任何 calendar 特征 |
-| Exp5 | **Level 0** | 仅有 NaiveLastValue baseline，无 calendar baseline |
+| Exp5 | **Level 1** | 新增 CalendarProfileNaive + NaiveLastValue baseline |
 | Exp6 | **Level 0** | 纯消融实验，无任何 calendar 特征 |
