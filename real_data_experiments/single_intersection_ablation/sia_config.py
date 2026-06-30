@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass, field
 
+from real_data_experiments.common.data_splits import validate_split_ratios
+
 
 DEFAULT_VARIANTS = [
     "full",
@@ -27,8 +29,9 @@ class ExperimentConfig:
     output_dir: str = "results/real_data_experiments/single_intersection_ablation_tensor"
     num_clients: int = 5
     selected_clients: list[int] | None = None
-    train_ratio: float = 0.7
-    val_ratio: float = 0.15
+    train_ratio: float = 0.8
+    val_ratio: float = 0.1
+    split_name: str = ""
     batch_size: int = 64
     learning_rate: float = 1e-3
     local_epochs: int = 2
@@ -102,11 +105,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input-normalization-eps", type=float, default=1e-6)
     parser.add_argument("--disable-target-normalization", action="store_true")
     parser.add_argument("--target-normalization-eps", type=float, default=1e-6)
+    parser.add_argument("--train-ratio", type=float, default=0.8)
+    parser.add_argument("--val-ratio", type=float, default=0.1)
     return parser
 
 
 def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     """Construct config from parsed CLI arguments."""
+    split_name = validate_split_ratios(args.train_ratio, args.val_ratio)
     return ExperimentConfig(
         workflow=args.workflow,
         seed=args.seed,
@@ -117,6 +123,9 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         output_dir=args.output_dir,
         num_clients=args.num_clients,
         selected_clients=parse_selected_clients(args.selected_clients),
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        split_name=split_name,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         local_epochs=args.local_epochs,

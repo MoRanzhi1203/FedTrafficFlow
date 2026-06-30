@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass, field
 
+from real_data_experiments.common.data_splits import validate_split_ratios
+
 
 @dataclass
 class ExperimentConfig:
@@ -19,8 +21,9 @@ class ExperimentConfig:
     output_dir: str = "results/real_data_experiments/single_intersection_client_tensor"
     num_clients: int = 5
     selected_clients: list[int] | None = None
-    train_ratio: float = 0.7
-    val_ratio: float = 0.15
+    train_ratio: float = 0.8
+    val_ratio: float = 0.1
+    split_name: str = ""
     batch_size: int = 64
     learning_rate: float = 1e-3
     local_epochs: int = 2
@@ -44,6 +47,23 @@ class ExperimentConfig:
     show_progress: bool = True
     progress_interval: int = 20
     model_variant: str = "baseline"
+
+    # Calendar Feature FedAvg
+    enable_calendar_profile_baseline: bool = False
+    enable_calendar_feature_fedavg: bool = False
+    calendar_features_path: str = "data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv"
+    calendar_feature_columns: tuple[str, ...] = (
+        "sin_time_of_day",
+        "cos_time_of_day",
+        "sin_day_of_week",
+        "cos_day_of_week",
+        "is_holiday",
+        "is_weekend",
+        "is_effective_workday",
+        "is_adjusted_workday",
+        "days_to_nearest_holiday",
+    )
+    calendar_feature_mode: str = "target_time"
 
     def to_dict(self) -> dict[str, object]:
         """Return a JSON-friendly config dict."""
@@ -93,11 +113,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.set_defaults(show_progress=True)
     parser.add_argument("--progress-interval", type=int, default=20)
     parser.add_argument("--model-variant", type=str, default="baseline", choices=["baseline", "legacy_ipynb"])
+    parser.add_argument("--enable-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_true")
+    parser.add_argument("--no-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_false")
+    parser.set_defaults(enable_calendar_profile_baseline=False)
+    parser.add_argument("--enable-calendar-feature-fedavg", dest="enable_calendar_feature_fedavg", action="store_true")
+    parser.add_argument("--no-calendar-feature-fedavg", dest="enable_calendar_feature_fedavg", action="store_false")
+    parser.set_defaults(enable_calendar_feature_fedavg=False)
+    parser.add_argument("--calendar-features-path", type=str, default="data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv")
+    parser.add_argument("--calendar-feature-columns", type=str, default="")
+    parser.add_argument("--calendar-feature-mode", type=str, default="target_time")
+    parser.add_argument("--train-ratio", type=float, default=0.8)
+    parser.add_argument("--val-ratio", type=float, default=0.1)
     return parser
+
+
+def _parse_calendar_columns(raw_text: str) -> tuple[str, ...]:
+    """Parse comma-separated calendar column names from CLI."""
+    if not raw_text or not raw_text.strip():
+        return ()
+    return tuple(col.strip() for col in raw_text.split(",") if col.strip())
 
 
 def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     """Construct an ExperimentConfig from parsed CLI arguments."""
+    split_name = validate_split_ratios(args.train_ratio, args.val_ratio)
     return ExperimentConfig(
         workflow=args.workflow,
         seed=args.seed,
@@ -108,6 +147,9 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         output_dir=args.output_dir,
         num_clients=args.num_clients,
         selected_clients=parse_selected_clients(args.selected_clients),
+        train_ratio=args.train_ratio,
+        val_ratio=args.val_ratio,
+        split_name=split_name,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         local_epochs=args.local_epochs,
@@ -124,4 +166,9 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         show_progress=args.show_progress,
         progress_interval=args.progress_interval,
         model_variant=args.model_variant,
+        enable_calendar_profile_baseline=args.enable_calendar_profile_baseline,
+        enable_calendar_feature_fedavg=args.enable_calendar_feature_fedavg,
+        calendar_features_path=args.calendar_features_path,
+        calendar_feature_columns=_parse_calendar_columns(args.calendar_feature_columns) or ExperimentConfig.calendar_feature_columns,
+        calendar_feature_mode=args.calendar_feature_mode,
     )

@@ -1,0 +1,7 @@
+# Ignore temporary Trae instruction files
+*.md
+
+# Keep permanent folder documentation and template
+!README.md
+!_template.md
+!.gitignore

@@ -1,7 +1,7 @@
 # 真实数据实验 1–6 当前状态与修订计划
 
 > 生成日期：2026-06-30
-> 本报告已同步至 Exp4 代码补全后的状态。Exp4 已新增独立消融入口并通过极小 smoke；formal 尚未运行。
+> 本报告已同步至 Exp1 CalendarFeatureFedAvg diagnostic 完成后的状态。Exp1 当前为 Level 2。
 
 ---
 
@@ -131,6 +131,10 @@
 | `__getitem__` 中 `.to(dtype=torch.float32)` | `region_tensor_dataset.py:75` | ⚠️ 每样本调用 `.to(dtype=torch.float32)`，轻量但可后续优化为直接保持 float32 |
 
 **结论**: 实验 3/5/6 的超时根因已从 Dataset 构造阶段的完整 tensor clone 修复，pipeline 已能运行；当前主要问题已从"构建超时"转为"模型训练效果异常或消融不完整"。
+
+**数据划分修订说明**: 考虑到 61 天观测窗口较短，修订后的真实数据实验采用 80%/10%/10% 时序划分为训练/验证/测试集。70%/15%/15% 时序划分仅作为 sensitivity check 保留（见 Exp1 formal）。数据划分全程不进行随机打乱，以避免时序信息泄漏。
+
+> Considering the relatively short 61-day observation window, the revised real-data experiments use a chronological 80%/10%/10% split for training, validation, and testing. A chronological 70%/15%/15% split is retained only as a sensitivity check. No random shuffling is applied during data splitting to avoid temporal information leakage.
 
 ---
 

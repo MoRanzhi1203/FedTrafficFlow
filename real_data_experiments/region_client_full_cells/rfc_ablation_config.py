@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 from dataclasses import asdict, dataclass, field
 
+from real_data_experiments.common.data_splits import validate_split_ratios
+
 
 DEFAULT_VARIANTS = [
     "full",
@@ -36,8 +38,9 @@ class ExperimentConfig:
     sequence_length: int = 12
     prediction_horizon: int = 1
     prediction_sample_limit: int = 500
-    train_ratio: float = 0.7
-    val_ratio: float = 0.15
+    train_ratio: float = 0.8
+    val_ratio: float = 0.1
+    split_name: str = ""
     device: str = "cuda"
     use_channels: list[int] = field(default_factory=lambda: [0, 1])
     target_channel: int = 0
@@ -98,8 +101,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--sequence-length", type=int, default=12)
     parser.add_argument("--prediction-horizon", type=int, default=1)
-    parser.add_argument("--train-ratio", type=float, default=0.7)
-    parser.add_argument("--val-ratio", type=float, default=0.15)
+    parser.add_argument("--train-ratio", type=float, default=0.8)
+    parser.add_argument("--val-ratio", type=float, default=0.1)
     parser.add_argument("--max-samples-per-client-split", type=int, default=0)
     parser.add_argument("--input-normalization", dest="input_normalization", action="store_true", default=True)
     parser.add_argument("--no-input-normalization", dest="input_normalization", action="store_false")
@@ -112,6 +115,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
     """Construct ExperimentConfig from parsed CLI arguments."""
+    split_name = validate_split_ratios(args.train_ratio, args.val_ratio)
 
     return ExperimentConfig(
         workflow=args.workflow,
@@ -128,6 +132,7 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         prediction_horizon=args.prediction_horizon,
         train_ratio=args.train_ratio,
         val_ratio=args.val_ratio,
+        split_name=split_name,
         device=args.device,
         variants=parse_variants(args.variants),
         max_samples_per_client_split=(None if int(args.max_samples_per_client_split) <= 0 else int(args.max_samples_per_client_split)),

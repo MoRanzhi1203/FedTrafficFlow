@@ -10,6 +10,33 @@ import pandas as pd
 from torch.utils.data import Subset
 
 
+def validate_split_ratios(train_ratio: float, val_ratio: float) -> str:
+    """Validate split ratios and return a canonical split_name string.
+
+    Returns:
+        split_name: e.g. "chronological_80_10_10"
+
+    Raises:
+        ValueError: if ratios are invalid.
+    """
+    if train_ratio <= 0 or val_ratio <= 0:
+        raise ValueError(
+            f"train_ratio and val_ratio must be positive, "
+            f"got train_ratio={train_ratio}, val_ratio={val_ratio}"
+        )
+    if train_ratio + val_ratio >= 1.0:
+        raise ValueError(
+            f"train_ratio + val_ratio must be < 1.0, "
+            f"got {train_ratio + val_ratio}"
+        )
+    test_ratio = 1.0 - train_ratio - val_ratio
+    split_name = (
+        f"chronological_{round(train_ratio * 100)}_"
+        f"{round(val_ratio * 100)}_{round(test_ratio * 100)}"
+    )
+    return split_name
+
+
 def temporal_split_indices(
     total_size: int,
     train_ratio: float = 0.7,
@@ -18,8 +45,7 @@ def temporal_split_indices(
     """Return contiguous train/val/test indices without shuffling."""
     if total_size <= 0:
         raise ValueError("total_size must be positive.")
-    if train_ratio <= 0 or val_ratio < 0 or train_ratio + val_ratio >= 1:
-        raise ValueError("Invalid split ratios. Require train_ratio > 0, val_ratio >= 0, and train_ratio + val_ratio < 1.")
+    split_name = validate_split_ratios(train_ratio, val_ratio)
 
     n_train = int(total_size * train_ratio)
     n_val = int(total_size * val_ratio)
@@ -49,6 +75,7 @@ def temporal_split_indices(
         "val_size": len(val_idx),
         "test_size": len(test_idx),
         "split_strategy": "temporal_contiguous",
+        "split_name": split_name,
     }
     return train_idx, val_idx, test_idx, metadata
 

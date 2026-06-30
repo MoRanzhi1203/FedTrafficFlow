@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from real_data_experiments.common.data_splits import validate_split_ratios
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -188,8 +190,7 @@ def build_time_split_bounds(time_count: int, train_ratio: float = 0.7, val_ratio
     """Build contiguous time-index split bounds on the raw tensor timeline."""
     if time_count <= 0:
         raise ValueError("time_count must be positive.")
-    if train_ratio <= 0 or val_ratio < 0 or train_ratio + val_ratio >= 1:
-        raise ValueError("Invalid split ratios.")
+    split_name = validate_split_ratios(train_ratio, val_ratio)
 
     train_end = int(time_count * train_ratio)
     val_end = int(time_count * (train_ratio + val_ratio))
@@ -206,6 +207,8 @@ def build_time_split_bounds(time_count: int, train_ratio: float = 0.7, val_ratio
         "val_ratio": float(val_ratio),
         "test_ratio": float(1.0 - train_ratio - val_ratio),
         "time_count": int(time_count),
+        "split_strategy": "temporal_contiguous_by_target_time",
+        "split_name": split_name,
     }
 
 
