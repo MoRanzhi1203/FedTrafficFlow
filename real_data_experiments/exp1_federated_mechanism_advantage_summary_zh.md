@@ -60,7 +60,7 @@
 3. FedAvg+LocalFT (55,773) 显著优于纯 FedAvg (82,523)，证明本地微调是联邦优势的关键（PersonalizationGain = 26,751）
 4. CentralizedUpperBound (44,819) 优于所有联邦方法，集中式仍是最强上界
 5. CalendarFeatureFedAvg-Full+LocalFT (53,756) 是最优联邦方法，说明 calendar 特征 + 个性化微调互补
-6. FedAvg 裸性能 (82,523) 仍然弱于 NaiveLastValue (94,259) 和 Independent (61,881)，但加 LocalFT 后大幅改善
+6. FedAvg 裸模型 RMSE=82,523，优于 NaiveLastValue=94,259，但仍弱于 Independent=61,881 以及 CalendarProfileNaive / DailySeasonalNaive / WeeklySeasonalNaive 等周期性基线；加入 LocalFT 后 RMSE 降至 55,773，才体现出联邦共享初始化 + 本地个性化的优势。
 7. 当前仍是 r5 diagnostic，需要 r10/r20 formal 验证稳定性
 
 ## 6. 下一步建议

@@ -16,7 +16,7 @@
 | **聚合策略讨论** | 所有联邦实验 | 当前仅使用标准 FedAvg（sample_count 加权），无 λ/β/ρ 超参数。`trainer.py` 和 `fedavg.py` 实现清晰。论文旧稿中出现过 loss-aware weighting、λ/β/ρ 和 smoothing 描述，但代码未实现。 | 论文中统一写为标准 FedAvg。若审稿人要求更多聚合策略对比，需补充 FedProx 或 FedAvgM |
 | **通信开销/掉线/鲁棒性** | 写作补充 | 当前实验均在全量 client 参与 + 无掉线条件下运行。无通信开销模拟。 | 在论文 limitations 或 discussion 中说明：当前实验假设全量 client 参与，通信开销和掉线鲁棒性作为未来工作或仿真实验补充 |
 | **GCN 真实数据** | 可选 | 当前未在真实数据上运行 GCN 实验。GCN 实验仅在 `results/simulation_experiments/` 中（仿真数据）。 | 在 limitations 中说明计算成本限制；或补一个轻量 GCN 真实数据测试 |
-| **日历周期特征对 FedAvg 的影响** | 实验 1 Calendar 诊断 | Exp1 formal 中已输出 CalendarProfileNaive / DailySeasonalNaive / WeeklySeasonalNaive 与 FedAvg 的对比。但 CalendarFeature-FedAvg 和 SeasonalResidual-FedAvg 尚未实现 | 在论文中写：日历特征当前仅作为独立 baseline 评估，尚未接入 FedAvg 训练链路；作为未来工作 |
+| **日历周期特征对 FedAvg 的影响** | 实验 1 Calendar 诊断 | Exp1 已完成 CalendarFeatureFedAvg v2 diagnostic：calendar/holiday 特征通过 residual-gated 辅助分支接入神经网络训练链路；同时保留 CalendarProfileNaive、DailySeasonalNaive、WeeklySeasonalNaive 作为独立周期性 baseline。当前仍为 diagnostic，尚未进入 r20 formal，因此论文中不能写成稳定性能提升，只能写作机制探索与诊断结果。 | P1：将 CalendarFeatureFedAvg v2 从 r5 diagnostic 推进到 r10/r20 formal candidate；同时补充分组日历指标，检查 weekday/weekend/holiday 下的误差差异。 |
 | **节假日和调休标注** | 实验 1 | 已实现：`calendar_features_15min_2017_04_01_to_2017_05_31.csv` 含清明节、劳动节、端午节及调休上班日 | 可直接写入论文数据描述 |
 | **预测模式分析（weekday/weekend）** | 实验 1 | CalendarProfileNaive 按 is_effective_workday + slot_of_day 分离 profile | 可从 client_metrics 中提取 weekday/weekend 分组对比 |
 | **论文 formal 结果可信度** | Exp1 ✅ / Exp2 ❌ / Exp3 ❌ / Exp4 ⚠️ / Exp5 ❌ / Exp6 ❌ | Exp4 代码和 smoke 已完成，但 formal 未运行，暂不能作为论文正式结果。其余实验需修复、补跑或补指标 | 当前论文仅能依赖实验 1 作为 grid-cell-level 主结果 |

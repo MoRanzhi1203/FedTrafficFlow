@@ -37,10 +37,17 @@ class ExperimentConfig:
     target_normalization: bool = True
     input_normalization_eps: float = 1e-6
     target_normalization_eps: float = 1e-6
+    max_samples_per_client_split: int | None = None
     show_progress: bool = True
     progress_interval: int = 20
     calendar_features_path: str = "data/external/calendar/calendar_features_15min_2017_04_01_to_2017_05_31.csv"
     enable_calendar_profile_baseline: bool = True
+    enable_mechanism_eval: bool = False
+    enable_fedprox: bool = False
+    fedprox_mu: float = 0.001
+    enable_local_ft: bool = False
+    local_ft_epochs: int = 3
+    local_ft_lr: float = 5e-4
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -76,6 +83,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
     parser.add_argument("--prediction-sample-limit", type=int, default=500)
+    parser.add_argument("--max-samples-per-client-split", type=int, default=0)
     parser.add_argument("--show-progress", action="store_true", default=False)
     parser.add_argument(
         "--calendar-features-path",
@@ -84,6 +92,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--enable-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_true", default=True)
     parser.add_argument("--no-calendar-profile-baseline", dest="enable_calendar_profile_baseline", action="store_false")
+    parser.add_argument("--enable-mechanism-eval", dest="enable_mechanism_eval", action="store_true", default=False)
+    parser.add_argument("--enable-fedprox", dest="enable_fedprox", action="store_true", default=False)
+    parser.add_argument("--fedprox-mu", type=float, default=0.001)
+    parser.add_argument("--enable-local-ft", dest="enable_local_ft", action="store_true", default=False)
+    parser.add_argument("--local-ft-epochs", type=int, default=3)
+    parser.add_argument("--local-ft-lr", type=float, default=5e-4)
     return parser
 
 
@@ -108,8 +122,15 @@ def config_from_args(args: argparse.Namespace) -> ExperimentConfig:
         val_ratio=args.val_ratio,
         split_name=split_name,
         device=args.device,
+        max_samples_per_client_split=(None if int(args.max_samples_per_client_split) <= 0 else int(args.max_samples_per_client_split)),
         prediction_sample_limit=args.prediction_sample_limit,
         show_progress=bool(args.show_progress),
         calendar_features_path=args.calendar_features_path,
         enable_calendar_profile_baseline=bool(args.enable_calendar_profile_baseline),
+        enable_mechanism_eval=bool(args.enable_mechanism_eval),
+        enable_fedprox=bool(args.enable_fedprox),
+        fedprox_mu=args.fedprox_mu,
+        enable_local_ft=bool(args.enable_local_ft),
+        local_ft_epochs=args.local_ft_epochs,
+        local_ft_lr=args.local_ft_lr,
     )

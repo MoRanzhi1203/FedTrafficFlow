@@ -23,8 +23,11 @@
 | 模块 | 参数 | 实验适用范围 | 取值 | 来源文件 | 作用 | 选择依据 |
 |---|---|---|---|---|---|---|
 | Input | input_channels | Exp1/2/3: 2; Exp5/6: 2 | `use_channels=[0,1]` | `*_config.py` | 双通道输入（total flow + mean flow） | 下游信道提供辅助信息 |
-| Input | input_length (sequence_length) | 全部 | 12 | `*_config.py` 默认; exp1 formal run_config 确认 | 12步历史窗口（3小时@15min） | 覆盖短时交通流模式 |
-| Output | prediction_horizon | 全部 | 1 | `*_config.py` 默认 | 单步预测（15min ahead） | 交通流短时预测标准设置 |
+| Input | input_length (sequence_length) | 主 formal 默认 | 12 | `*_config.py` 默认; exp1 formal run_config 确认 | 12步历史窗口（3小时@15min） | 覆盖短时交通流模式 |
+| Input | input_length (sequence_length) | Exp1 long-horizon/mechanism diagnostic | 96 | diagnostic run_config | 24小时历史窗口 | 用于检查长历史窗口与长预测跨度 |
+| Output | prediction_horizon | 主 formal 默认 | 1 | `*_config.py` 默认 | 单步 15min ahead | 默认短时预测设置 |
+| Output | prediction_horizon | Exp1 long-horizon diagnostic | 4 / 12 / 24 | diagnostic run_config | 未来1小时/3小时/6小时 | 长跨度诊断 |
+| Output | prediction_horizon | Exp1 federated mechanism diagnostic | 12 | diagnostic run_config | 未来3小时 | 机制诊断 |
 | CNN | Conv1d layer 1 | 全部 | in→16, kernel=3, padding=1, ReLU | `sic_core.py` line 80-81 | 空间特征提取 | — |
 | CNN | Conv1d layer 2 | 全部 | 16→32, kernel=3, padding=1, ReLU | `sic_core.py` line 82-83 | 空间特征提取 | — |
 | CNN | hidden_dim (=CNN output) | 全部 | 32 | `sic_core.py` line 77 默认; `ra_core.py` line 61 硬编码 | LSTM 输入维度 | — |

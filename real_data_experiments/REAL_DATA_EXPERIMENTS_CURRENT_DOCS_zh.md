@@ -9,9 +9,9 @@
 | 文档 | 用途 | 状态 |
 |---|---|---|
 | real_exp_1_6_current_status_and_revision_plan_zh.md | 实验1-6当前状态与修订计划 | 当前有效 |
-| real_exp_1_6_calendar_holiday_handling_check_zh.md | 日历/节假日处理检查报告 | 当前有效 |
-| real_exp_1_6_hyperparameter_tables_zh.md | 超参数表 | 当前有效 |
-| reviewer_response_experiment_mapping_zh.md | 审稿意见-实验映射 | 当前有效 |
+| real_exp_1_6_calendar_holiday_handling_check_zh.md | 日历/节假日处理检查报告 | 当前有效（2026-07-01 已修正 formal/diagnostic 混写和 Exp5 calendar baseline 矛盾） |
+| real_exp_1_6_hyperparameter_tables_zh.md | 超参数表 | 当前有效（2026-07-01 已区分主 formal 默认参数与 Exp1 diagnostic 参数） |
+| reviewer_response_experiment_mapping_zh.md | 审稿意见-实验映射 | 当前有效（2026-07-01 已修正 CalendarFeatureFedAvg v2 旧口径） |
 | real_exp_1_6_result_table_plan_zh.md | 论文结果表计划 | 当前有效 |
 
 ## 2. 当前可信结果汇总

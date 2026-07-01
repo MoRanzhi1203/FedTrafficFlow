@@ -49,7 +49,7 @@
 ## 7. 验证
 
 - Python 3.9 环境 (`E:\anaconda3\envs\FedTrafficFlow\python.exe`) 通过 `py_compile` 验证
-- 未修改任何 .py 文件
-- 未运行任何实验
+- 本次文档清理操作未修改任何 .py 文件
+- 本次文档清理操作未运行任何实验
 - 未提交任何 results/logs/data
 - 归档目录 `archive_legacy_docs/` 已创建

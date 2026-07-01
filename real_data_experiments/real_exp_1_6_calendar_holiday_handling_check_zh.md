@@ -8,7 +8,8 @@
 
 - **分支**：`feature/real-exp4-rfc-ablation`
 - **HEAD**：`e91e2cd` — feat(real-data): add Exp1 federated mechanism diagnostic
-- **本轮是否运行 formal**：Exp1 federated mechanism diagnostic 已运行
+- **本轮是否运行 formal**：否
+- **本轮是否运行 diagnostic**：是，Exp1 federated mechanism diagnostic 已运行；Exp5 final align smoke 用于验证 CalendarProfileNaive 样本对齐
 - **本轮是否运行 smoke**：是，Exp5 final align smoke 用于验证 CalendarProfileNaive 样本对齐
 - **本轮是否修改源码**：是，前序提交已修改 `rc_core.py` 与 `calendar_utils.py`
 - **本轮是否修改文档**：是，本文件已在多轮中更新

@@ -49,3 +49,17 @@
 ## 5. 当前结论占位
 
 本报告只汇总 diagnostic 数据。是否进入 r10/r20，需要基于 h4/h12/h24 的 RMSE/MAE/MAPE 和 grouped calendar metrics 决定。
+
+## 6. 解释风险与待核查项
+
+1. CalendarProfileNaive、DailySeasonalNaive、WeeklySeasonalNaive 在 seq96_h4 / seq96_h12 / seq96_h24 下 RMSE 完全相同。该现象不能直接解释为"周期性 baseline 对 horizon 稳定"，需要先检查 evaluator 是否真正按 prediction_horizon 改变了目标点，或这些 baseline 是否固定使用同一 target_time profile lookup。
+2. NaiveLastValue、FedAvg、Independent、CalendarFeatureFedAvg 会随 horizon 变化，说明神经网络方法和 last-value baseline 至少受到 horizon 设置影响。
+3. seq96_h12 long-horizon diagnostic 与 federated mechanism diagnostic 中同名方法的 RMSE 存在小幅差异，后续需要核对 seed、输出目录、method set、evaluator、local fine-tuning 设置是否完全一致。
+4. 本报告仅用于决定是否进入 r10/r20 formal candidate，不能直接作为论文 formal 结果。
+
+## 7. 后续检查任务
+
+- 检查 CalendarProfileNaive / DailySeasonalNaive / WeeklySeasonalNaive 是否按 h4/h12/h24 正确取对应 horizon 的 target；
+- 检查 prediction 输出中是否保留 target_time、date、slot_of_day、is_effective_workday、is_holiday、is_weekend、holiday_name；
+- 如果 seasonal baselines 当前没有按 horizon 改变，应修正 evaluator 后重跑 long-horizon diagnostic；
+- 如果 evaluator 正确，应在文档中解释为什么 seasonal baselines 在不同 horizon 下指标相同。

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 
 from real_data_experiments.common.region_tensor_dataset import RegionClientWindowDataset
 from real_data_experiments.common.tensor_dataset import build_time_split_bounds, get_region_usage_summary, load_grid_tensor_bundle
@@ -31,6 +31,9 @@ class RFCClientData:
     raw_train_dataset: RegionClientWindowDataset | None = None
     raw_val_dataset: RegionClientWindowDataset | None = None
     raw_test_dataset: RegionClientWindowDataset | None = None
+    effective_train_dataset: object | None = None
+    effective_val_dataset: object | None = None
+    effective_test_dataset: object | None = None
 
 
 def load_partition_payload(partition_file: str | Path) -> dict[str, Any]:
@@ -40,6 +43,30 @@ def load_partition_payload(partition_file: str | Path) -> dict[str, Any]:
 
 def _describe_dataset(dataset: RegionClientWindowDataset) -> dict[str, object]:
     return dataset.describe()
+
+
+def _maybe_cap_dataset(dataset: RegionClientWindowDataset, max_samples: int | None) -> RegionClientWindowDataset | Subset:
+    if max_samples is None or max_samples <= 0 or len(dataset) <= max_samples:
+        return dataset
+    return Subset(dataset, list(range(int(max_samples))))
+
+
+def _validate_effective_loader_alignment(effective_dataset, dataloader, split_name: str, client_id: int) -> None:
+    effective_len = len(effective_dataset)
+    loader_len = len(dataloader.dataset)
+    if effective_len != loader_len:
+        raise ValueError(
+            f"client {client_id} {split_name}: effective_dataset length ({effective_len}) "
+            f"!= dataloader.dataset length ({loader_len})"
+        )
+
+
+def _cap_summary(raw_dataset, effective_dataset) -> dict[str, int | bool]:
+    return {
+        "raw_len": int(len(raw_dataset)),
+        "effective_len": int(len(effective_dataset)),
+        "is_capped": bool(len(effective_dataset) < len(raw_dataset)),
+    }
 
 
 def _make_client_distribution_frame(partition_payload: dict[str, Any]) -> pd.DataFrame:
@@ -118,14 +145,25 @@ def build_full_cells_client_data(
             start_time=int(time_bounds["test_start"]),
             end_time=int(time_bounds["test_end"]),
         )
+        # Apply capping
+        cap = config.max_samples_per_client_split
+        effective_train_dataset = _maybe_cap_dataset(raw_train_dataset, cap)
+        effective_val_dataset = _maybe_cap_dataset(raw_val_dataset, cap)
+        effective_test_dataset = _maybe_cap_dataset(raw_test_dataset, cap)
+        train_loader = DataLoader(effective_train_dataset, batch_size=config.batch_size, shuffle=False)
+        val_loader = DataLoader(effective_val_dataset, batch_size=config.batch_size, shuffle=False)
+        test_loader = DataLoader(effective_test_dataset, batch_size=config.batch_size, shuffle=False)
+        _validate_effective_loader_alignment(effective_train_dataset, train_loader, "train", client_id)
+        _validate_effective_loader_alignment(effective_val_dataset, val_loader, "val", client_id)
+        _validate_effective_loader_alignment(effective_test_dataset, test_loader, "test", client_id)
         client = RFCClientData(
             client_id=client_id,
             entity_id=client_id,
             entity_kind="region_full_cells_client",
             cell_ids=cell_ids,
-            train_loader=DataLoader(raw_train_dataset, batch_size=config.batch_size, shuffle=False),
-            val_loader=DataLoader(raw_val_dataset, batch_size=config.batch_size, shuffle=False),
-            test_loader=DataLoader(raw_test_dataset, batch_size=config.batch_size, shuffle=False),
+            train_loader=train_loader,
+            val_loader=val_loader,
+            test_loader=test_loader,
             split_metadata={
                 "train": _describe_dataset(raw_train_dataset),
                 "val": _describe_dataset(raw_val_dataset),
@@ -144,6 +182,9 @@ def build_full_cells_client_data(
             raw_train_dataset=raw_train_dataset,
             raw_val_dataset=raw_val_dataset,
             raw_test_dataset=raw_test_dataset,
+            effective_train_dataset=effective_train_dataset,
+            effective_val_dataset=effective_val_dataset,
+            effective_test_dataset=effective_test_dataset,
         )
         clients.append(client)
         split_clients.append(
@@ -154,6 +195,10 @@ def build_full_cells_client_data(
                 "train": _describe_dataset(raw_train_dataset),
                 "val": _describe_dataset(raw_val_dataset),
                 "test": _describe_dataset(raw_test_dataset),
+                "train_cap": _cap_summary(raw_train_dataset, effective_train_dataset),
+                "val_cap": _cap_summary(raw_val_dataset, effective_val_dataset),
+                "test_cap": _cap_summary(raw_test_dataset, effective_test_dataset),
+                "max_samples_per_client_split": config.max_samples_per_client_split,
             }
         )
 
